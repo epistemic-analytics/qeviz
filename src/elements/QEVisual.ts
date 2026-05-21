@@ -3,7 +3,7 @@ import { Edge } from "../objects/Edges";
 import Model, { ModelKey } from "../objects/Model";
 import { DataFrame } from "../types/DataFrame.js";
 import { dbg } from "../utils/debug.js";
-import { ENAModelData } from "../types/ModelData.js";
+import { ModelData } from "../types/ModelData.js";
 
 export const vizENA = {
   get: (n: number) => {
@@ -115,65 +115,88 @@ export class QEVisualElement extends HTMLElement {
    * Call this directly when data is available from any source —
    * rENA R package, Python package, or static JSON.
    */
-  setModelData(data: ENAModelData): void {
-    const keys: ModelKey[] = ['nodes', 'edges', 'points', 'confidence', 'outlier', 'updated'] as ModelKey[];
+  setModelData(data: ModelData): void {
+    const frameKeys: ModelKey[] = ['nodes', 'edges', 'points', 'groups', 'confidence', 'outlier'] as ModelKey[];
 
-    // Known ID columns that should not be treated as the row-identifier for
-    // interval frames (confidence / outlier).
-    const KNOWN_ID_COLS = new Set(['QEUNIT', 'code', 'ENA_UNIT', 'unit']);
-
-    keys.forEach((name) => {
+    // ── Step 1: ingest all frames into DataFrames ──────────────────────────
+    frameKeys.forEach((name) => {
       const raw = (data as any)[name];
-      if (raw === undefined) return;
+      if (!raw?.data?.length) return;
 
-      if (['points', 'nodes', 'edges', 'confidence', 'outlier'].includes(name)) {
-        const
-          these_values: any = raw.data || [],
-          these_types: any  = raw.types || {},
-          colNames  = Object.keys(these_values[0]) || [],
-          colValues = Object.values(these_values).map((v: any) => Object.values(v)) || [],
-          classes   = colNames.map(col => (these_types[col] ?? 'character') as string)
-        ;
+      const
+        rows:      any[]   = raw.data,
+        types:     any     = raw.types || {},
+        colNames:  string[] = Object.keys(rows[0]),
+        colValues: any[][]  = rows.map((v: any) => Object.values(v)),
+        classes:   string[] = colNames.map(col => (types[col] ?? 'character') as string);
 
-        let removalCol: number;
-        if (name === 'nodes') {
-          removalCol = colNames.indexOf('code');
-        } else if (name === 'edges' || name === 'points') {
-          removalCol = colNames.indexOf('QEUNIT');
-        } else {
-          // confidence / outlier: auto-detect first character column that isn't a
-          // known ID column; fall back to 'group', then index 0.
-          removalCol = colNames.findIndex((col, idx) => {
-            return !KNOWN_ID_COLS.has(col) && (these_types[col] ?? 'character') === 'character';
-          });
-          if (removalCol < 0) removalCol = colNames.indexOf('group');
-          if (removalCol < 0) removalCol = 0;
-        }
-
-        const rowNames = colValues.map((v: any) => v[removalCol]) as string[];
-        this._model.setByKey(name, new DataFrame(colNames, colValues, rowNames, classes));
+      // Determine which column is the row-identifier (stored as DataFrame.rowName).
+      // The caller can supply overrides; otherwise we auto-detect.
+      let idCol: string | undefined;
+      if (name === 'nodes') {
+        idCol = data.node_id_col
+          ?? colNames.find(c => (types[c] ?? 'character') === 'character');
+      } else if (name === 'edges' || name === 'points') {
+        idCol = data.id_col
+          ?? colNames.find(c => (types[c] ?? 'character') === 'character');
       } else {
-        this._model.setByKey(name, raw);
+        // groups / confidence / outlier: first character column is the group id
+        idCol = data.group_col
+          ?? colNames.find(c => (types[c] ?? 'character') === 'character');
       }
+
+      const removalCol = idCol ? colNames.indexOf(idCol) : 0;
+      const rowNames   = colValues.map((v: any) => String(v[removalCol]));
+      this._model.setByKey(name, new DataFrame(colNames, colValues, rowNames, classes));
     });
 
-    // Auto-detect dimension columns from the nodes DataFrame.
-    // We look for numeric (non-character, non-logical) columns that aren't the
-    // row-identifier column ('code'). This lets setModelData work with plain
-    // data from rENA, pyENA, or static JSON without requiring ENA class tags.
+    // ── Step 2: ingest scalar fields ─────────────────────────────────────
+    if (data.updated !== undefined) this._model.setByKey('updated', data.updated);
+
+    // ── Step 3: resolve and store column names on the model ───────────────
+    // These are read by QEGraph at render time instead of hardcoded strings.
+
+    // node id col — first character column in nodes, or override
     const nodesDF = this._model.nodes;
+    this._model.node_id_col = data.node_id_col
+      ?? nodesDF?.names?.find(n => nodesDF.col(n)?.type === 'character')
+      ?? 'id';
+
+    // unit id col — first character column in points, or override
+    const pointsDF = this._model.points;
+    this._model.unit_id_col = data.id_col
+      ?? pointsDF?.names?.find(n => pointsDF.col(n)?.type === 'character')
+      ?? 'id';
+
+    // group col — caller override, or first non-unit-id character col in points
+    const unitId = this._model.unit_id_col;
+    this._model.group_col = data.group_col
+      ?? pointsDF?.names?.find(n => n !== unitId && pointsDF.col(n)?.type === 'character')
+      ?? null;
+
+    // ── Step 4: auto-detect dimension (x/y) columns from nodes ───────────
+    // Numeric columns that aren't the node id. Caller can override via
+    // x_col / y_col but those are passed in ModelData for the renderer to use
+    // directly; here we just set model.dimensions as the default.
     if (nodesDF?.names?.length) {
-      const dimCols = nodesDF.names.filter(name => {
-        if (name === 'code') return false;
-        const col = nodesDF.col(name);
-        return col && col.type !== 'character' && col.type !== 'logical';
-      });
-      if (dimCols.length >= 2) {
-        this._model.dimensions = dimCols.slice(0, 2);
+      const nodeId  = this._model.node_id_col;
+      const xColOvr = data.x_col;
+      const yColOvr = data.y_col;
+      if (xColOvr && yColOvr) {
+        this._model.dimensions = [xColOvr, yColOvr];
+      } else {
+        const numCols = nodesDF.names.filter(n => {
+          if (n === nodeId) return false;
+          const col = nodesDF.col(n);
+          return col && col.type !== 'character' && col.type !== 'logical';
+        });
+        if (numCols.length >= 2) {
+          this._model.dimensions = [xColOvr ?? numCols[0], yColOvr ?? numCols[1]];
+        }
       }
     }
 
-    this.updated = this._model.updated !== undefined ? String(this._model.updated) : '';
+    this.updated = this._model.updated !== undefined ? String(this._model.updated) : String(Date.now());
     dbg("Model updated via setModelData:", this.updated);
     this.render();
   }

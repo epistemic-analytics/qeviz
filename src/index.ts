@@ -7,7 +7,7 @@ export { QELayer } from './elements/QELayer.js';
 export { QEPoint } from './elements/QEPoint.js';
 export { QELine } from './elements/QELine.js';
 
-export type { ENAModelData, ENADataFrame } from './types/ModelData.js';
+export type { ModelData, QEFrame, ENAModelData, ENADataFrame } from './types/ModelData.js';
 
 export { Graph } from './objects/Graph.js';
 export { Edge } from './objects/Edges.js';

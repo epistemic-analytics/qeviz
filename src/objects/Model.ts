@@ -1,104 +1,84 @@
 import { DataFrame, DataFrameRow } from "../types/DataFrame";
 
-export type ModelKey = "udpated" | "points" | "nodes" | "edges" | "dimensions" | "confidence" | "outlier";
+/** Internal key union for Model.setByKey */
+export type ModelKey =
+  | "updated" | "points" | "nodes" | "edges"
+  | "dimensions" | "confidence" | "outlier" | "groups";
 
-export interface ModelData {
-  updated?: number; // timestamp in milliseconds
-  points: DataFrame;
-  nodes: DataFrame;
-  edges: DataFrame;
-  dimensions: (string | number)[];
+/** Internal shape of the Model class — used by setByKey */
+export interface ModelSpec {
+  updated?:    number;
+  points:      DataFrame;
+  nodes:       DataFrame;
+  edges:       DataFrame;
+  dimensions:  (string | number)[];
   confidence?: DataFrame;
-  outlier?: DataFrame;
-  // add other properties as needed
+  outlier?:    DataFrame;
+  groups?:     DataFrame;
 }
 
-export class Model implements ModelData {
-  private _updated: number | undefined;
-  private _points: DataFrame;
-  private _nodes: DataFrame;
-  private _edges: DataFrame;
+export class Model implements ModelSpec {
+  private _updated:    number | undefined;
+  private _points:     DataFrame;
+  private _nodes:      DataFrame;
+  private _edges:      DataFrame;
   private _dimensions: (string | number)[];
-  private _params: any;
+  private _params:     any;
   private _confidence: DataFrame | undefined;
-  private _outlier: DataFrame | undefined;
+  private _outlier:    DataFrame | undefined;
+  private _groups:     DataFrame | undefined;
 
-  constructor(o: ModelData = {} as ModelData) {
-    this._points = o.points ?? new DataFrame();
-    this._nodes = o.nodes ?? new DataFrame();
-    this._edges = o.edges ?? new DataFrame();
-    this._dimensions = o.dimensions ?? ["RR1", "SVD2"];
+  // Resolved column names — set by QEVisual.setModelData() via auto-detection
+  // or caller-supplied overrides. Renderers read these instead of hardcoding.
+  /** ID column in the points and edges frames */
+  unit_id_col: string = 'id';
+  /** ID column in the nodes frame */
+  node_id_col: string = 'id';
+  /** Group column in the points frame (null = no grouping) */
+  group_col:   string | null = null;
+
+  constructor(o: Partial<ModelSpec> = {}) {
+    this._points     = o.points     ?? new DataFrame();
+    this._nodes      = o.nodes      ?? new DataFrame();
+    this._edges      = o.edges      ?? new DataFrame();
+    this._dimensions = o.dimensions ?? [];
     this._confidence = undefined;
-    this._outlier = undefined;
+    this._outlier    = undefined;
+    this._groups     = undefined;
   }
 
-  public get updated(): number | undefined {
-    return this._updated;
-  }
-  public set updated(value: number | undefined) {
-    this._updated = value;
-  }
+  get updated(): number | undefined { return this._updated; }
+  set updated(v: number | undefined) { this._updated = v; }
 
-  public get points(): DataFrame {
-    return this._points;
-  }
-  public set points(value: DataFrame) {
-    this._points = value;
-  }
+  get points(): DataFrame { return this._points; }
+  set points(v: DataFrame) { this._points = v; }
 
-  public get nodes(): DataFrame {
-    return this._nodes;
-  }
-  public set nodes(value: DataFrame) {
-    this._nodes = value;
-  }
+  get nodes(): DataFrame { return this._nodes; }
+  set nodes(v: DataFrame) { this._nodes = v; }
 
-  public get edges(): DataFrame {
-    return this._edges;
-  }
-  public set edges(value: DataFrame) {
-    this._edges = value;
-  }
+  get edges(): DataFrame { return this._edges; }
+  set edges(v: DataFrame) { this._edges = v; }
 
-  public get confidence(): DataFrame | undefined {
-    return this._confidence;
-  }
-  public set confidence(value: DataFrame | undefined) {
-    this._confidence = value;
-  }
+  get confidence(): DataFrame | undefined { return this._confidence; }
+  set confidence(v: DataFrame | undefined) { this._confidence = v; }
 
-  public get outlier(): DataFrame | undefined {
-    return this._outlier;
-  }
-  public set outlier(value: DataFrame | undefined) {
-    this._outlier = value;
-  }
+  get outlier(): DataFrame | undefined { return this._outlier; }
+  set outlier(v: DataFrame | undefined) { this._outlier = v; }
 
-  public get dimensions(): (string | number)[] {
-    return this._dimensions;
-  }
-  public set dimensions(value: (string | number)[]) {
-    this._dimensions = value;
-  }
+  get groups(): DataFrame | undefined { return this._groups; }
+  set groups(v: DataFrame | undefined) { this._groups = v; }
 
-  public get params(): any {
-    return this._params;
-  }
-  public set params(value: any) {
-    this._params = value;
-  }
+  get dimensions(): (string | number)[] { return this._dimensions; }
+  set dimensions(v: (string | number)[]) { this._dimensions = v; }
 
-  public point(id: string): DataFrameRow | undefined {
+  get params(): any { return this._params; }
+  set params(v: any) { this._params = v; }
+
+  point(id: string): DataFrameRow | undefined {
     return this._points.row(id);
   }
 
-  // Dynamic getter
-  // public getByKey<K extends ModelKey>(key: K): Model[K] {
-  //   return this[key];
-  // }
-
-  // Dynamic setter
-  public setByKey<K extends keyof ModelData>(key: K, value: ModelData[K]): void {
+  setByKey<K extends keyof ModelSpec>(key: K, value: ModelSpec[K]): void {
     (this as any)[key] = value;
   }
 }

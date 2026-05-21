@@ -181,19 +181,16 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       const dims = model.dimensions as string[];
 
+      // Resolved column names from setModelData (auto-detected or caller-supplied)
+      const unitIdCol  = model.unit_id_col;
+      const nodeIdCol  = model.node_id_col;
+      const groupColName = model.group_col;
+
       // ── Group color map ──────────────────────────────────────────────────────
-      // Detect the group column: the first character-typed column in points that
-      // is not the unit ID column ('QEUNIT').
       const groupColorMap: Record<string, string> = {};
-      let groupColName: string | null = null;
-      if (model.points?.names) {
-        groupColName = model.points.names.find((n: string) => {
-          if (n === 'QEUNIT') return false;
-          const col = model.points.col(n);
-          return col && col.type === 'character';
-        }) ?? null;
-        if (groupColName) {
-          const groupCol = model.points.col(groupColName);
+      if (groupColName && model.points?.names) {
+        const groupCol = model.points.col(groupColName);
+        if (groupCol) {
           const uniqueGroups: string[] = [...new Set([...groupCol].map(String))];
           uniqueGroups.forEach((g, i) => {
             groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
@@ -325,7 +322,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             if (model.confidence?.rows) {
               // Pre-computed path: use libqe interval frame
               model.confidence.rows().forEach((row: DataFrameRow) => {
-                const groupIdx = row.names.indexOf('group');
+                const groupIdx = row.names.indexOf(groupColName ?? 'group');
                 const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
                 if (!group) return;
                 const color = groupColorMap[group] ?? '#888888';
@@ -418,7 +415,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             });
 
             model.outlier.rows().forEach((row: DataFrameRow) => {
-              const groupIdx = row.names.indexOf('group');
+              const groupIdx = row.names.indexOf(groupColName ?? 'group');
               const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
               if (!group) return;
               const color = groupColorMap[group] ?? '#888888';
@@ -466,7 +463,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             // Unit point labels
             if (labelPoints !== 0) {
               model.points.rows().forEach((row: DataFrameRow) => {
-                const qIdx = row.names.indexOf('QEUNIT');
+                const qIdx = row.names.indexOf(unitIdCol);
                 const unitId = qIdx >= 0 ? String(row[qIdx]) : null;
                 if (!unitId) return;
                 const pt = pointsLayer.__data__.objects.get(unitId) as Point | undefined;
@@ -525,7 +522,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           const unitGroupMap: Record<string, string> = {};
           if (groupColName && model.points?.rows) {
             model.points.rows().forEach((row: DataFrameRow) => {
-              const qIdx = row.names.indexOf('QEUNIT');
+              const qIdx = row.names.indexOf(unitIdCol);
               const gIdx = row.names.indexOf(groupColName!);
               if (qIdx >= 0 && gIdx >= 0) unitGroupMap[String(row[qIdx])] = String(row[gIdx]);
             });
@@ -533,7 +530,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
           // ── Step 3: Collect valid edge-column → code-pair mappings ───────────
           const codeNames: string[] = model.nodes.rows().map((r: DataFrameRow) => {
-            const idx = r.names.indexOf('code');
+            const idx = r.names.indexOf(nodeIdCol);
             return idx >= 0 ? String(r[idx]) : '';
           }).filter(Boolean);
 
@@ -550,7 +547,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           const getUnitEdges = (unitId: string): EdgeWeights => {
             const result: EdgeWeights = {};
             model.edges.rows().forEach((row: DataFrameRow) => {
-              const qIdx = row.names.indexOf('QEUNIT');
+              const qIdx = row.names.indexOf(unitIdCol);
               if (qIdx < 0 || String(row[qIdx]) !== unitId) return;
               edgePairs.forEach(({ col }) => {
                 const colIdx = row.names.indexOf(col);
@@ -565,7 +562,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const sums: EdgeWeights = {};
             let count = 0;
             model.edges.rows().forEach((row: DataFrameRow) => {
-              const qIdx  = row.names.indexOf('QEUNIT');
+              const qIdx  = row.names.indexOf(unitIdCol);
               const unitId = qIdx >= 0 ? String(row[qIdx]) : null;
               const gColIdx = groupColName ? row.names.indexOf(groupColName) : -1;
               const group   = gColIdx >= 0 ? String(row[gColIdx]) : (unitId ? unitGroupMap[unitId] : null);
@@ -680,7 +677,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // ── Step 8: Resize nodes by total connection weight ───────────────────
           const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
           model.nodes.rows().forEach((row: DataFrameRow) => {
-            const codeIdx = row.names.indexOf('code');
+            const codeIdx = row.names.indexOf(nodeIdCol);
             const id = codeIdx >= 0 ? String(row[codeIdx]) : '';
             const pt = nodeLayer.__data__.objects.get(id) as Point | undefined;
             if (!pt) return;
@@ -696,7 +693,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             if (!nodeLayer.__data__.objects.get(id)) { lbl.remove(); this._nodeLabels.delete(id); }
           });
           model.nodes.rows().forEach((row: DataFrameRow) => {
-            const codeIdx = row.names.indexOf('code');
+            const codeIdx = row.names.indexOf(nodeIdCol);
             const id = codeIdx >= 0 ? String(row[codeIdx]) : '';
             if (!id) return;
             const pt = nodeLayer.__data__.objects.get(id) as Point | undefined;
