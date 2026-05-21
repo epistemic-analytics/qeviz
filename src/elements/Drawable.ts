@@ -1,6 +1,6 @@
 import { PlottedObject } from "../objects/PlottedObject";
-import { ENAArray, } from "./ENALayer";
-import { ENASvgElement } from "./ENASvg";
+import { QEArray, } from "./QELayer";
+import { QEGraphElement } from "./QEGraph";
 
 export abstract class Drawable {
   abstract create(): SVGElement;
@@ -10,8 +10,8 @@ export abstract class Drawable {
   constructor(
       public __data__: PlottedObject, 
       public parent: SVGElement, 
-      public graph: ENASvgElement,
-      public __children__: ENAArray = new ENAArray()
+      public graph: QEGraphElement,
+      public __children__: QEArray = new QEArray()
     ) {
       this.svg_element = this.create();
     }

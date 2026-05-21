@@ -1,16 +1,16 @@
 import { Line } from "../objects/PlottedObject";
 import { Drawable } from "./Drawable";
-import { EnaGraphElement } from "./ENAgraph";
-import { ENAArray, ENAElement } from "./ENALayer";
+import { EnaGraphElement } from "./QEGraphLegacy";
+import { QEArray, QEElement } from "./QELayer";
 
-export class ENALine extends Drawable implements ENAElement {
+export class QELine extends Drawable implements QEElement {
   __name__: string = "unnamed-line";
 
   constructor(
     public __data__: Line, 
     public parent: SVGElement, 
     public graph: EnaGraphElement,
-    public __children__: ENAArray = new ENAArray(),
+    public __children__: QEArray = new QEArray(),
   ) {
     super(__data__, parent, graph, __children__);
 

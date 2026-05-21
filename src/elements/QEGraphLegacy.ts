@@ -2,18 +2,18 @@ import { Tools } from "../utils/Tools";
 import { Graph } from "../objects/Graph";
 import { DimensionVector, Label, Line, PlottedObject, PlottedObjectOptions, Point } from "../objects/PlottedObject";
 import { Mean, Node } from "../objects/Points";
-import VizENAElement from "./VizENA";
+import QEVisualElement from "./QEVisual";
 import { Edge, MeanNodeEdge, NodeEdge } from "../objects/Edges";
 import { Layer, LayerLike } from "../objects/Layers";
 
 import { DataFrame, DataFrameColumnType, DataFrameRow } from "../types/DataFrame";
 
-import { vizENA } from "./VizENA";
+import { vizENA } from "./QEVisual";
 import { DrawableElement } from "./DrawableElement";
-import { ENALayer, ENAElement, ENAArray } from "./ENALayer";
-import { ENAPoint } from "./ENAPoint";
+import { QELayer, QEElement, QEArray } from "./QELayer";
+import { QEPoint } from "./QEPoint";
 import { AxisPoint } from "../objects/AxisPoint";
-import { ENALine } from "./ENALine";
+import { QELine } from "./QELine";
 
 interface ObjectHandler<T> {
   name?: string;
@@ -33,9 +33,9 @@ interface ObjectHandler<T> {
 
 // Legacy graph implementation — superseded by ENASvgElement ("ena-graph").
 // Tag name kept with "-old" suffix to avoid collision. Class retained as a
-// type reference by ENALayer, ENALine, and VizTools.
-export class EnaGraphElement extends DrawableElement implements ENAElement {
-  static tagName: string = "ena-graph-old";
+// type reference by QELayer, QELine, and VizTools.
+export class EnaGraphElement extends DrawableElement implements QEElement {
+  static tagName: string = "qe-graph-old";
 
   svg_element: SVGElement;
   graph: EnaGraphElement;
@@ -43,7 +43,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
   zoom_level: number = 1;
 
   __data__: Graph;
-  __children__: ENAArray = new ENAArray();
+  __children__: QEArray = new QEArray();
   __name__: string;
 
   static get observedAttributes() {
@@ -113,7 +113,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
   }
 
   // #region declarations
-  private _vizena!: VizENAElement;
+  private _vizena!: QEVisualElement;
 
   private _layersOld: ObjectHandler<Layer> = {
     size: 0,
@@ -175,7 +175,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
         return;
       }
 
-      let point_layer: ENALayer | undefined = this.__children__.find( el => el.__name__ === "points" );
+      let point_layer: QELayer | undefined = this.__children__.find( el => el.__name__ === "points" );
 
       // Remove points not in data
       const existing_point_ids = new Set(this.__data__.points.keys());
@@ -204,7 +204,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
             visible: true,
             shape: "circle"
           }),
-          new_ena_point: ENAPoint = new ENAPoint(new_point, point_layer!.svg_element, this)
+          new_ena_point: QEPoint = new QEPoint(new_point, point_layer!.svg_element, this)
         ;
 
         if(point_layer) {
@@ -1010,7 +1010,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
     console.log("Connecting to the ena-graph here: ", this);
 
     if (!this._vizena) {
-      let v = this.closest("ena-visual") as VizENAElement;
+      let v = this.closest("qe-visual") as QEVisualElement;
       if (!v) {
         console.error("No vizena found, cannot continue.");
         this.remove();
@@ -1097,7 +1097,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
   //     element.options
   //   );
   // }
-  set vizena(v: VizENAElement) {
+  set vizena(v: QEVisualElement) {
     const element: EnaGraphElement = this;
 
     element._vizena = v;
@@ -1146,7 +1146,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
     // this.options = {};
     // element.update(false);
   }
-  get vizena(): VizENAElement {
+  get vizena(): QEVisualElement {
     return this._vizena;
   }
   get labels(): ObjectHandler<Label> {
@@ -1187,7 +1187,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
 
     this.__data__.layers.forEach((layer: LayerLike) => {
       let 
-        layer_g: ENALayer = new ENALayer(layer, this.svg_element, this)
+        layer_g: QELayer = new QELayer(layer, this.svg_element, this)
       ;
 
       this.__children__.push(layer_g);
@@ -1201,14 +1201,14 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
     if(axisPointLayer) {
       debugger;
       [...axisPointLayer.objects.entries()].forEach(([id, point]: [string, AxisPoint]) => {
-        let new_ena_point = new ENAPoint(point, this.svg_element, this);
+        let new_ena_point = new QEPoint(point, this.svg_element, this);
         this.__children__.push(new_ena_point);
       });
     }
     if(axisLineLayer) {
       debugger;
       [...axisLineLayer.objects.entries()].forEach(([id, line]: [string, Line]) => {
-        let new_ena_line = new ENALine(line, this.svg_element, this);
+        let new_ena_line = new QELine(line, this.svg_element, this);
         this.__children__.push(new_ena_line);
       });
     }
@@ -1264,7 +1264,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
     
     this.wrapper?.appendChild(this.svg_element);
 
-    this.__children__.forEach((enaLayer: ENALayer) => {
+    this.__children__.forEach((enaLayer: QELayer) => {
       enaLayer.draw();
     });
   }
@@ -1432,7 +1432,7 @@ export class EnaGraphElement extends DrawableElement implements ENAElement {
     //     ;
     // }
 
-    this.__children__.forEach((enaLayer: ENALayer) => {
+    this.__children__.forEach((enaLayer: QELayer) => {
       enaLayer.update();
     });
   }

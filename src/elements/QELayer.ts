@@ -2,14 +2,14 @@ import { Tools } from "../utils/Tools";
 import { Graph } from "../objects/Graph";
 import { Layer, LayerLike } from "../objects/Layers";
 import { PlottedObject } from "../objects/PlottedObject";
-import { EnaGraphElement } from "./ENAgraph";
-import { ENALine } from "./ENALine";
-import { ENAPoint } from "./ENAPoint";
-import { ENASvgElement } from "./ENASvg";
+import { EnaGraphElement } from "./QEGraphLegacy";
+import { QELine } from "./QELine";
+import { QEPoint } from "./QEPoint";
+import { QEGraphElement } from "./QEGraph";
 
 
 const { ArrayTools } = Tools;
-export class ENAArray extends Array<LayerLike> {
+export class QEArray extends Array<LayerLike> {
   constructor(...args: any[]) {
     super(...args);
   }
@@ -61,36 +61,36 @@ export class ENAArray extends Array<LayerLike> {
   }
 }
 
-export interface ENAElement {
+export interface QEElement {
   svg_element: SVGElement;
-  graph: ENASvg;
+  graph: QEGraphElement;
   parent: SVGElement | null;
   __name__: string;
   __data__: Graph | PlottedObject | LayerLike;
-  __children__: ENAArray;
+  __children__: QEArray;
   draw(): void;
   update(): void;
 }
 
 const
-  ENAElementConstructors: 
+  QEElementConstructors: 
     { 
       [key: string]: new (
         __data__: PlottedObject,
         parent: SVGElement, 
-        graph: ENASvgElement
-      ) => ENAElement 
+        graph: QEGraphElement
+      ) => QEElement 
     } =
     {
-      "AxisPoint": ENAPoint,
-      "AxisLine": ENALine,
-      "Point": ENAPoint,
-      "Line": ENALine,
-      "Edge": ENALine
+      "AxisPoint": QEPoint,
+      "AxisLine": QELine,
+      "Point": QEPoint,
+      "Line": QELine,
+      "Edge": QELine
     }
 ;
 
-export class ENALayer implements ENAElement {
+export class QELayer implements QEElement {
   static tagName = 'g';
 
   svg_element: SVGElement;  
@@ -99,14 +99,14 @@ export class ENALayer implements ENAElement {
   constructor(
     public __data__: Layer, 
     public parent: SVGElement, 
-    public graph: ENASvgElement,
-    public __children__: ENAArray = new ENAArray(),
+    public graph: QEGraphElement,
+    public __children__: QEArray = new QEArray(),
   ) {
     this.__name__ = __data__.name || "unnamed-layer";
 
     __data__.__state__.addListener(`layer_updated`, "live", ({ key, newValue, oldValue } : any) => {
       let 
-        removing = this.__children__.filter((child: ENAElement) => {
+        removing = this.__children__.filter((child: QEElement) => {
           if(child.__data__ && newValue.objects.has(child.__data__.ID)) {
             return false;
           }
@@ -114,7 +114,7 @@ export class ENALayer implements ENAElement {
             return true;
           }
         }),
-        updating = this.__children__.filter((child: ENAElement) => {
+        updating = this.__children__.filter((child: QEElement) => {
           if(child.__data__ && newValue.objects.has(child.__data__.ID)) {
             return true;
           }
@@ -123,7 +123,7 @@ export class ENALayer implements ENAElement {
           }
         }),
         adding = [...newValue.objects.values()].filter( (obj: PlottedObject) => {
-          if(this.__children__.some((child: ENAElement) => child.__data__ && child.__data__.ID === obj.ID)) {
+          if(this.__children__.some((child: QEElement) => child.__data__ && child.__data__.ID === obj.ID)) {
             return false;
           }
           else {
@@ -135,24 +135,24 @@ export class ENALayer implements ENAElement {
       adding.forEach( ( obj: PlottedObject) => {
         let 
           obj_name = obj.constructor.name,
-          ena_element: ENAElement = new ENAElementConstructors[obj_name](obj, this.svg_element, this.graph)
+          ena_element: QEElement = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph)
         ;
         this.__children__.push(ena_element);
       });
 
       updating.forEach( ( obj: PlottedObject) => {
-        let child = this.__children__.find((child: ENAElement) => child.__data__ && child.__data__.ID === obj.__data__.ID);
+        let child = this.__children__.find((child: QEElement) => child.__data__ && child.__data__.ID === obj.__data__.ID);
         if(child) {
           child.__data__ = obj.__data__;
           child.update();
         }
       });
 
-      removing.forEach( ( child: ENAElement) => {
+      removing.forEach( ( child: QEElement) => {
         if(child.svg_element.parentElement) {
           child.svg_element.parentElement.removeChild(child.svg_element);
         }
-        this.__children__ = this.__children__.filter((c: ENAElement) => c !== child);
+        this.__children__ = this.__children__.filter((c: QEElement) => c !== child);
       });
 
       this.update();
@@ -170,7 +170,7 @@ export class ENALayer implements ENAElement {
       throw new Error("Layer is null");
     }
     let layer: Layer = this.__data__ as Layer;
-    this.svg_element = document.createElementNS("http://www.w3.org/2000/svg", ENALayer.tagName);
+    this.svg_element = document.createElementNS("http://www.w3.org/2000/svg", QELayer.tagName);
     this.svg_element.setAttribute('data-layer-name', layer.name);
     this.svg_element.setAttribute('data-layer-id',   layer.ID);
 
@@ -181,7 +181,7 @@ export class ENALayer implements ENAElement {
     if(this.__data__.layers && this.__data__.layers.length > 0) {
       this.__data__.layers.forEach((sublayer: LayerLike) => {
         let 
-          layer_g: ENALayer = new ENALayer(sublayer, this.svg_element, this.graph)
+          layer_g: QELayer = new QELayer(sublayer, this.svg_element, this.graph)
         ;
         this.__children__.push(layer_g);
       });
@@ -205,7 +205,7 @@ export class ENALayer implements ENAElement {
       }
 
       // Update sublayers
-      this.__children__.forEach((child: ENAElement) => {
+      this.__children__.forEach((child: QEElement) => {
         child.update();
       });
 
@@ -225,12 +225,12 @@ export class ENALayer implements ENAElement {
   draw(): void {
     this.parent?.appendChild(this.svg_element);
 
-    this.__children__.forEach((child: ENAElement) => {
+    this.__children__.forEach((child: QEElement) => {
       child.draw();
     });
   }
 
-  add(child: ENAElement) {
+  add(child: QEElement) {
     this.__children__.push(child);
   }
 }

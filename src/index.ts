@@ -1,13 +1,13 @@
-// VizENA standalone entry point — no arbor/webr dependency.
+// QEViz standalone entry point — no arbor/webr dependency.
 // Import this bundle directly from rENA or any non-arbor context.
 
-export { VisualENAElement, vizENA } from './elements/VizENA.js';
-export { ENASvgElement } from './elements/ENASvg.js';
-export { ENALayer } from './elements/ENALayer.js';
-export { ENAPoint } from './elements/ENAPoint.js';
-export { ENALine } from './elements/ENALine.js';
+export { QEVisualElement, vizENA } from './elements/QEVisual.js';
+export { QEGraphElement } from './elements/QEGraph.js';
+export { QELayer } from './elements/QELayer.js';
+export { QEPoint } from './elements/QEPoint.js';
+export { QELine } from './elements/QELine.js';
 
-export type { ENAModelData, ENADataFrame } from './types/ENAModelData.js';
+export type { ENAModelData, ENADataFrame } from './types/ModelData.js';
 
 export { Graph } from './objects/Graph.js';
 export { Edge } from './objects/Edges.js';

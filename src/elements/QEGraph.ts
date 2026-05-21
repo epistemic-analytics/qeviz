@@ -1,15 +1,15 @@
 import { DefaultGraphOptions, Graph } from "../objects/Graph";
 import { DrawableElement } from "./DrawableElement";
-import { ENAArray, ENAElement, ENALayer } from "./ENALayer";
-import VizENAElement from "./VizENA";
+import { QEArray, QEElement, QELayer } from "./QELayer";
+import QEVisualElement from "./QEVisual";
 import { DataFrame, DataFrameColumn, DataFrameRow } from "../types/DataFrame";
-import { ENAPoint } from "./ENAPoint";
-import { ENALine } from "./ENALine";
+import { QEPoint } from "./QEPoint";
+import { QELine } from "./QELine";
 import { AxisPoint } from "../objects/AxisPoint";
 import { Edge } from "../objects/Edges";
 import { Label, Line, Point } from "../objects/PlottedObject";
 import { Color } from "../objects/Color";
-import { ENALabel } from "./ENALabel";
+import { QELabel } from "./QELabel";
 
 // Accessible color palette for group assignment (Paul Tol's bright scheme)
 const GROUP_PALETTE = [
@@ -93,8 +93,8 @@ function parseLabelMode(attr: string | null, defaultMode: number): number {
   }
 }
 
-export class ENASvgElement extends DrawableElement implements ENAElement {
-  static tagName: string = "ena-graph";
+export class QEGraphElement extends DrawableElement implements QEElement {
+  static tagName: string = "qe-graph";
 
   static style: string = `
     ${DrawableElement.style}
@@ -117,22 +117,22 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
   `;
 
   svg_element: SVGElement;
-  graph: ENASvgElement;
+  graph: QEGraphElement;
   parent: SVGElement | null;
   zoom_level: number = 1;
 
   __data__: Graph;
-  __children__: ENAArray = new ENAArray();
+  __children__: QEArray = new QEArray();
   __name__: string;
   
 
-  private _vizena!: VizENAElement;
+  private _vizena!: QEVisualElement;
   get vizena() {
     return this._vizena;
   }
 
   // SVG <rect> elements for per-group CI boxes, keyed by group name.
-  // Managed directly (not via ENALayer) so they render behind unit points.
+  // Managed directly (not via QELayer) so they render behind unit points.
   private _ciRects: Map<string, SVGRectElement> = new Map();
   private _outlierRects: Map<string, SVGRectElement> = new Map();
 
@@ -141,9 +141,9 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
   private _labelsGroup: SVGGElement | null = null;
 
   // SVG <text> label elements for nodes, mean points, and unit points.
-  private _nodeLabels:  Map<string, ENALabel> = new Map();
-  private _meanLabels:  Map<string, ENALabel> = new Map();
-  private _pointLabels: Map<string, ENALabel> = new Map();
+  private _nodeLabels:  Map<string, QELabel> = new Map();
+  private _meanLabels:  Map<string, QELabel> = new Map();
+  private _pointLabels: Map<string, QELabel> = new Map();
 
   // Cached model received from the most recent model-updated event.
   // Using event.detail decouples ena-graph from the parent-element assumption.
@@ -171,7 +171,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
 
     console.log("Created ena-graph svg element: ", this.svg_element);
 
-    // Listen for the model-updated CustomEvent dispatched by VisualENAElement.
+    // Listen for the model-updated CustomEvent dispatched by VisualQEElement.
     // The Model object is carried in event.detail, so ena-graph works whether it
     // is a child, sibling, or anywhere else relative to ena-visual.
     document.addEventListener('model-updated', (e: Event) => {
@@ -266,7 +266,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
       }> = {};
 
       if (this.hasAttribute('points') && model.points?.rows) {
-        const pointsLayer = this.__children__.search('__children__', 'points') as ENALayer;
+        const pointsLayer = this.__children__.search('__children__', 'points') as QELayer;
         if (pointsLayer) {
           model.points.rows().forEach((row: DataFrameRow) => {
             // Determine this point's group color
@@ -475,7 +475,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
                 const displayText = unitId.includes('::') ? unitId.split('::')[0] : unitId;
                 let lbl = this._pointLabels.get(unitId);
                 if (!lbl) {
-                  lbl = new ENALabel(displayText, pt, labelSvg, this, labelPoints);
+                  lbl = new QELabel(displayText, pt, labelSvg, this, labelPoints);
                   this._pointLabels.set(unitId, lbl);
                 } else {
                   labelPoints === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
@@ -491,7 +491,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
                 if (!pt) return;
                 let lbl = this._meanLabels.get(group);
                 if (!lbl) {
-                  lbl = new ENALabel(group, pt, labelSvg, this, labelMeans);
+                  lbl = new QELabel(group, pt, labelSvg, this, labelMeans);
                   this._meanLabels.set(group, lbl);
                 } else {
                   labelMeans === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
@@ -507,9 +507,9 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
       // ── Mean network edges ───────────────────────────────────────────────────
       // For each group, compute the mean weight of every edge column across its
       // unit rows, then draw a Line for pairs whose mean weight is non-zero.
-      const networkLayer = this.__children__.search('__children__', 'network') as ENALayer;
-      const edgeLayer    = networkLayer?.__children__.search('__children__', 'edges') as ENALayer;
-      const nodeLayer    = networkLayer?.__children__.search('__children__', 'nodes') as ENALayer;
+      const networkLayer = this.__children__.search('__children__', 'network') as QELayer;
+      const edgeLayer    = networkLayer?.__children__.search('__children__', 'edges') as QELayer;
+      const nodeLayer    = networkLayer?.__children__.search('__children__', 'nodes') as QELayer;
 
       if (model.nodes?.rows && nodeLayer) {
         // ── Step 1: Populate node positions first (edges need to look them up) ─
@@ -703,7 +703,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
             if (!pt) return;
             let lbl = this._nodeLabels.get(id);
             if (!lbl) {
-              lbl = new ENALabel(id, pt, labelSvg, this, labelNodes);
+              lbl = new QELabel(id, pt, labelSvg, this, labelNodes);
               this._nodeLabels.set(id, lbl);
             } else {
               labelNodes === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
@@ -744,22 +744,22 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
     const forId = this.getAttribute('for');
     this._vizena = (
       (forId ? document.getElementById(forId) : null) ??
-      this.closest('ena-visual') ??
-      this.parentElement?.closest('ena-visual') ??
-      document.querySelector('ena-visual')
-    ) as VizENAElement;
+      this.closest('qe-visual') ??
+      this.parentElement?.closest('qe-visual') ??
+      document.querySelector('qe-visual')
+    ) as QEVisualElement;
     this.draw();
 
     // Cache the labels <g> after draw() has connected all layer elements to
     // the SVG DOM. We do this once here rather than searching on every
     // model-updated event to guarantee we always have a valid reference.
-    const labelsLayer = this.__children__.search('__children__', 'labels') as ENALayer;
+    const labelsLayer = this.__children__.search('__children__', 'labels') as QELayer;
     if (labelsLayer?.svg_element) {
       this._labelsGroup = labelsLayer.svg_element as SVGGElement;
     } else {
       // Fallback: create a new <g> directly inside the outermost graph layer.
       console.warn('[ena-graph] labels layer not found in layer tree; creating fallback <g>');
-      const graphLayer = this.__children__[0] as ENALayer;
+      const graphLayer = this.__children__[0] as QELayer;
       if (graphLayer?.svg_element) {
         this._labelsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g') as SVGGElement;
         this._labelsGroup.setAttribute('data-layer-name', 'labels-fallback');
@@ -781,7 +781,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
 
     this.__data__.layers.forEach((layer: LayerLike) => {
       let 
-        layer_g: ENALayer = new ENALayer(layer, this.svg_element, this)
+        layer_g: QELayer = new QELayer(layer, this.svg_element, this)
       ;
 
       this.__children__.push(layer_g);
@@ -794,14 +794,14 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
     ;
     // if(axisPointLayer) {
     //   [...axisPointLayer.objects.entries()].forEach(([id, point]: [string, AxisPoint]) => {
-    //     let new_ena_point = new ENAPoint(point, this.svg_element, this);
+    //     let new_ena_point = new QEPoint(point, this.svg_element, this);
     //     console.log("Adding axis point: ", axisPointLayer, new_ena_point);
     //     // this.__children__.push(new_ena_point);
     //   });
     // }
     if(axisLineLayer) {
       [...axisLineLayer.objects.entries()].forEach(([id, line]: [string, Line]) => {
-        let new_ena_line = new ENALine(line, this.svg_element, this);
+        let new_ena_line = new QELine(line, this.svg_element, this);
         axisLineLayer.objects.set(id, line); 
       });
     }
@@ -871,9 +871,9 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
       const model = this._currentModel ?? this.vizena?.model;
       console.log("Model: ", model);
       let
-        networkLayer = this.__children__.search("__children__", "network") as ENALayer,
-        nodeLayer = networkLayer?.__children__.search("__children__", "nodes") as ENALayer,
-        edgeLayer = networkLayer?.__children__.search("__children__", "edges") as ENALayer,
+        networkLayer = this.__children__.search("__children__", "network") as QELayer,
+        nodeLayer = networkLayer?.__children__.search("__children__", "nodes") as QELayer,
+        edgeLayer = networkLayer?.__children__.search("__children__", "edges") as QELayer,
         activatedEdge: DataFrameRow | undefined = model?.edges.row(ev.detail.pointData.ID)
       ;
 
@@ -920,7 +920,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
       return null;
     };
 
-    const getAutoLabel = (id: string): ENALabel | undefined => {
+    const getAutoLabel = (id: string): QELabel | undefined => {
       return this._pointLabels.get(id)
           ?? this._meanLabels.get(id.replace(/^mean-/, ''))
           ?? this._nodeLabels.get(id);
@@ -956,7 +956,7 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
     
     this.wrapper?.appendChild(this.svg_element);
 
-    this.__children__.forEach((enaLayer: ENALayer) => {
+    this.__children__.forEach((enaLayer: QELayer) => {
       enaLayer.draw();
     });
   }
@@ -1016,9 +1016,9 @@ export class ENASvgElement extends DrawableElement implements ENAElement {
   }
 
   update_layers() {
-    this.__children__.forEach((enaLayer: ENALayer) => {
+    this.__children__.forEach((enaLayer: QELayer) => {
       enaLayer.update();
     });
   }
 }
-customElements.define(ENASvgElement.tagName, ENASvgElement);
+customElements.define(QEGraphElement.tagName, QEGraphElement);

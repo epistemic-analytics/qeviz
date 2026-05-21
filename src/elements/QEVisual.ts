@@ -3,11 +3,11 @@ import { Edge } from "../objects/Edges";
 import Model, { ModelKey } from "../objects/Model";
 import { DataFrame } from "../types/DataFrame.js";
 import { dbg } from "../utils/debug.js";
-import { ENAModelData } from "../types/ENAModelData.js";
+import { ENAModelData } from "../types/ModelData.js";
 
 export const vizENA = {
   get: (n: number) => {
-    const elements = [...(document as any).querySelectorAll("ena-graph")];
+    const elements = [...(document as any).querySelectorAll("qe-graph")];
     if (typeof n === "number" && n >= 0) {
       return elements[n];
     }
@@ -15,8 +15,8 @@ export const vizENA = {
   },
 }
 
-export class VisualENAElement extends HTMLElement {
-  static tagName = 'ena-visual';
+export class QEVisualElement extends HTMLElement {
+  static tagName = 'qe-visual';
 
   static get observedAttributes() {
     return ['updated'];
@@ -45,7 +45,7 @@ export class VisualENAElement extends HTMLElement {
     this._updated = val;
     this.setAttribute('updated', val);
     // Notify via CustomEvent instead of directly coupling to StateManager.
-    // RVisualENAElement (and any other arbor consumer) listens for this and
+    // RQEVisualElement (and any other arbor consumer) listens for this and
     // forwards to globalStateManager.
     this.dispatchEvent(new CustomEvent('model-updated', {
       detail: this._model,
@@ -98,7 +98,7 @@ export class VisualENAElement extends HTMLElement {
     const shadow = this.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
-    style.textContent = VisualENAElement.styles;
+    style.textContent = QEVisualElement.styles;
     shadow.appendChild(style);
 
     this._outputElement = document.createElement('div');
@@ -106,7 +106,7 @@ export class VisualENAElement extends HTMLElement {
   }
 
   connectedCallback(): void {
-    dbg("VisualENAElement connected");
+    dbg("QEVisualElement connected");
     this.render();
   }
 
@@ -179,7 +179,7 @@ export class VisualENAElement extends HTMLElement {
   }
 
   /**
-   * Base implementation is a no-op. Subclasses (e.g. RVisualENAElement) override
+   * Base implementation is a no-op. Subclasses (e.g. RQEVisualElement) override
    * this to fetch data from a backend and call setModelData().
    */
   async calculate(): Promise<void> {}
@@ -198,6 +198,6 @@ export class VisualENAElement extends HTMLElement {
     }
   }
 }
-customElements.define(VisualENAElement.tagName, VisualENAElement);
+customElements.define(QEVisualElement.tagName, QEVisualElement);
 
-export default VisualENAElement;
+export default QEVisualElement;

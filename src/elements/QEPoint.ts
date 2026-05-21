@@ -1,16 +1,16 @@
 import { PlottedObject, Point } from "../objects/PlottedObject";
 import { Drawable } from "./Drawable";
-import { ENAArray, ENAElement } from "./ENALayer";
-import { ENASvgElement } from "./ENASvg";
+import { QEArray, QEElement } from "./QELayer";
+import { QEGraphElement } from "./QEGraph";
 
-export class ENAPoint extends Drawable implements ENAElement {
+export class QEPoint extends Drawable implements QEElement {
   __name__: string = "unnamed-point";
 
   constructor(
     public __data__: PlottedObject,
     public parent: SVGElement,
-    public graph: ENASvgElement,
-    public __children__: ENAArray = new ENAArray(),
+    public graph: QEGraphElement,
+    public __children__: QEArray = new QEArray(),
   ) {
     super(__data__, parent, graph, __children__);
 

@@ -1,8 +1,8 @@
-import EnaGraphElement from "./ENAgraph";
-import VizENAElement from "./VizENA";
+import EnaGraphElement from "./QEGraphLegacy";
+import QEVisualElement from "./QEVisual";
 
 export namespace VizENATools {
-  export function getviz(): VizENAElement | null {
+  export function getviz(): QEVisualElement | null {
     return document.querySelector("visual-ena");
   }
 

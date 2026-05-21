@@ -1,5 +1,5 @@
 import { Label, Point } from "../objects/PlottedObject";
-import { ENASvgElement } from "./ENASvg";
+import { QEGraphElement } from "./QEGraph";
 
 /**
  * SVG <text> drawable for a single ENA label.
@@ -17,7 +17,7 @@ import { ENASvgElement } from "./ENASvg";
  *                   useful for code-node labels that appear at the outer ring
  *   CUSTOM    (4) — caller provides explicit (customX, customY) coordinates
  */
-export class ENALabel {
+export class QELabel {
   svg_element: SVGTextElement;
   private _visible: boolean = false;
 
@@ -25,7 +25,7 @@ export class ENALabel {
     public readonly text:        string,
     public readonly point:       Point,
     public readonly parent:      SVGElement,
-    public readonly graph:       ENASvgElement,
+    public readonly graph:       QEGraphElement,
     public readonly displayMode: number = Label.DISPLAY_TYPES.ON,
     public readonly position:    number = Label.POSITION.OBJECT,
     public customX?: number,
@@ -34,7 +34,7 @@ export class ENALabel {
     this.svg_element = this._create();
 
     // Set initial visibility without calling update() yet.
-    // The ENASvgElement calls update_labels() after update_extremes() so that
+    // The QEGraphElement calls update_labels() after update_extremes() so that
     // the first real positioning uses the correct graph extent, not the default 1.
     if (displayMode === Label.DISPLAY_TYPES.ON) {
       this._visible = true;
