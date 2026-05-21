@@ -69,6 +69,15 @@ export interface ModelData {
   weight_col?:  string;
 }
 
+// ── Domain-specific aliases ──────────────────────────────────────────────────
+/**
+ * Ordered Network Analysis model data.
+ * Identical to ModelData but documents that `directed` should be true and the
+ * edges frame contains the full (unfolded) adjacency matrix, including
+ * self-connection columns (A.A).
+ */
+export type ONAModelData = ModelData;
+
 // ── Backward-compat aliases (ENA adapters) ───────────────────────────────────
 /** @deprecated use QEFrame */
 export type ENADataFrame    = QEFrame;

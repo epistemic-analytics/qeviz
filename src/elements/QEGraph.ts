@@ -22,8 +22,17 @@ const GROUP_PALETTE = [
  * Edge columns use "." as separator between the two codes, but codes can
  * themselves contain "." (e.g. "Technical.Constraints"). We resolve the
  * ambiguity by trying every prefix that matches a known code.
+ *
+ * Self-connections ("A.A") are detected first — they return [A, A].
+ * In directed (ONA) mode the full unfolded matrix is expected, so A→B and
+ * B→A are distinct columns; both resolve correctly as ordered pairs.
  */
 function parseEdgePair(colName: string, codes: string[]): [string, string] | null {
+  // Self-connections first: exact match "code.code"
+  for (const c of codes) {
+    if (colName === `${c}.${c}`) return [c, c];
+  }
+  // Directed or undirected pairs: longest-prefix wins to handle dotted code names
   for (const c1 of codes) {
     if (colName.startsWith(c1 + '.')) {
       const c2 = colName.slice(c1.length + 1);
@@ -651,12 +660,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // ── Step 7: Draw Line objects + accumulate node weights ───────────────
           const maxEdgeWeight = Math.max(1, ...drawEdges.map(e => e.weight));
           const nodeWeightSum: Record<string, number> = {};
+          const isDirected = !!(model as any).directed;
 
           drawEdges.forEach(({ col, pair, weight, color }) => {
             const fromNode = nodeLayer.__data__.objects.get(pair[0]);
             const toNode   = nodeLayer.__data__.objects.get(pair[1]);
             if (!fromNode || !toNode) return;
 
+            const isSelf   = pair[0] === pair[1];
             const opacity  = Math.min(1, weight / maxEdgeWeight);
             const edgeLine = new Line(
               {},
@@ -665,11 +676,25 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             );
             edgeLine.ID    = `edge-${col}`;
             edgeLine.color = new Color(color);
-            (edgeLine as any).meta = { isMeanEdge: true, weight, maxWeight: maxEdgeWeight, opacity };
+            (edgeLine as any).meta = {
+              isMeanEdge:      true,
+              weight,
+              maxWeight:       maxEdgeWeight,
+              opacity,
+              isDirected,
+              isSelfConnection: isSelf,
+              // Self-connection rendering needs the node position at render time;
+              // store it here so QELine can draw the arc without looking up the node.
+              selfX: isSelf ? fromNode.x : undefined,
+              selfY: isSelf ? fromNode.y : undefined,
+            };
             edgeLayer.__data__.objects.set(edgeLine.ID, edgeLine);
 
+            // Self-connection: only credit the single node once
             nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
-            nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
+            if (!isSelf) {
+              nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
+            }
           });
 
           edgeLayer.__data__.__state__.setVariable('layer_updated', edgeLayer.__data__);
@@ -766,7 +791,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   create(): SVGElement {
-    const 
+    const
       svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     ;
     svg.classList.add("graph");
@@ -775,6 +800,23 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     svg.setAttribute("role", "figure");
     svg.setAttribute("data-graph-size", `${Math.min((this.__data__ as Graph).extremes.width, (this.__data__ as Graph).extremes.height)}`);
     this.svg_element = svg;
+
+    // Arrowhead marker used by directed edges (fill="context-stroke" so the
+    // arrow inherits the stroke color of the referencing element).
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'qe-arrow');
+    marker.setAttribute('markerWidth',  '6');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('refX', '5');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    arrowPath.setAttribute('d', 'M0,0 L0,6 L6,3 z');
+    arrowPath.setAttribute('fill', 'context-stroke');
+    marker.appendChild(arrowPath);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
 
     this.__data__.layers.forEach((layer: LayerLike) => {
       let 

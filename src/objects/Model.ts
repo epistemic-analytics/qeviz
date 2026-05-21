@@ -36,6 +36,8 @@ export class Model implements ModelSpec {
   node_id_col: string = 'id';
   /** Group column in the points frame (null = no grouping) */
   group_col:   string | null = null;
+  /** Directed network mode — true renders arrowheads; false (default) undirected */
+  directed:    boolean = false;
 
   constructor(o: Partial<ModelSpec> = {}) {
     this._points     = o.points     ?? new DataFrame();

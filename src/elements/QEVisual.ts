@@ -151,7 +151,8 @@ export class QEVisualElement extends HTMLElement {
     });
 
     // ── Step 2: ingest scalar fields ─────────────────────────────────────
-    if (data.updated !== undefined) this._model.setByKey('updated', data.updated);
+    if (data.updated  !== undefined) this._model.setByKey('updated', data.updated);
+    if (data.directed !== undefined) this._model.directed = data.directed;
 
     // ── Step 3: resolve and store column names on the model ───────────────
     // These are read by QEGraph at render time instead of hardcoded strings.
