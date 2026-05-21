@@ -1,0 +1,23 @@
+{
+  "name": "qeviz",
+  "version": "0.1.0",
+  "description": "Generic 2D model visualization library for quantitative/qualitative exploration",
+  "type": "module",
+  "main": "./dist/qeviz.umd.js",
+  "module": "./dist/qeviz.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/qeviz.es.js",
+      "require": "./dist/qeviz.umd.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^6.4.1"
+  }
+}
