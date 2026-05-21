@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>qeviz — Directed / ONA demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #f5f5f5;
+    }
+    h1 { font-size: 1.2rem; margin: 0 0 0.25rem; }
+    p.subtitle { color: #555; margin: 0 0 1rem; font-size: 0.85rem; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    .card h2 { font-size: 0.9rem; margin: 0 0 0.5rem; color: #333; }
+
+    qe-visual {
+      display: block;
+      width: 100%;
+      height: 420px;
+    }
+    qe-graph {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* control panel */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      align-items: center;
+    }
+    label { font-size: 0.85rem; }
+    select, input[type=range] { font-size: 0.85rem; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.8rem;
+    }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    details summary { font-size: 0.8rem; cursor: pointer; color: #555; }
+    pre { font-size: 0.72rem; background: #f8f8f8; padding: 0.5rem; border-radius: 4px;
+          overflow: auto; max-height: 200px; margin: 0; }
+  </style>
+</head>
+<body>
+
+<h1>qeviz — Directed (ONA) network</h1>
+<p class="subtitle">
+  Demonstrates <code>directed: true</code> with arrowheads and self-connections (A→A).
+  Group means and CI bounds are supplied via a pre-computed <code>groups</code> frame
+  (Phase 3) — qeviz renders without computing any statistics itself.
+  Synthetic ONA dataset: 4 codes, 2 groups, 8 units.
+</p>
+
+<div class="controls">
+  <label>View:
+    <select id="sel-mode">
+      <option value="group-FirstGame">Group — FirstGame</option>
+      <option value="group-SecondGame">Group — SecondGame</option>
+      <option value="subtract">Subtraction (FirstGame − SecondGame)</option>
+      <option value="overlay">Overlay (both groups)</option>
+    </select>
+  </label>
+  <label>Labels:
+    <select id="sel-labels">
+      <option value="auto">Auto</option>
+      <option value="on">On</option>
+      <option value="off">Off</option>
+      <option value="click">Click</option>
+    </select>
+  </label>
+</div>
+
+<div class="layout">
+  <div class="card">
+    <h2>Standard ENA (undirected) — <code>directed: false</code></h2>
+    <qe-visual id="vis-undirected">
+      <qe-graph id="graph-undirected" width="100%" height="420" nodes labels="auto" points></qe-graph>
+    </qe-visual>
+    <div class="legend" id="legend-undirected"></div>
+  </div>
+
+  <div class="card">
+    <h2>Ordered ENA (directed, with self-loops) — <code>directed: true</code></h2>
+    <qe-visual id="vis-directed">
+      <qe-graph id="graph-directed" width="100%" height="420" nodes labels="auto" points></qe-graph>
+    </qe-visual>
+    <div class="legend" id="legend-directed"></div>
+  </div>
+</div>
+
+<br>
+<details>
+  <summary>Show model data (JSON)</summary>
+  <pre id="json-display"></pre>
+</details>
+
+<script type="module">
+// ── Load qeviz ────────────────────────────────────────────────────────────────
+import { QEVisualElement, QEGraphElement } from '../dist/qeviz.es.js';
+
+// ── Synthetic ONA dataset ─────────────────────────────────────────────────────
+//
+// 4 codes: Planning (P), Data (D), Technical (T), Constraints (C)
+// 2 groups: FirstGame, SecondGame
+// 8 units total (4 per group)
+//
+// The full (unfolded) adjacency matrix has 4×4 = 16 columns, including:
+//   - Upper triangle: P.D, P.T, P.C, D.T, D.C, T.C
+//   - Lower triangle: D.P, T.P, C.P, T.D, C.D, C.T  (direction matters in ONA)
+//   - Diagonal:       P.P, D.D, T.T, C.C              (self-connections)
+//
+// Node positions are on a unit circle for clarity.
+
+const CODES = ['P', 'D', 'T', 'C'];
+
+// Node positions on a unit circle (radius 0.7)
+const R = 0.7;
+const nodeRows = CODES.map((c, i) => {
+  const angle = (2 * Math.PI * i) / CODES.length - Math.PI / 2;
+  return { id: c, x: parseFloat((R * Math.cos(angle)).toFixed(4)), y: parseFloat((R * Math.sin(angle)).toFixed(4)) };
+});
+
+const nodeTypes = { id: 'character', x: 'numeric', y: 'numeric' };
+
+// Build the full 4×4 edge columns (including diagonal for self-connections)
+function edgeCols() {
+  const cols = {};
+  for (const c1 of CODES) {
+    for (const c2 of CODES) {
+      cols[`${c1}.${c2}`] = 'numeric';
+    }
+  }
+  return { ...{ QEUNIT: 'character', group: 'character' }, ...cols };
+}
+
+// Generate synthetic edge weights for a unit.
+// directionality: some connections flow P→D more than D→P, etc.
+function makeUnit(unitId, group, seed) {
+  const rng = (s) => { let x = Math.sin(s) * 10000; return x - Math.floor(x); };
+  const row = { QEUNIT: unitId, group };
+  let s = seed;
+  for (const c1 of CODES) {
+    for (const c2 of CODES) {
+      s++;
+      // Self-connections: present but smaller
+      // Directed asymmetry: forward connections (lower i → higher j) stronger in FirstGame
+      // reversed in SecondGame
+      const i = CODES.indexOf(c1);
+      const j = CODES.indexOf(c2);
+      let base = rng(s) * 0.4;
+      if (i === j) {
+        base = rng(s + 100) * 0.3; // self-connection
+      } else if (group === 'FirstGame') {
+        base = i < j ? rng(s) * 0.8 : rng(s) * 0.2;
+      } else {
+        base = i > j ? rng(s) * 0.8 : rng(s) * 0.2;
+      }
+      row[`${c1}.${c2}`] = parseFloat(base.toFixed(4));
+    }
+  }
+  return row;
+}
+
+const edgeData = [
+  makeUnit('alice',   'FirstGame',  1),
+  makeUnit('bob',     'FirstGame',  7),
+  makeUnit('carol',   'FirstGame', 13),
+  makeUnit('dan',     'FirstGame', 19),
+  makeUnit('eve',     'SecondGame', 25),
+  makeUnit('frank',   'SecondGame', 31),
+  makeUnit('grace',   'SecondGame', 37),
+  makeUnit('henry',   'SecondGame', 43),
+];
+
+// Point positions: each unit gets a position derived from a simple weighted sum
+// of node positions, projected onto the 2D plane.
+function makePoint(unit) {
+  let sx = 0, sy = 0, total = 0;
+  for (const c1 of CODES) {
+    for (const c2 of CODES) {
+      const w = unit[`${c1}.${c2}`] || 0;
+      const i = CODES.indexOf(c1);
+      const j = CODES.indexOf(c2);
+      const angle1 = (2 * Math.PI * i) / CODES.length - Math.PI / 2;
+      const angle2 = (2 * Math.PI * j) / CODES.length - Math.PI / 2;
+      sx += w * (Math.cos(angle1) + Math.cos(angle2)) / 2;
+      sy += w * (Math.sin(angle1) + Math.sin(angle2)) / 2;
+      total += w;
+    }
+  }
+  if (total > 0) { sx /= total; sy /= total; }
+  // add a small offset per unit so points don't stack
+  const rng = (s) => { let x = Math.sin(s)*10000; return x - Math.floor(x); };
+  const off = rng(unit.QEUNIT.length + 5) * 0.1 - 0.05;
+  return { QEUNIT: unit.QEUNIT, group: unit.group,
+           x: parseFloat((sx + off).toFixed(4)),
+           y: parseFloat((sy + off).toFixed(4)) };
+}
+
+const pointData = edgeData.map(makePoint);
+const pointTypes = { QEUNIT: 'character', group: 'character', x: 'numeric', y: 'numeric' };
+
+// ── Phase 3: pre-compute group summaries (means + CI bounds) ─────────────────
+// In production this is done by rENA / pyena and passed into setModelData().
+// qeviz renders without computing any statistics itself.
+function computeGroupSummaries(points) {
+  const acc = {};
+  points.forEach(({ QEUNIT, group, x, y }) => {
+    if (!acc[group]) acc[group] = { group, xs: [], ys: [] };
+    acc[group].xs.push(x);
+    acc[group].ys.push(y);
+  });
+  return Object.values(acc).map(({ group, xs, ys }) => {
+    const n  = xs.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    // ±1 SD bounds (illustrative; rENA uses 95% CI via t-distribution)
+    const sdX = Math.sqrt(xs.reduce((a, b) => a + (b - mx) ** 2, 0) / Math.max(1, n - 1));
+    const sdY = Math.sqrt(ys.reduce((a, b) => a + (b - my) ** 2, 0) / Math.max(1, n - 1));
+    return {
+      group,
+      x: parseFloat(mx.toFixed(4)),
+      y: parseFloat(my.toFixed(4)),
+      'x.low':  parseFloat((mx - sdX).toFixed(4)),
+      'x.high': parseFloat((mx + sdX).toFixed(4)),
+      'y.low':  parseFloat((my - sdY).toFixed(4)),
+      'y.high': parseFloat((my + sdY).toFixed(4)),
+    };
+  });
+}
+
+const groupData  = computeGroupSummaries(pointData);
+const groupTypes = {
+  group: 'character',
+  x: 'numeric', y: 'numeric',
+  'x.low': 'numeric', 'x.high': 'numeric',
+  'y.low': 'numeric', 'y.high': 'numeric',
+};
+
+// Build the ModelData payload — same data, only directed flag differs
+function buildModel(directed) {
+  return {
+    directed,
+    updated: Date.now(),
+    id_col:      'QEUNIT',
+    node_id_col: 'id',
+    x_col: 'x',
+    y_col: 'y',
+    group_col: 'group',
+    nodes: {
+      data:  nodeRows,
+      types: nodeTypes,
+    },
+    edges: {
+      data:  edgeData,
+      types: edgeCols(),
+    },
+    points: {
+      data:  pointData,
+      types: pointTypes,
+    },
+    // Phase 3: pre-computed group summaries — means + CI bounds
+    groups: {
+      data:  groupData,
+      types: groupTypes,
+    },
+  };
+}
+
+const undirectedModel = buildModel(false);
+const directedModel   = buildModel(true);
+
+// Display the JSON
+document.getElementById('json-display').textContent =
+  JSON.stringify(directedModel, null, 2).slice(0, 3000) + '\n... (truncated)';
+
+// ── Push data to both visuals ─────────────────────────────────────────────────
+const visUndirected = document.getElementById('vis-undirected');
+const visDirected   = document.getElementById('vis-directed');
+
+visUndirected.setModelData(undirectedModel);
+visDirected.setModelData(directedModel);
+
+// ── Group legend ──────────────────────────────────────────────────────────────
+const PALETTE = ['#4477AA', '#EE6677', '#228833', '#CCBB44'];
+const groups  = ['FirstGame', 'SecondGame'];
+
+['undirected', 'directed'].forEach(id => {
+  const el = document.getElementById(`legend-${id}`);
+  groups.forEach((g, i) => {
+    el.innerHTML += `<span class="legend-item">
+      <span class="legend-dot" style="background:${PALETTE[i]}"></span>${g}
+    </span>`;
+  });
+});
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+const graphU = document.getElementById('graph-undirected');
+const graphD = document.getElementById('graph-directed');
+
+document.getElementById('sel-mode').addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (val === 'subtract') {
+    graphU.setAttribute('group',   'FirstGame');
+    graphU.setAttribute('compare', 'SecondGame');
+    graphD.setAttribute('group',   'FirstGame');
+    graphD.setAttribute('compare', 'SecondGame');
+    graphU.removeAttribute('also');
+    graphD.removeAttribute('also');
+  } else if (val === 'overlay') {
+    graphU.setAttribute('group', 'FirstGame');
+    graphU.setAttribute('also',  'SecondGame');
+    graphD.setAttribute('group', 'FirstGame');
+    graphD.setAttribute('also',  'SecondGame');
+    graphU.removeAttribute('compare');
+    graphD.removeAttribute('compare');
+  } else {
+    const g = val.replace('group-', '');
+    graphU.setAttribute('group', g);
+    graphD.setAttribute('group', g);
+    graphU.removeAttribute('compare');
+    graphD.removeAttribute('compare');
+    graphU.removeAttribute('also');
+    graphD.removeAttribute('also');
+  }
+
+  // Re-push data to trigger re-render
+  visUndirected.setModelData({ ...undirectedModel, updated: Date.now() });
+  visDirected.setModelData({   ...directedModel,   updated: Date.now() });
+});
+
+document.getElementById('sel-labels').addEventListener('change', (e) => {
+  const v = e.target.value;
+  graphU.setAttribute('labels', v);
+  graphD.setAttribute('labels', v);
+  visUndirected.setModelData({ ...undirectedModel, updated: Date.now() });
+  visDirected.setModelData({   ...directedModel,   updated: Date.now() });
+});
+</script>
+</body>
+</html>

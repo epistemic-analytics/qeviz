@@ -184,6 +184,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // The Model object is carried in event.detail, so ena-graph works whether it
     // is a child, sibling, or anywhere else relative to ena-visual.
     document.addEventListener('model-updated', (e: Event) => {
+      // When multiple qe-visual elements exist on the page, each qe-graph must
+      // only react to events from its own associated visual.  _vizena is resolved
+      // in connectedCallback(); before that point we accept all events (initial
+      // load), but once the association is known we filter strictly.
+      if (this._vizena && e.target !== this._vizena) return;
+
       const model = (e as CustomEvent).detail;
       if (!model) return;
       this._currentModel = model;
@@ -196,6 +202,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const groupColName = model.group_col;
 
       // ── Group color map ──────────────────────────────────────────────────────
+      // Priority: (1) points groupCol, (2) groups frame row names, (3) empty.
       const groupColorMap: Record<string, string> = {};
       if (groupColName && model.points?.names) {
         const groupCol = model.points.col(groupColName);
@@ -205,6 +212,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
           });
         }
+      } else if (model.groups?.rows && model.groups.rows().length > 0) {
+        // No points-based groups — assign colors from the groups frame directly.
+        model.groups.rows().forEach((row: DataFrameRow, i: number) => {
+          const g = row.rowName ?? String(row[0]);
+          if (!groupColorMap[g]) groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
+        });
       }
 
       // ── Point-to-node coordinate scaling ────────────────────────────────────
@@ -300,44 +313,50 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             }
           });
 
-          // Add one mean point per group — larger (size=1.5) and same group color
-          Object.entries(groupSums).forEach(([group, { x, y, n, color }]) => {
-            const meanPt = new Point({
-              ID: `mean-${group}`,
-              dimensions: [x / n * pointScale, -(y / n) * pointScale],  // scale + negate Y
-              meta: { group },
-            });
-            meanPt.color = new Color(color);
-            meanPt.size  = 1.5;
-            meanPt.shape = 'rect';   // group means render as squares
-            this.__data__.points.set(meanPt.ID, meanPt);
-            pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
-          });
+          // ── Group means + bounds ──────────────────────────────────────────────
+          // Two paths:
+          //   A) model.groups frame present → use pre-computed means + bounds.
+          //      This is the Phase 3+ preferred path. qeviz renders; adapters compute.
+          //   B) No groups frame → compute means from unit-point accumulations
+          //      (legacy fallback; also used when only points are provided).
+          //
+          // Deprecated frames (model.confidence, model.outlier) are still respected
+          // in path B for backward compatibility with rENA adapters not yet updated.
 
-          // ── 95% CI boxes on group means ────────────────────────────────────
-          // On by default; disable with confidence="false" on <ena-graph>.
-          // Each box spans ±t(df,0.975)×SE independently per axis — the
-          // standard rectangular CI shown in the rENA / Web ENA tools.
-          const showCI = this.getAttribute('confidence') !== 'false';
-          if (showCI) {
-            const pointsLayerSvg = pointsLayer.svg_element as SVGGElement | null;
-            const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 0.008;
+          const hasGroupsFrame = !!(model.groups?.rows && model.groups.rows().length > 0);
+          const pointsLayerSvg = pointsLayer.svg_element as SVGGElement | null;
+          const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 0.008;
 
-            // Remove rects for groups no longer present
-            this._ciRects.forEach((el, g) => {
-              if (!groupSums[g]) { el.remove(); this._ciRects.delete(g); }
-            });
+          if (hasGroupsFrame) {
+            // ── Path A: groups frame ─────────────────────────────────────────
+            // Remove CI/outlier rects for groups no longer in the frame.
+            const groupFrameNames = new Set(model.groups.rows().map((r: DataFrameRow) => r.rowName ?? String(r[0])));
+            this._ciRects.forEach((el, g) => { if (!groupFrameNames.has(g)) { el.remove(); this._ciRects.delete(g); } });
+            this._outlierRects.forEach((el, g) => { if (!groupFrameNames.has(g)) { el.remove(); this._outlierRects.delete(g); } });
 
-            if (model.confidence?.rows) {
-              // Pre-computed path: use libqe interval frame
-              model.confidence.rows().forEach((row: DataFrameRow) => {
-                const groupIdx = row.names.indexOf(groupColName ?? 'group');
-                const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
-                if (!group) return;
-                const color = groupColorMap[group] ?? '#888888';
-                const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
-                if (!bounds) return;
+            model.groups.rows().forEach((row: DataFrameRow) => {
+              const group = row.rowName ?? String(row[0]);
+              const color = groupColorMap[group] ?? '#888888';
+              const xIdx = row.names.indexOf(dims[0]);
+              const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
+              const mx = xIdx >= 0 ? Number(row[xIdx]) * pointScale : 0;
+              const my = yIdx >= 0 ? -Number(row[yIdx]) * pointScale : 0;
 
+              // Mean marker — square, larger than unit points
+              const meanPt = new Point({
+                ID: `mean-${group}`,
+                dimensions: [mx, my],
+                meta: { group },
+              });
+              meanPt.color = new Color(color);
+              meanPt.size  = 1.5;
+              meanPt.shape = 'rect';
+              this.__data__.points.set(meanPt.ID, meanPt);
+              pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
+
+              // Bounds rect (CI, IQR, or any interval) — rendered behind points
+              const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
+              if (bounds) {
                 const rect_x      = bounds.x_low  * pointScale;
                 const rect_y      = -bounds.y_high * pointScale;
                 const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
@@ -349,7 +368,6 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                   el.setAttribute('data-ci-group', group);
                   this._ciRects.set(group, el);
                 }
-
                 el.setAttribute('x',              rect_x.toString());
                 el.setAttribute('y',              rect_y.toString());
                 el.setAttribute('width',          rect_width.toString());
@@ -359,105 +377,136 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 el.setAttribute('stroke-width',   sw.toString());
                 el.setAttribute('stroke-opacity', '0.8');
                 el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
-
                 if (pointsLayerSvg && !el.parentElement) {
                   pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                 }
+              }
+            });
+
+          } else {
+            // ── Path B: legacy — compute means from groupSums ────────────────
+            // Add one mean point per group — larger (size=1.5) and same group color
+            Object.entries(groupSums).forEach(([group, { x, y, n, color }]) => {
+              const meanPt = new Point({
+                ID: `mean-${group}`,
+                dimensions: [x / n * pointScale, -(y / n) * pointScale],
+                meta: { group },
               });
-            } else {
-              // JS fallback: compute CI from groupSums
-              Object.entries(groupSums).forEach(([group, { x, y, x2, y2, n, color }]) => {
-                if (n < 2) return;
+              meanPt.color = new Color(color);
+              meanPt.size  = 1.5;
+              meanPt.shape = 'rect';
+              this.__data__.points.set(meanPt.ID, meanPt);
+              pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
+            });
 
-                const μx = x / n;
-                const μy = y / n;
+            // ── CI boxes (deprecated confidence frame or JS fallback) ────────
+            const showCI = this.getAttribute('confidence') !== 'false';
+            if (showCI) {
+              this._ciRects.forEach((el, g) => {
+                if (!groupSums[g]) { el.remove(); this._ciRects.delete(g); }
+              });
 
-                // Raw (un-scaled) sample variances
-                const rawVarX = x2 / n - μx * μx;
-                const rawVarY = y2 / n - μy * μy;
+              if (model.confidence?.rows) {
+                // Pre-computed path: deprecated model.confidence frame
+                model.confidence.rows().forEach((row: DataFrameRow) => {
+                  const groupIdx = row.names.indexOf(groupColName ?? 'group');
+                  const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
+                  if (!group) return;
+                  const color = groupColorMap[group] ?? '#888888';
+                  const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
+                  if (!bounds) return;
+                  const rect_x      = bounds.x_low  * pointScale;
+                  const rect_y      = -bounds.y_high * pointScale;
+                  const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
+                  const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                  let el = this._ciRects.get(group);
+                  if (!el) {
+                    el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
+                    el.setAttribute('data-ci-group', group);
+                    this._ciRects.set(group, el);
+                  }
+                  el.setAttribute('x',              rect_x.toString());
+                  el.setAttribute('y',              rect_y.toString());
+                  el.setAttribute('width',          rect_width.toString());
+                  el.setAttribute('height',         rect_height.toString());
+                  el.setAttribute('fill',           'none');
+                  el.setAttribute('stroke',         color);
+                  el.setAttribute('stroke-width',   sw.toString());
+                  el.setAttribute('stroke-opacity', '0.8');
+                  el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
+                  if (pointsLayerSvg && !el.parentElement) {
+                    pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
+                  }
+                });
+              } else {
+                // JS fallback: compute CI from accumulated variance
+                Object.entries(groupSums).forEach(([group, { x, y, x2, y2, n, color }]) => {
+                  if (n < 2) return;
+                  const μx = x / n, μy = y / n;
+                  const rawVarX = x2 / n - μx * μx;
+                  const rawVarY = y2 / n - μy * μy;
+                  const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
+                  const cx = μx * pointScale, cy = -(μy) * pointScale;
+                  let el = this._ciRects.get(group);
+                  if (!el) {
+                    el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
+                    el.setAttribute('data-ci-group', group);
+                    this._ciRects.set(group, el);
+                  }
+                  el.setAttribute('x',              (cx - halfW).toString());
+                  el.setAttribute('y',              (cy - halfH).toString());
+                  el.setAttribute('width',          (halfW * 2).toString());
+                  el.setAttribute('height',         (halfH * 2).toString());
+                  el.setAttribute('fill',           'none');
+                  el.setAttribute('stroke',         color);
+                  el.setAttribute('stroke-width',   sw.toString());
+                  el.setAttribute('stroke-opacity', '0.8');
+                  el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
+                  if (pointsLayerSvg && !el.parentElement) {
+                    pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
+                  }
+                });
+              }
+            }
 
-                // CI half-extents in display space (pointScale applied inside)
-                const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
-
-                // Display-space mean (y negated for SVG)
-                const cx = μx * pointScale;
-                const cy = -(μy) * pointScale;
-
-                // Get or create <rect>
-                let el = this._ciRects.get(group);
+            // ── Outlier boxes (deprecated model.outlier frame) ───────────────
+            const showOutlier = this.getAttribute('outlier') !== 'false';
+            if (showOutlier && model.outlier?.rows) {
+              this._outlierRects.forEach((el, g) => {
+                if (!groupColorMap[g]) { el.remove(); this._outlierRects.delete(g); }
+              });
+              model.outlier.rows().forEach((row: DataFrameRow) => {
+                const groupIdx = row.names.indexOf(groupColName ?? 'group');
+                const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
+                if (!group) return;
+                const color = groupColorMap[group] ?? '#888888';
+                const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
+                if (!bounds) return;
+                const rect_x      = bounds.x_low  * pointScale;
+                const rect_y      = -bounds.y_high * pointScale;
+                const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
+                const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                let el = this._outlierRects.get(group);
                 if (!el) {
                   el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
-                  el.setAttribute('data-ci-group', group);
-                  this._ciRects.set(group, el);
+                  el.setAttribute('data-outlier-group', group);
+                  this._outlierRects.set(group, el);
                 }
-
-                el.setAttribute('x',              (cx - halfW).toString());
-                el.setAttribute('y',              (cy - halfH).toString());
-                el.setAttribute('width',          (halfW * 2).toString());
-                el.setAttribute('height',         (halfH * 2).toString());
+                el.setAttribute('x',              rect_x.toString());
+                el.setAttribute('y',              rect_y.toString());
+                el.setAttribute('width',          rect_width.toString());
+                el.setAttribute('height',         rect_height.toString());
                 el.setAttribute('fill',           'none');
                 el.setAttribute('stroke',         color);
                 el.setAttribute('stroke-width',   sw.toString());
-                el.setAttribute('stroke-opacity', '0.8');
-                el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
-
-                // Insert before existing children → renders behind unit points
+                el.setAttribute('stroke-opacity', '0.5');
+                el.setAttribute('stroke-dasharray', `${sw * 2} ${sw * 2}`);
                 if (pointsLayerSvg && !el.parentElement) {
                   pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                 }
               });
             }
-          }
-
-          // ── Outlier boxes ─────────────────────────────────────────────────────
-          // On by default; disable with outlier="false" on <ena-graph>.
-          // Uses model.outlier (pre-computed by libqe::lq_outlier_ci()) only;
-          // no JS fallback — outlier calculation is purely libqe's responsibility.
-          const showOutlier = this.getAttribute('outlier') !== 'false';
-          if (showOutlier && model.outlier?.rows) {
-            const pointsLayerSvg = pointsLayer.svg_element as SVGGElement | null;
-            const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 0.008;
-
-            // Remove rects for groups no longer present
-            this._outlierRects.forEach((el, g) => {
-              if (!groupColorMap[g]) { el.remove(); this._outlierRects.delete(g); }
-            });
-
-            model.outlier.rows().forEach((row: DataFrameRow) => {
-              const groupIdx = row.names.indexOf(groupColName ?? 'group');
-              const group = groupIdx >= 0 ? String(row[groupIdx]) : (row.rowName ?? null);
-              if (!group) return;
-              const color = groupColorMap[group] ?? '#888888';
-              const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
-              if (!bounds) return;
-
-              const rect_x      = bounds.x_low  * pointScale;
-              const rect_y      = -bounds.y_high * pointScale;
-              const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
-              const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
-
-              let el = this._outlierRects.get(group);
-              if (!el) {
-                el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
-                el.setAttribute('data-outlier-group', group);
-                this._outlierRects.set(group, el);
-              }
-
-              el.setAttribute('x',              rect_x.toString());
-              el.setAttribute('y',              rect_y.toString());
-              el.setAttribute('width',          rect_width.toString());
-              el.setAttribute('height',         rect_height.toString());
-              el.setAttribute('fill',           'none');
-              el.setAttribute('stroke',         color);
-              el.setAttribute('stroke-width',   sw.toString());
-              el.setAttribute('stroke-opacity', '0.5');
-              el.setAttribute('stroke-dasharray', `${sw * 2} ${sw * 2}`);
-
-              if (pointsLayerSvg && !el.parentElement) {
-                pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
-              }
-            });
-          }
+          } // end Path B
 
           // ── Labels ──────────────────────────────────────────────────────────
           if (labelSvg) {
@@ -489,9 +538,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               });
             }
 
-            // Mean labels
+            // Mean labels — use groups frame rows if available, else groupSums keys
             if (labelMeans !== 0) {
-              Object.entries(groupSums).forEach(([group]) => {
+              const meanGroupNames: string[] = hasGroupsFrame
+                ? model.groups.rows().map((r: DataFrameRow) => r.rowName ?? String(r[0]))
+                : Object.keys(groupSums);
+
+              meanGroupNames.forEach((group: string) => {
                 const meanId = `mean-${group}`;
                 const pt = pointsLayer.__data__.objects.get(meanId) as Point | undefined;
                 if (!pt) return;
@@ -801,21 +854,34 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     svg.setAttribute("data-graph-size", `${Math.min((this.__data__ as Graph).extremes.width, (this.__data__ as Graph).extremes.height)}`);
     this.svg_element = svg;
 
-    // Arrowhead marker used by directed edges (fill="context-stroke" so the
-    // arrow inherits the stroke color of the referencing element).
+    // Pre-generate one arrowhead marker per palette color.  Per-color markers are
+    // the most reliable approach: `context-stroke` and `currentColor` inheritance
+    // through SVG markers is inconsistent across browsers and shadow-DOM contexts.
+    // Reference as url(#qe-arrow-RRGGBB) where RRGGBB is the hex without '#'.
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', 'qe-arrow');
-    marker.setAttribute('markerWidth',  '6');
-    marker.setAttribute('markerHeight', '6');
-    marker.setAttribute('refX', '5');
-    marker.setAttribute('refY', '3');
-    marker.setAttribute('orient', 'auto');
-    const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    arrowPath.setAttribute('d', 'M0,0 L0,6 L6,3 z');
-    arrowPath.setAttribute('fill', 'context-stroke');
-    marker.appendChild(arrowPath);
-    defs.appendChild(marker);
+    // Arrow dimensions in SVG user-space units (viewBox is ~4.8×4.8).
+    // AW must be large enough so the body of the arrowhead is visible before it
+    // disappears behind the target node circle.  ~5% of the viewport (0.24 units)
+    // works well.  markerUnits="userSpaceOnUse" keeps the size fixed regardless
+    // of stroke-width, so even thin edges get a readable direction indicator.
+    const AW = 0.22, AH = 0.15; // arrow length (along edge) and base width (perp)
+    const makeArrow = (id: string, fill: string) => {
+      const m = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      m.setAttribute('id',          id);
+      m.setAttribute('markerWidth', String(AW));
+      m.setAttribute('markerHeight',String(AH));
+      m.setAttribute('refX',        String(AW));   // tip at reference point
+      m.setAttribute('refY',        String(AH / 2));
+      m.setAttribute('orient',      'auto');
+      m.setAttribute('markerUnits', 'userSpaceOnUse');
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d',    `M0,0 L0,${AH} L${AW},${AH/2} z`);
+      p.setAttribute('fill', fill);
+      m.appendChild(p);
+      defs.appendChild(m);
+    };
+    // One marker per GROUP_PALETTE entry (covers all possible edge colors)
+    GROUP_PALETTE.forEach(color => makeArrow(`qe-arrow-${color.slice(1)}`, color));
     svg.appendChild(defs);
 
     this.__data__.layers.forEach((layer: LayerLike) => {

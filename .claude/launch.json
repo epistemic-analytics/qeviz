@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "/Users/clmarquart/Workspaces/sandbox/qeviz", "-l", "7801"],
+      "port": 7801
+    }
+  ]
+}

@@ -26,7 +26,8 @@ export class QELine extends Drawable implements QEElement {
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', this.__data__.color.toString());
       if (meta.isDirected) {
-        path.setAttribute('marker-end', 'url(#qe-arrow)');
+        const c = (this.__data__.color?.toString() ?? '').replace('#', '');
+        path.setAttribute('marker-end', `url(#qe-arrow-${c})`);
       }
       this.svg_element = path;
       return path;
@@ -40,7 +41,8 @@ export class QELine extends Drawable implements QEElement {
     line.setAttribute('stroke-width', this.get_size().toString());
     line.setAttribute('stroke', this.__data__.color.toString());
     if (meta.isDirected) {
-      line.setAttribute('marker-end', 'url(#qe-arrow)');
+      const c = (this.__data__.color?.toString() ?? '').replace('#', '');
+      line.setAttribute('marker-end', `url(#qe-arrow-${c})`);
     }
 
     this.svg_element = line;
@@ -55,8 +57,9 @@ export class QELine extends Drawable implements QEElement {
       this.parent.appendChild(this.svg_element);
     }
 
-    const extent = (this.graph.__data__ as any).extremes?.x_max ?? 1;
-    const meta   = (this.__data__ as any).meta ?? {};
+    const extent      = (this.graph.__data__ as any).extremes?.x_max ?? 1;
+    const meta        = (this.__data__ as any).meta ?? {};
+    const strokeColor = this.__data__.color.toString();
 
     if (meta.isMeanEdge) {
       const weight  = typeof meta.weight    === 'number' ? meta.weight    : 0;
@@ -76,6 +79,10 @@ export class QELine extends Drawable implements QEElement {
         (this.svg_element as SVGPathElement).setAttribute('d', d);
         this.svg_element.setAttribute('stroke-width',   (sw * 0.6).toString());
         this.svg_element.setAttribute('stroke-opacity', opacity.toString());
+        if (meta.isDirected) {
+          const colorId = strokeColor.replace('#', '');
+          this.svg_element.setAttribute('marker-end', `url(#qe-arrow-${colorId})`);
+        }
       } else {
         // Regular directed or undirected edge
         (this.svg_element as SVGLineElement).setAttribute('x1', this.__data__.from.x.toString());
@@ -85,7 +92,8 @@ export class QELine extends Drawable implements QEElement {
         this.svg_element.setAttribute('stroke-width',   sw.toString());
         this.svg_element.setAttribute('stroke-opacity', opacity.toString());
         if (meta.isDirected) {
-          this.svg_element.setAttribute('marker-end', 'url(#qe-arrow)');
+          const colorId = strokeColor.replace('#', '');
+          this.svg_element.setAttribute('marker-end', `url(#qe-arrow-${colorId})`);
         } else {
           this.svg_element.removeAttribute('marker-end');
         }
@@ -100,7 +108,7 @@ export class QELine extends Drawable implements QEElement {
       this.svg_element.setAttribute('stroke-width',   sw.toString());
       this.svg_element.setAttribute('stroke-opacity', '1');
     }
-    this.svg_element.setAttribute('stroke', this.__data__.color.toString());
+    this.svg_element.setAttribute('stroke', strokeColor);
   }
 
   draw() {

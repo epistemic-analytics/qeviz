@@ -140,12 +140,13 @@ export class QELayer implements QEElement {
         this.__children__.push(ena_element);
       });
 
-      updating.forEach( ( obj: PlottedObject) => {
-        let child = this.__children__.find((child: QEElement) => child.__data__ && child.__data__.ID === obj.__data__.ID);
-        if(child) {
-          child.__data__ = obj.__data__;
-          child.update();
-        }
+      updating.forEach( ( child: QEElement) => {
+        // Pull the *new* PlottedObject from the updated layer data so that any
+        // changed properties (e.g. weight, color, meta flags) are picked up by
+        // the child's update() call.
+        const newData = newValue.objects.get(child.__data__.ID) as PlottedObject;
+        if (newData) (child as any).__data__ = newData;
+        child.update();
       });
 
       removing.forEach( ( child: QEElement) => {
