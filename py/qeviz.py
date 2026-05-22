@@ -329,3 +329,87 @@ def export_html(
     with open(abs_path, "w", encoding="utf-8") as fh:
         fh.write(html)
     return abs_path
+
+
+# ── ENA-namespaced convenience wrappers ───────────────────────────────────────
+# These mirror the rENA function names for a consistent cross-language API.
+
+def ena_plot_interactive(
+    nodes:   pd.DataFrame,
+    edges:   pd.DataFrame,
+    points:  Optional[pd.DataFrame] = None,
+    *,
+    group_col:   Optional[str] = None,
+    options:     Optional[dict] = None,
+    width:       int = 700,
+    height:      int = 600,
+    **model_kwargs,
+):
+    """
+    Build a ModelData dict and display an interactive qeviz plot.
+
+    Convenience wrapper that combines :func:`model_data` and :func:`plot`.
+    Mirrors ``ena.plot.interactive()`` in rENA.
+
+    Parameters
+    ----------
+    nodes, edges, points
+        See :func:`model_data`.
+    group_col
+        Grouping column in ``points``.
+    options
+        Display options dict — see :func:`plot`.
+    width, height
+        Plot dimensions in pixels.
+    **model_kwargs
+        Additional keyword arguments forwarded to :func:`model_data`
+        (e.g. ``id_col``, ``x_col``, ``conf_level``, ``directed``).
+
+    Returns
+    -------
+    dict  The ModelData dict (also displays inline when in Jupyter).
+    """
+    m = model_data(nodes, edges, points, group_col=group_col, **model_kwargs)
+    plot(m, options=options, width=width, height=height)
+    return m
+
+
+def ena_export_html(
+    nodes:   pd.DataFrame,
+    edges:   pd.DataFrame,
+    path:    str = "ena_plot.html",
+    points:  Optional[pd.DataFrame] = None,
+    *,
+    group_col:   Optional[str] = None,
+    options:     Optional[dict] = None,
+    width:       int = 700,
+    height:      int = 600,
+    **model_kwargs,
+) -> str:
+    """
+    Build a ModelData dict and write a self-contained HTML file.
+
+    Convenience wrapper that combines :func:`model_data` and :func:`export_html`.
+    Mirrors ``ena.export.html()`` in rENA.
+
+    Parameters
+    ----------
+    nodes, edges, points
+        See :func:`model_data`.
+    path
+        Output file path. Default ``"ena_plot.html"``.
+    group_col
+        Grouping column in ``points``.
+    options
+        Display options dict — see :func:`plot`.
+    width, height
+        Plot dimensions in pixels.
+    **model_kwargs
+        Additional keyword arguments forwarded to :func:`model_data`.
+
+    Returns
+    -------
+    str  The resolved absolute path of the written file.
+    """
+    m = model_data(nodes, edges, points, group_col=group_col, **model_kwargs)
+    return export_html(m, path, options=options, width=width, height=height)
