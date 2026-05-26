@@ -6,7 +6,7 @@ import { DataFrame, DataFrameColumn, DataFrameRow } from "../types/DataFrame";
 import { QEPoint } from "./QEPoint";
 import { QELine } from "./QELine";
 import { AxisPoint } from "../objects/AxisPoint";
-import { Edge } from "../objects/Edges";
+import { Edge, NodeEdge, TaperedEdge } from "../objects/Edges";
 import { Label, Line, Point } from "../objects/PlottedObject";
 import { Color } from "../objects/Color";
 import { QELabel } from "./QELabel";
@@ -566,9 +566,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // ── Mean network edges ───────────────────────────────────────────────────
       // For each group, compute the mean weight of every edge column across its
       // unit rows, then draw a Line for pairs whose mean weight is non-zero.
-      const networkLayer = this.__children__.search('__children__', 'network') as QELayer;
-      const edgeLayer    = networkLayer?.__children__.search('__children__', 'edges') as QELayer;
-      const nodeLayer    = networkLayer?.__children__.search('__children__', 'nodes') as QELayer;
+      const networkLayer  = this.__children__.search('__children__', 'network') as QELayer;
+      const edgeLayer     = networkLayer?.__children__.search('__children__', 'edges') as QELayer;
+      const nodeLayer     = networkLayer?.__children__.search('__children__', 'nodes') as QELayer;
+      // edgenodes sits above `nodes` in the layer tree — self-connections (NodeEdge)
+      // must be drawn here so the dot is visible on top of the code node.
+      const edgenodeLayer = networkLayer?.__children__.search('__children__', 'edgenodes') as QELayer;
 
       if (model.nodes?.rows && nodeLayer) {
         // ── Step 1: Populate node positions first (edges need to look them up) ─
@@ -710,58 +713,93 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             });
           }
 
-          // ── Step 7: Draw Line objects + accumulate node weights ───────────────
-          const maxEdgeWeight = Math.max(1, ...drawEdges.map(e => e.weight));
+          // ── Step 7: Compute node sizes BEFORE creating edges ──────────────────
+          // NodeEdge dot radii must fit *inside* each code node, so we need the
+          // host node's effective radius at edge-creation time.  Pre-tally
+          // weights and apply sizes up front.
+          const isDirected   = !!(model as any).directed;
+          const maxEdgeWeight = Math.max(1, ...drawEdges.filter(e => e.pair[0] !== e.pair[1]).map(e => e.weight));
+          const maxSelfWeight = Math.max(0, ...drawEdges.filter(e => e.pair[0] === e.pair[1]).map(e => e.weight));
           const nodeWeightSum: Record<string, number> = {};
-          const isDirected = !!(model as any).directed;
-
-          drawEdges.forEach(({ col, pair, weight, color }) => {
-            const fromNode = nodeLayer.__data__.objects.get(pair[0]);
-            const toNode   = nodeLayer.__data__.objects.get(pair[1]);
-            if (!fromNode || !toNode) return;
-
-            const isSelf   = pair[0] === pair[1];
-            const opacity  = Math.min(1, weight / maxEdgeWeight);
-            const edgeLine = new Line(
-              {},
-              new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} }),
-              new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x,   toNode.y],   meta: {} }),
-            );
-            edgeLine.ID    = `edge-${col}`;
-            edgeLine.color = new Color(color);
-            (edgeLine as any).meta = {
-              isMeanEdge:      true,
-              weight,
-              maxWeight:       maxEdgeWeight,
-              opacity,
-              isDirected,
-              isSelfConnection: isSelf,
-              // Self-connection rendering needs the node position at render time;
-              // store it here so QELine can draw the arc without looking up the node.
-              selfX: isSelf ? fromNode.x : undefined,
-              selfY: isSelf ? fromNode.y : undefined,
-            };
-            edgeLayer.__data__.objects.set(edgeLine.ID, edgeLine);
-
-            // Self-connection: only credit the single node once
+          drawEdges.forEach(({ pair, weight }) => {
+            const isSelf = pair[0] === pair[1];
+            if (isSelf && !isDirected) return;  // skip illegal undirected diagonals
             nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
             if (!isSelf) {
               nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
             }
           });
-
-          edgeLayer.__data__.__state__.setVariable('layer_updated', edgeLayer.__data__);
-
-          // ── Step 8: Resize nodes by total connection weight ───────────────────
           const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
+
+          // Apply node sizes (range [2, 5]) to the actual Point objects.
+          const nodeSizes: Record<string, number> = {};
           model.nodes.rows().forEach((row: DataFrameRow) => {
             const codeIdx = row.names.indexOf(nodeIdCol);
             const id = codeIdx >= 0 ? String(row[codeIdx]) : '';
+            if (!id) return;
             const pt = nodeLayer.__data__.objects.get(id) as Point | undefined;
             if (!pt) return;
             const w = nodeWeightSum[id] ?? 0;
-            pt.size = 2 + (w / maxNodeWeight) * 3; // range [2, 5]
+            pt.size = 2 + (w / maxNodeWeight) * 3;
+            nodeSizes[id] = pt.size;
           });
+
+          // ── Step 8: Create edge objects ───────────────────────────────────────
+          const extentForRadius = (this.__data__ as any).extremes?.x_max ?? 1;
+          drawEdges.forEach(({ col, pair, weight, color }) => {
+            const fromNode = nodeLayer.__data__.objects.get(pair[0]);
+            const toNode   = nodeLayer.__data__.objects.get(pair[1]);
+            if (!fromNode || !toNode) return;
+
+            const isSelf  = pair[0] === pair[1];
+            if (isSelf && !isDirected) return;  // undirected ENA has zero diagonal
+
+            // Opacity normalizes within each visual class: lines compare against
+            // the strongest line, self-loops against the strongest self-loop.
+            // Mixing the two scales (everything ÷ maxEdgeWeight) would wash
+            // self-loops out, since self-weights are typically smaller.
+            const classMax = isSelf ? Math.max(maxSelfWeight, 1e-9) : maxEdgeWeight;
+            const opacity  = Math.min(1, weight / classMax);
+            const fromPt = new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} });
+            const toPt   = new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x,   toNode.y],   meta: {} });
+            // Pick the edge class by topology:
+            //   • self-connection (A→A) → NodeEdge (filled circle at the node)
+            //   • directed (A→B)        → TaperedEdge (triangle, apex at "from")
+            //   • undirected            → Line (straight stroke)
+            let edgeLine: Line;
+            if (isSelf) {
+              edgeLine = new NodeEdge({}, fromPt as any, toPt as any);
+              // NodeEdge.path uses .weight as the dot's DIAMETER.  Scale the
+              // dot to a fraction of the host node's radius so it always sits
+              // visibly inside the node:
+              //   nodeRadius = extent · 0.015 · nodeSize  (matches QEPoint)
+              //   R          = nodeRadius · 0.8 · (weight / maxSelfWeight)
+              //   diameter   = 2R
+              const nodeR = extentForRadius * 0.015 * (nodeSizes[pair[0]] ?? 2);
+              const ratio = weight / Math.max(maxSelfWeight, 1e-9);
+              (edgeLine as any).weight = 2 * nodeR * 0.8 * ratio;
+            } else if (isDirected) {
+              edgeLine = new TaperedEdge({}, fromPt as any, toPt as any);
+            } else {
+              edgeLine = new Line({}, fromPt, toPt);
+            }
+            edgeLine.ID    = `edge-${col}`;
+            edgeLine.color = new Color(color);
+            (edgeLine as any).meta = {
+              isMeanEdge: true,
+              weight,
+              maxWeight:  maxEdgeWeight,
+              opacity,
+              isDirected,
+            };
+            // Self-connections go in the `edgenodes` layer (above `nodes` in
+            // draw order) so the dot is visible on top of the code node.
+            const targetLayer = isSelf ? (edgenodeLayer ?? edgeLayer) : edgeLayer;
+            targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
+          });
+
+          edgeLayer.__data__.__state__.setVariable('layer_updated', edgeLayer.__data__);
+          if (edgenodeLayer) edgenodeLayer.__data__.__state__.setVariable('layer_updated', edgenodeLayer.__data__);
         }
 
         // ── Node labels ──────────────────────────────────────────────────────

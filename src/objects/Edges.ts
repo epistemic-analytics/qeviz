@@ -20,44 +20,8 @@ export class Edge extends Line {
   }
 
   get base_color(): Color { return this._color };
-  get color(): WeightedColor {
-    let w: number = this.weight;
-
-    // https://planetcalc.com/7661/#:~:text=Finding%20a%20complementary%20color%20is,0xFFFFFF%20%2D%200xFF0000%20%3D%200x00FFFF).
-    let wc = this._color || new Color("#000000");
-
-    if (Array.isArray(this._color)) {
-      console.error("Edge color is an array, this should not happen");
-      // if (w >= 0) {
-      //   wc = this._color[0].base;
-      // }
-      // else {
-      //   if (this._color[0].base === this._color[0].base) {
-      //     // let rgb_white: Color = Color.parseColor("#ffffff");
-      //     let rgb_white = new Color("#ffffff");
-      //     let c = Color.parseColor(this._color[0].base);
-      //     wc = Color.rgb(...['r', 'g', 'b'].map(x => (rgb_white[x] - c[x]))).hex()
-      //   }
-      //   else {
-      //     wc = this.#color[1].base;
-      //   }
-      // }
-    }
-
-    // return new WeightedColor(wc, Math.abs(w));
-    return "#000000";
-  }
-  set color(c: Color) {
-    let wc: WeightedColor;
-    if (!(c instanceof WeightedColor)) {
-      wc = new WeightedColor(c, this.weight);
-    }
-    else {
-      wc = c;
-      wc.weight = this.weight;
-    }
-    this._color = wc;
-  }
+  get color(): Color { return this._color || new Color("#000000"); }
+  set color(c: Color) { this._color = c as any; }
 
   base_weight() { return this._weight };
   get weight() {
@@ -208,7 +172,10 @@ export enum EdgeDirection {
 export class TaperedEdge extends Edge {
   // base_pts = [];
   _path: string = '';
-  #with_arrow = true;
+  // Arrowheads are off by default — the tapered triangle shape already
+  // communicates direction.  Enabling #with_arrow currently throws because
+  // EdgeArrow.constructor passes the edge as the lone super() arg.
+  #with_arrow = false;
   #arrow;
 
   _directions: EdgeDirection[] = [EdgeDirection.FROM, EdgeDirection.TO];
@@ -226,18 +193,31 @@ export class TaperedEdge extends Edge {
     return `M${this.from.x} ${this.from.y} L${this.base_pts[0].join(' ')} L${this.base_pts[1].join(' ')}z`;
   }
   static calculate_base_points(edg: TaperedEdge): [[number, number], [number, number]] {
-    const
-      top: EdgeDirection = edg._directions[edg._directions.findIndex(d => d === edg.towards)],
-      base: EdgeDirection = edg._directions[edg._directions.findIndex(d => d !== edg.towards)];
+    // Find the two endpoints of the tapered edge based on its `towards` direction.
+    const top: EdgeDirection = edg.towards;
+    const base: EdgeDirection = edg._directions.find(d => d !== edg.towards) as EdgeDirection;
 
-    let
-      edge_line: [[number, number], [number, number]] = [[edg[base].x, edg[base].y], [edg[top].x, edg[top].y]],
-      perp_line = Tools.Geometry.Line.rotate2(edge_line, edge_line[1], 90),
-      wt = edg.weight * zoom_level,
-      ints = Tools.Geometry.Line.intersect_circle(perp_line, edge_line[1], wt / 2)
-      ;
+    const bx = edg[base].x, by = edg[base].y;
+    const tx = edg[top].x,  ty = edg[top].y;
+    const dx = tx - bx, dy = ty - by;
+    const L  = Math.hypot(dx, dy);
 
-    return ints;
+    // Degenerate: zero-length edge or unset weight — collapse to a point at `top`.
+    const wt = (edg.weight ?? 0) * zoom_level;
+    if (L === 0 || !isFinite(wt) || wt === 0) {
+      return [[tx, ty], [tx, ty]];
+    }
+
+    // Unit perpendicular to the edge direction; offset both sides by wt/2.
+    // Pure vector math here avoids the slope-intercept form used by
+    // Tools.Geometry, which produces NaN for vertical edges and ill-conditioned
+    // values for horizontal ones.
+    const px = -dy / L, py = dx / L;
+    const halfW = wt / 2;
+    return [
+      [tx + px * halfW, ty + py * halfW],
+      [tx - px * halfW, ty - py * halfW],
+    ];
   }
   get base_pts() {
     return TaperedEdge.calculate_base_points(this);

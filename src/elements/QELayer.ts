@@ -86,7 +86,9 @@ const
       "AxisLine": QELine,
       "Point": QEPoint,
       "Line": QELine,
-      "Edge": QELine
+      "Edge": QELine,
+      "TaperedEdge": QELine,
+      "NodeEdge": QELine,
     }
 ;
 
