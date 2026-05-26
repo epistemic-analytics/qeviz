@@ -1,6 +1,4 @@
 
-type Point = { x: number; y: number };
-
 class Extremes {
   x_max: number;
   y_max: number;

@@ -2,14 +2,13 @@ import { Tools } from "../utils/Tools";
 import { Graph } from "../objects/Graph";
 import { Layer, LayerLike } from "../objects/Layers";
 import { PlottedObject } from "../objects/PlottedObject";
-import { EnaGraphElement } from "./QEGraphLegacy";
 import { QELine } from "./QELine";
 import { QEPoint } from "./QEPoint";
 import { QEGraphElement } from "./QEGraph";
 
 
 const { ArrayTools } = Tools;
-export class QEArray extends Array<LayerLike> {
+export class QEArray extends Array<any> {
   constructor(...args: any[]) {
     super(...args);
   }
@@ -73,14 +72,7 @@ export interface QEElement {
 }
 
 const
-  QEElementConstructors: 
-    { 
-      [key: string]: new (
-        __data__: PlottedObject,
-        parent: SVGElement, 
-        graph: QEGraphElement
-      ) => QEElement 
-    } =
+  QEElementConstructors: Record<string, new (d: any, p: SVGElement, g: QEGraphElement) => QEElement> =
     {
       "AxisPoint": QEPoint,
       "AxisLine": QELine,
@@ -107,55 +99,39 @@ export class QELayer implements QEElement {
     this.__name__ = __data__.name || "unnamed-layer";
 
     __data__.__state__.addListener(`layer_updated`, "live", ({ key, newValue, oldValue } : any) => {
-      let 
-        removing = this.__children__.filter((child: QEElement) => {
-          if(child.__data__ && newValue.objects.has(child.__data__.ID)) {
-            return false;
-          }
-          else {
-            return true;
-          }
-        }),
-        updating = this.__children__.filter((child: QEElement) => {
-          if(child.__data__ && newValue.objects.has(child.__data__.ID)) {
-            return true;
-          }
-          else {
-            return false;
-          }
-        }),
-        adding = [...newValue.objects.values()].filter( (obj: PlottedObject) => {
-          if(this.__children__.some((child: QEElement) => child.__data__ && child.__data__.ID === obj.ID)) {
-            return false;
-          }
-          else {
-            return true;
-          }
-        })
-      ;
-      
-      adding.forEach( ( obj: PlottedObject) => {
-        let 
-          obj_name = obj.constructor.name,
-          ena_element: QEElement = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph)
-        ;
+      const childId = (child: QEElement) => (child.__data__ as PlottedObject)?.ID;
+
+      const removing = this.__children__.filter((child: QEElement) =>
+        !newValue.objects.has(childId(child))
+      );
+      const updating = this.__children__.filter((child: QEElement) =>
+        newValue.objects.has(childId(child))
+      );
+      const adding = [...newValue.objects.values()].filter((obj: PlottedObject) =>
+        !this.__children__.some((child: QEElement) => childId(child) === obj.ID)
+      );
+
+      adding.forEach((obj: PlottedObject) => {
+        const obj_name = obj.constructor.name;
+        const ena_element: QEElement = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph);
         this.__children__.push(ena_element);
       });
 
-      updating.forEach( ( child: QEElement) => {
+      updating.forEach((child: QEElement) => {
         // Pull the *new* PlottedObject from the updated layer data so that any
         // changed properties (e.g. weight, color, meta flags) are picked up by
         // the child's update() call.
-        const newData = newValue.objects.get(child.__data__.ID) as PlottedObject;
+        const newData = newValue.objects.get(childId(child)) as PlottedObject;
         if (newData) (child as any).__data__ = newData;
         child.update();
       });
 
-      removing.forEach( ( child: QEElement) => {
-        if(child.svg_element.parentElement) {
+      removing.forEach((child: QEElement) => {
+        if (child.svg_element.parentElement) {
           child.svg_element.parentElement.removeChild(child.svg_element);
         }
-        this.__children__ = this.__children__.filter((c: QEElement) => c !== child);
+        const idx = this.__children__.indexOf(child);
+        if (idx >= 0) this.__children__.splice(idx, 1);
       });
 
       this.update();
@@ -183,9 +159,7 @@ export class QELayer implements QEElement {
 
     if(this.__data__.layers && this.__data__.layers.length > 0) {
       this.__data__.layers.forEach((sublayer: LayerLike) => {
-        let 
-          layer_g: QELayer = new QELayer(sublayer, this.svg_element, this.graph)
-        ;
+        const layer_g: QELayer = new QELayer(sublayer as any, this.svg_element, this.graph);
         this.__children__.push(layer_g);
       });
     }

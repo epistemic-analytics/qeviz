@@ -215,7 +215,7 @@ export class QEVisualElement extends HTMLElement {
       this.classList.remove('hidden');
     }
 
-    if (this._model?.updated !== undefined && this._model.updated !== null && this._model.updated !== '') {
+    if (this._model?.updated !== undefined && this._model.updated !== null) {
       this._outputElement.innerHTML = `${this.output}<slot></slot>`;
     } else {
       this._outputElement.innerHTML = "Define the model on the left.";

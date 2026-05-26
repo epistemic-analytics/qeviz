@@ -1,22 +1,22 @@
-import { PlottedObject, Line, PlottedObjectOptions, DimensionType } from './PlottedObject.js';
+import { PlottedObject, Line, PlottedObjectOptions } from './PlottedObject.js';
 import { Node } from './Points.js';
 import { Color, WeightedColor } from './Color.js';
 import { Tools } from '../utils/Tools.js';
-import { Graph } from './Graph.js';
 import { DataFrameRow } from '../types/DataFrame.js';
 
 // Placeholder for zoom level, should be defined in the context of the application
 const zoom_level = 1;
 
 export class Edge extends Line {
-  from: Node;
-  to: Node;
+  declare from: Node;
+  declare to: Node;
   _totalweight: number = 0;
   _weight: number;
-  _color: WeightedColor;
+  declare _color: WeightedColor;
 
   constructor(data: DataFrameRow | any, from: Node, to: Node, weight: number = 0) {
     super(data, from, to);
+    this._weight = weight;
   }
 
   get base_color(): Color { return this._color };
@@ -48,8 +48,8 @@ export class SubtractedEdges extends Edge {
   #weight: number;
   #color: WeightedColor;
 
-  constructor(e1: Edge, e2: Edge, graph: Graph | undefined = undefined) {
-    super(e1, e1.from, e1.to, graph);
+  constructor(e1: Edge, e2: Edge) {
+    super(e1, e1.from, e1.to);
 
     this.edge_one = e1;
     this.edge_two = e2;
@@ -88,8 +88,8 @@ export class SubtractedEdges extends Edge {
 export class MeanEdge extends Edge {
   edges: Set<Edge> = new Set<Edge>();
 
-  constructor(o: any, graph: Graph | undefined = undefined) {
-    super(o, o.from, o.to, graph);
+  constructor(o: any) {
+    super(o, o.from, o.to);
 
     this.visible = true;
     // this.meta = o.meta || { ID: this.ID };
@@ -115,7 +115,7 @@ export class EdgeArrow extends PlottedObject {
   #edge;
 
   constructor(edge: PlottedObjectOptions) {
-    super(edge);
+    super(edge.dimensions || [], edge);
     this.#edge = edge;
   }
 
@@ -181,8 +181,8 @@ export class TaperedEdge extends Edge {
   _directions: EdgeDirection[] = [EdgeDirection.FROM, EdgeDirection.TO];
   towards: EdgeDirection = EdgeDirection.TO;
 
-  constructor(data: any, from: Node, to: Node, graph: Graph | undefined = undefined) {
-    super(data, from, to, graph);
+  constructor(data: any, from: Node, to: Node) {
+    super(data, from, to);
 
     if (this.#with_arrow === true) {
       this.#arrow = new EdgeArrow(this);
@@ -234,8 +234,8 @@ export class TaperedEdge extends Edge {
 }
 
 export class TaperedMidpointEdge extends TaperedEdge {
-  constructor(data: any, from: Node, to: Node, graph: Graph | undefined = undefined) {
-    super(data, from, to, graph);
+  constructor(data: any, from: Node, to: Node) {
+    super(data, from, to);
   }
 
   get path(): string {
@@ -248,8 +248,8 @@ export class TaperedMidpointEdge extends TaperedEdge {
 
 export class TaperedWeightedMidpointEdge extends TaperedEdge {
 
-  constructor(data: any, from: Node, to: Node, graph: Graph | undefined = undefined) {
-    super(data, from, to, graph);
+  constructor(data: any, from: Node, to: Node) {
+    super(data, from, to);
     this._totalweight = data.totalweight;
   }
 
@@ -282,14 +282,14 @@ export class TaperedWeightedMidpointEdge extends TaperedEdge {
 }
 
 export class MeanNodeEdge extends MeanEdge {
-  constructor(o: any, graph: Graph | undefined = undefined) {
-    super(o, graph);
+  constructor(o: any) {
+    super(o);
   }
   get path() {
     return NodeEdge.build_path(this.weight, [...this.edges.values()][0].to)
   }
   get weight() {
-    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * this.graph.options.EDGE.multiplier;
+    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * 1;
   }
   set weight(w) { this._weight = w; }
 }
@@ -298,8 +298,8 @@ export class MeanTaperedEdge extends MeanEdge {
   #with_arrow = true;
   #arrow;
 
-  constructor(o: PlottedObjectOptions, graph: Graph | undefined = undefined) {
-    super(o, graph);
+  constructor(o: PlottedObjectOptions) {
+    super(o);
 
     if (this.#with_arrow === true) {
       this.#arrow = new EdgeArrow(this);
@@ -318,8 +318,8 @@ export class MeanTaperedEdge extends MeanEdge {
 }
 
 export class MeanTaperedMidpointEdge extends MeanTaperedEdge {
-  constructor(o: PlottedObjectOptions, graph: Graph | undefined = undefined) {
-    super(o, graph);
+  constructor(o: PlottedObjectOptions) {
+    super(o);
   }
 
   get base_pts(): [[number, number], [number, number]] {
@@ -340,14 +340,14 @@ export class MeanTaperedMidpointEdge extends MeanTaperedEdge {
     return `M${this.midpoint[0]} ${this.midpoint[1]} L${this.base_pts[0].join(' ')} L${this.base_pts[1].join(' ')}z`;
   }
   get weight(): number {
-    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * this.graph.options.EDGE.multiplier;
+    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * 1;
   }
   set weight(w) { this._weight = w; }
 }
 
 export class MeanTaperedWeightedMidpointEdge extends MeanTaperedEdge {
-  constructor(o: PlottedObjectOptions, graph: Graph | undefined = undefined) {
-    super(o, graph);
+  constructor(o: PlottedObjectOptions) {
+    super(o);
   }
 
   get totalweight(): number {
@@ -383,15 +383,15 @@ export class MeanTaperedWeightedMidpointEdge extends MeanTaperedEdge {
     return p;
   }
   get weight() {
-    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * this.graph.options.EDGE.multiplier;
+    return Tools.Mathematics.mean([...this.edges.values()].map(e => e.weight)) * 1;
   }
   set weight(w) { this._weight = w; }
 }
 
 export class NodeEdge extends Edge {
 
-  constructor(data: any, from: Node, to: Node, graph: Graph | undefined = undefined) {
-    super(data, from, to, graph);
+  constructor(data: any, from: Node, to: Node) {
+    super(data, from, to);
   }
 
   static build_path(weight: number, to: Node) {

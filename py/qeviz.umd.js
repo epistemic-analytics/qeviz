@@ -272,23 +272,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       return new _DataFrame(selectedNames, selectedCols, __privateGet(this, _rowNames2));
     }
     subset(rows, cols) {
-      let selectedCols = [];
-      if (rows && rows.length > 0) {
-        this.rows(...rows);
-      } else {
-        Array.from({ length: this.nrow }, (_, i) => this.getRowByIndex(i));
-      }
-      if (cols && cols.length > 0) {
-        selectedCols = this.cols(...cols);
-      } else {
-        selectedCols = this.slice();
-      }
-      const result = new _DataFrame(
+      const selectedCols = cols && cols.length > 0 ? this.cols(...cols) : this.slice();
+      return new _DataFrame(
         selectedCols.map((col) => col.name),
         selectedCols.map((col) => col.values),
         __privateGet(this, _rowNames2)
       );
-      return result;
     }
     get names() {
       return __privateGet(this, _names2);
@@ -545,7 +534,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       } else {
         this.classList.remove("hidden");
       }
-      if (((_a = this._model) == null ? void 0 : _a.updated) !== void 0 && this._model.updated !== null && this._model.updated !== "") {
+      if (((_a = this._model) == null ? void 0 : _a.updated) !== void 0 && this._model.updated !== null) {
         this._outputElement.innerHTML = `${this.output}<slot></slot>`;
       } else {
         this._outputElement.innerHTML = "Define the model on the left.";
@@ -1430,7 +1419,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         meta = {};
         ID = `point-${Math.random().toString(36).substring(2, 9)}`;
       }
-      super(dimensions, { meta, ID });
+      super(dimensions ?? [], { meta, ID });
       this.edges = /* @__PURE__ */ new Map();
       this.shape = _Point.SHAPES.CIRCLE;
     }
@@ -1739,7 +1728,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       return this.mirror_y ? -1 : 1;
     }
     add_point(p) {
-      let point = new Point(p);
+      const point = new Point(p);
       this.points.set(point.ID, point);
     }
     add_points(ps) {
@@ -1751,7 +1740,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     add_nodes(ns) {
       let g_ = this;
       ns.forEach((new_node) => {
-        new_node.label = new Label(new_node.ID, new_node, this);
+        new_node.label = new Label(new_node.ID, new_node);
         g_.labels.set(new_node.label.ID, new_node.label);
         g_.nodes.set(new_node.ID, new_node);
         const nodesLayer = g_.layers.search("layers", "nodes");
@@ -1779,8 +1768,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const search_layers = [
         this.layers.search("layers", "points"),
         this.layers.search("layers", "nodes")
-      ];
-      if (!search_layers || search_layers.length === 0) {
+      ].filter((l) => l !== void 0);
+      if (search_layers.length === 0) {
         this.extremes = new Extremes(1, 1);
       } else {
         const found_max = Math.max(...search_layers.map((l) => Math.max(...[...l.objects.values()].map((o) => Math.max(Math.abs(o.x), Math.abs(o.y))))).filter((a) => Math.abs(a) !== Infinity)) * 1.5;
@@ -2109,31 +2098,26 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.__children__ = __children__;
       this.__name__ = __data__.name || "unnamed-layer";
       __data__.__state__.addListener(`layer_updated`, "live", ({ key, newValue, oldValue }) => {
-        let removing = this.__children__.filter((child) => {
-          if (child.__data__ && newValue.objects.has(child.__data__.ID)) {
-            return false;
-          } else {
-            return true;
-          }
-        }), updating = this.__children__.filter((child) => {
-          if (child.__data__ && newValue.objects.has(child.__data__.ID)) {
-            return true;
-          } else {
-            return false;
-          }
-        }), adding = [...newValue.objects.values()].filter((obj) => {
-          if (this.__children__.some((child) => child.__data__ && child.__data__.ID === obj.ID)) {
-            return false;
-          } else {
-            return true;
-          }
-        });
+        const childId = /* @__PURE__ */ __name((child) => {
+          var _a;
+          return (_a = child.__data__) == null ? void 0 : _a.ID;
+        }, "childId");
+        const removing = this.__children__.filter(
+          (child) => !newValue.objects.has(childId(child))
+        );
+        const updating = this.__children__.filter(
+          (child) => newValue.objects.has(childId(child))
+        );
+        const adding = [...newValue.objects.values()].filter(
+          (obj) => !this.__children__.some((child) => childId(child) === obj.ID)
+        );
         adding.forEach((obj) => {
-          let obj_name = obj.constructor.name, ena_element = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph);
+          const obj_name = obj.constructor.name;
+          const ena_element = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph);
           this.__children__.push(ena_element);
         });
         updating.forEach((child) => {
-          const newData = newValue.objects.get(child.__data__.ID);
+          const newData = newValue.objects.get(childId(child));
           if (newData) child.__data__ = newData;
           child.update();
         });
@@ -2141,7 +2125,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           if (child.svg_element.parentElement) {
             child.svg_element.parentElement.removeChild(child.svg_element);
           }
-          this.__children__ = this.__children__.filter((c) => c !== child);
+          const idx = this.__children__.indexOf(child);
+          if (idx >= 0) this.__children__.splice(idx, 1);
         });
         this.update();
       });
@@ -2162,7 +2147,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element.classList.add("ena-layer");
       if (this.__data__.layers && this.__data__.layers.length > 0) {
         this.__data__.layers.forEach((sublayer) => {
-          let layer_g = new _QELayer(sublayer, this.svg_element, this.graph);
+          const layer_g = new _QELayer(sublayer, this.svg_element, this.graph);
           this.__children__.push(layer_g);
         });
       }
@@ -2196,51 +2181,6 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   __name(_QELayer, "QELayer");
   _QELayer.tagName = "g";
   let QELayer = _QELayer;
-  const _Edge = class _Edge extends Line {
-    constructor(data, from, to, weight = 0) {
-      super(data, from, to);
-      this._totalweight = 0;
-    }
-    get base_color() {
-      return this._color;
-    }
-    get color() {
-      this.weight;
-      this._color || new Color("#000000");
-      if (Array.isArray(this._color)) {
-        console.error("Edge color is an array, this should not happen");
-      }
-      return "#000000";
-    }
-    set color(c) {
-      let wc;
-      if (!(c instanceof WeightedColor)) {
-        wc = new WeightedColor(c, this.weight);
-      } else {
-        wc = c;
-        wc.weight = this.weight;
-      }
-      this._color = wc;
-    }
-    base_weight() {
-      return this._weight;
-    }
-    get weight() {
-      let w = Array.isArray(this._weight) ? this._weight[0] - this._weight[1] : this._weight;
-      return w;
-    }
-    set weight(w) {
-      this._weight = w;
-    }
-    get totalweight() {
-      return this.weight;
-    }
-    set totalweight(w) {
-      this._totalweight = w;
-    }
-  };
-  __name(_Edge, "Edge");
-  let Edge = _Edge;
   const _QELabel = class _QELabel {
     constructor(text, point, parent, graph, displayMode = Label.DISPLAY_TYPES.ON, position = Label.POSITION.OBJECT, customX, customY) {
       this.text = text;
@@ -2409,21 +2349,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       super();
       this.zoom_level = 1;
       this.__children__ = new QEArray();
+      this._hasModel = false;
+      this._renderPending = false;
       this._ciRects = /* @__PURE__ */ new Map();
       this._outlierRects = /* @__PURE__ */ new Map();
       this._labelsGroup = null;
       this._nodeLabels = /* @__PURE__ */ new Map();
       this._meanLabels = /* @__PURE__ */ new Map();
       this._pointLabels = /* @__PURE__ */ new Map();
-      this._currentModel = null;
-      this._points = {
-        add: /* @__PURE__ */ __name((points) => {
-          points.rows().forEach((row, i) => {
-            this.__data__.add_point(row);
-          });
-          this.__data__.__state__.setVariable("graph_updated_points", this.__data__.points);
-        }, "add")
-      };
       this.graph = this;
       this.parent = null;
       this.__data__ = new Graph(DefaultGraphOptions);
@@ -2435,7 +2368,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         if (this._vizena && e.target !== this._vizena) return;
         const model = e.detail;
         if (!model) return;
-        this._currentModel = model;
+        this._hasModel = true;
         const dims = model.dimensions;
         const unitIdCol = model.unit_id_col;
         const nodeIdCol = model.node_id_col;
@@ -2469,9 +2402,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const maxNodeExtent = ((_c = model.nodes) == null ? void 0 : _c.rows) ? getExtent(model.nodes.rows()) : 0;
         const maxPointExtent = ((_d = model.points) == null ? void 0 : _d.rows) ? getExtent(model.points.rows()) : 0;
         const pointScale = scalePointsEnabled && maxPointExtent > 0 && maxNodeExtent > 0 ? maxNodeExtent / maxPointExtent : 1;
-        const labelNodes = parseLabelMode(this.getAttribute("label-nodes"), Label.DISPLAY_TYPES.ON);
-        const labelMeans = parseLabelMode(this.getAttribute("label-means"), Label.DISPLAY_TYPES.ON);
-        const labelPoints = parseLabelMode(this.getAttribute("label-points"), Label.DISPLAY_TYPES.OFF);
+        const labelsShorthand = this.getAttribute("labels");
+        const labelNodes = parseLabelMode(this.getAttribute("label-nodes") ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
+        const labelMeans = parseLabelMode(this.getAttribute("label-means") ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
+        const labelPoints = parseLabelMode(this.getAttribute("label-points") ?? labelsShorthand, Label.DISPLAY_TYPES.OFF);
         const labelSvg = this._labelsGroup;
         const rowToPoint = /* @__PURE__ */ __name((row, idCol, colorStr, scale = 1) => {
           const idIdx = row.names.indexOf(idCol);
@@ -2497,7 +2431,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const groupColIdx = groupColName ? row.names.indexOf(groupColName) : -1;
               const group = groupColIdx >= 0 ? String(row[groupColIdx]) : null;
               const colorStr = group ? groupColorMap[group] ?? "#888888" : "#888888";
-              const pt = rowToPoint(row, "QEUNIT", colorStr, pointScale);
+              const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
               this.__data__.points.set(pt.ID, pt);
               pointsLayer.__data__.objects.set(pt.ID, pt);
               if (group) {
@@ -2749,7 +2683,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes");
         if (((_i = model.nodes) == null ? void 0 : _i.rows) && nodeLayer) {
           model.nodes.rows().forEach((row) => {
-            const pt = rowToPoint(row, "code", "#444444");
+            const pt = rowToPoint(row, nodeIdCol, "#444444");
             pt.size = 3;
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
@@ -2925,10 +2859,39 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         this.update();
       });
     }
+    static get observedAttributes() {
+      return [
+        "group",
+        "unit",
+        "compare",
+        "also",
+        "labels",
+        "label-nodes",
+        "label-means",
+        "label-points",
+        "scale-points",
+        "points",
+        "confidence",
+        "outlier"
+      ];
+    }
     get vizena() {
       return this._vizena;
     }
-    attributeChangedCallback(name, oldValue, newValue) {
+    attributeChangedCallback(_name2, oldValue, newValue) {
+      if (oldValue === newValue) return;
+      if (!this._vizena || !this._hasModel) return;
+      if (this._renderPending) return;
+      this._renderPending = true;
+      queueMicrotask(() => {
+        var _a;
+        this._renderPending = false;
+        (_a = this._vizena) == null ? void 0 : _a.dispatchEvent(new CustomEvent("model-updated", {
+          detail: this._vizena.model,
+          bubbles: true,
+          composed: true
+        }));
+      });
     }
     connectedCallback() {
       var _a;
@@ -2981,16 +2944,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       GROUP_PALETTE.forEach((color) => makeArrow(`qe-arrow-${color.slice(1)}`, color));
       svg.appendChild(defs);
       this.__data__.layers.forEach((layer) => {
-        let layer_g = new QELayer(layer, this.svg_element, this);
+        const layer_g = new QELayer(layer, this.svg_element, this);
         this.__children__.push(layer_g);
       });
-      let axisLineLayer = this.__data__.layers.search("layers", "axis_lines");
-      if (axisLineLayer) {
-        [...axisLineLayer.objects.entries()].forEach(([id, line]) => {
-          new QELine(line, this.svg_element, this);
-          axisLineLayer.objects.set(id, line);
-        });
-      }
       this.__data__.__state__.setVariable("graph_updated", this.__data__);
       this.attach_events();
       return svg;
@@ -3006,7 +2962,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           this.zoom_level /= 1.1;
         }
         this.__data__.transform.zoom(this.zoom_level);
-        this.update(true);
+        this.update();
       });
       let isPanning = false;
       let startX, startY;
@@ -3038,31 +2994,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element.addEventListener("mouseup", (ev) => {
         isPanning = false;
       });
-      this.svg_element.addEventListener("point-clicked", (ev) => {
-        var _a, _b;
-        const model = this._currentModel ?? ((_a = this.vizena) == null ? void 0 : _a.model);
-        console.log("Model: ", model);
-        let networkLayer = this.__children__.search("__children__", "network"), nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes"), edgeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edges"), activatedEdge = model == null ? void 0 : model.edges.row(ev.detail.pointData.ID);
-        if (networkLayer && activatedEdge) {
-          let indices = (_b = activatedEdge.classes) == null ? void 0 : _b.map((c, i) => c === "ena.co.occurrence" ? i : null).filter((c) => c), columns = indices == null ? void 0 : indices.map((ind, j) => activatedEdge.names[ind].split(/\s&\s/)), nodes = columns.map((c, i) => c.map((col, j) => nodeLayer.__data__.objects.get(col))), edges = nodes.map((n, i) => {
-            let edge = new Edge(activatedEdge, n[0], n[1]);
-            edge.ID = activatedEdge.names[indices[i]];
-            edge.weight = activatedEdge.values[indices[i]];
-            edgeLayer == null ? void 0 : edgeLayer.__data__.objects.set(edge.ID, edge);
-            return edge;
-          });
-          edgeLayer.__data__.__state__.setVariable("layer_updated", edgeLayer.__data__);
-          console.log("Columns: ", edges);
-          this.update_extremes();
-        }
-      });
-      this.svg_element.addEventListener("point-clicked", (ev) => {
+      this.svg_element.addEventListener("point-clicked", ((ev) => {
         var _a, _b;
         const id = (_b = (_a = ev.detail) == null ? void 0 : _a.pointData) == null ? void 0 : _b.ID;
         if (!id) return;
         const lbl = this._pointLabels.get(id) ?? this._meanLabels.get(id.replace("mean-", "")) ?? this._nodeLabels.get(id);
         if (lbl && lbl.displayMode === Label.DISPLAY_TYPES.CLICK) lbl.toggle();
-      });
+      }));
       const findPointId = /* @__PURE__ */ __name((el) => {
         var _a;
         while (el && el !== this.svg_element) {
@@ -3172,6 +3110,51 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   `;
   let QEGraphElement = _QEGraphElement;
   customElements.define(QEGraphElement.tagName, QEGraphElement);
+  const _Edge = class _Edge extends Line {
+    constructor(data, from, to, weight = 0) {
+      super(data, from, to);
+      this._totalweight = 0;
+      this._weight = weight;
+    }
+    get base_color() {
+      return this._color;
+    }
+    get color() {
+      if (Array.isArray(this._color)) {
+        console.error("Edge color is an array, this should not happen");
+      }
+      const wc = this._color || new Color("#000000");
+      return new WeightedColor(wc, Math.abs(this.weight));
+    }
+    set color(c) {
+      let wc;
+      if (!(c instanceof WeightedColor)) {
+        wc = new WeightedColor(c, this.weight);
+      } else {
+        wc = c;
+        wc.weight = this.weight;
+      }
+      this._color = wc;
+    }
+    base_weight() {
+      return this._weight;
+    }
+    get weight() {
+      let w = Array.isArray(this._weight) ? this._weight[0] - this._weight[1] : this._weight;
+      return w;
+    }
+    set weight(w) {
+      this._weight = w;
+    }
+    get totalweight() {
+      return this.weight;
+    }
+    set totalweight(w) {
+      this._totalweight = w;
+    }
+  };
+  __name(_Edge, "Edge");
+  let Edge = _Edge;
   exports2.Color = Color;
   exports2.DataFrame = DataFrame;
   exports2.DataFrameColumn = DataFrameColumn;

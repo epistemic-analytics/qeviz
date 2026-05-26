@@ -219,8 +219,8 @@ export class Line extends PlottedObject {
   from: Point;
   to: Point;
   width?: number;
-  _color: Color;
-  shape: string;
+  _color!: Color;
+  shape!: string;
 
   // constructor(x: LineOptions) {
   //   super([], x);
@@ -330,7 +330,7 @@ export class Point extends PlottedObject {
       ID = `point-${Math.random().toString(36).substring(2, 9)}`;
     }
 
-    super(dimensions, { meta, ID } as any);
+    super(dimensions ?? [], { meta, ID } as any);
   }
 
   set label(l: Label | undefined) {
@@ -365,7 +365,7 @@ export class ConfidenceInterval extends PlottedObject {
   private _mean: any;
 
   constructor(mean: any) {
-    super(mean);
+    super(mean.dimensions, mean);
     this.ID = "mean_ci_" + mean.ID;
     this._mean = mean;
   }

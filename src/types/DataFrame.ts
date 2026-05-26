@@ -140,7 +140,7 @@ export class DataFrameColumn extends Array<any> implements DataFrameColumnInterf
     if (!this.#parent) throw new Error("No parent DataFrame attached to this column.");
     return this.#parent.row(wh);
   }
-  rows(...wh: (string | number)[]): DataFrame {
+  rows(...wh: (string | number)[]): DataFrameRow[] {
     if (!this.#parent) throw new Error("No parent DataFrame attached to this column.");
     return this.#parent.rows(...wh);
   }
@@ -356,28 +356,15 @@ export class DataFrame extends Array<DataFrameColumn> implements DataFrameInterf
   }
 
   subset(rows?: (string | number)[], cols?: (string | number)[]): DataFrame {
-    // Support: subset(rows, cols), subset(rows), subset(cols), subset()
-    let selectedRows: DataFrameRow[] = [];
-    let selectedCols: DataFrameColumn[] = [];
+    const selectedCols: DataFrameColumn[] = (cols && cols.length > 0)
+      ? this.cols(...cols)
+      : this.slice();
 
-    if (rows && rows.length > 0) {
-      selectedRows = this.rows(...rows);
-    } else {
-      selectedRows = Array.from({ length: this.nrow }, (_, i) => this.getRowByIndex(i));
-    }
-
-    if (cols && cols.length > 0) {
-      selectedCols = this.cols(...cols);
-    } else {
-      selectedCols = this.slice();
-    }
-
-    const result = new DataFrame(
+    return new DataFrame(
       selectedCols.map(col => col.name),
       selectedCols.map(col => col.values),
       this.#rowNames
     );
-    return result;
   }
 
   get names(): string[] {
