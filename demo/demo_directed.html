@@ -353,18 +353,11 @@ document.getElementById('sel-mode').addEventListener('change', (e) => {
     graphU.removeAttribute('also');
     graphD.removeAttribute('also');
   }
-
-  // Re-push data to trigger re-render
-  visUndirected.setModelData({ ...undirectedModel, updated: Date.now() });
-  visDirected.setModelData({   ...directedModel,   updated: Date.now() });
 });
 
 document.getElementById('sel-labels').addEventListener('change', (e) => {
-  const v = e.target.value;
-  graphU.setAttribute('labels', v);
-  graphD.setAttribute('labels', v);
-  visUndirected.setModelData({ ...undirectedModel, updated: Date.now() });
-  visDirected.setModelData({   ...directedModel,   updated: Date.now() });
+  graphU.setAttribute('labels', e.target.value);
+  graphD.setAttribute('labels', e.target.value);
 });
 </script>
 </body>
