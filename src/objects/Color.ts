@@ -47,23 +47,33 @@ export class WeightedColor extends Color {
 
   constructor(base: Color | string, weight: number) {
     super(base);
-
     this.weight = weight;
   }
 
-  desaturate(alpha = 1): { r: number; g: number; b: number } {
-    const rgbWhite = { r: 255, g: 255, b: 255 };
-    const rgbVal = Color.parseColor(this.base);
-
-    return {
-      r: Math.round(rgbWhite.r + (rgbVal.r - rgbWhite.r) * (alpha * Math.abs(this.weight))),
-      g: Math.round(rgbWhite.g + (rgbVal.g - rgbWhite.g) * (alpha * Math.abs(this.weight))),
-      b: Math.round(rgbWhite.b + (rgbVal.b - rgbWhite.b) * (alpha * Math.abs(this.weight))),
-    };
+  // Parse hex → HSL (h in degrees, s/l as percentages 0–100).
+  static toHSL(hex: string): { h: number; s: number; l: number } {
+    const { r, g, b } = Color.parseColor(hex);
+    const rn = r / 255, gn = g / 255, bn = b / 255;
+    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+    const l = (max + min) / 2;
+    if (max === min) return { h: 0, s: 0, l: l * 100 };
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h: number;
+    switch (max) {
+      case rn: h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6; break;
+      case gn: h = ((bn - rn) / d + 2) / 6; break;
+      default:  h = ((rn - gn) / d + 4) / 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
   }
 
-  toString(alpha = 1): string {
-    const desaturated = this.desaturate(alpha);
-    return Color.rgb(desaturated.r, desaturated.g, desaturated.b);
+  // Returns hsla(...) with saturation and alpha both scaled by |weight|,
+  // matching the Web ENA visual convention: hue and lightness stay constant
+  // while heavy edges are vivid/opaque and light edges fade toward transparent.
+  toString(): string {
+    const { h, s, l } = WeightedColor.toHSL(this.base);
+    const w = Math.min(1, Math.abs(this.weight));
+    return `hsla(${h.toFixed(2)}, ${(s * w).toFixed(2)}%, ${l.toFixed(2)}%, ${w.toFixed(4)})`;
   }
 }
