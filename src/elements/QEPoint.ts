@@ -1,4 +1,4 @@
-import { PlottedObject, Point } from "../objects/PlottedObject";
+import { PlottedObject } from "../objects/PlottedObject";
 import { Drawable } from "./Drawable";
 import { QEArray, QEElement } from "./QELayer";
 import { QEGraphElement } from "./QEGraph";

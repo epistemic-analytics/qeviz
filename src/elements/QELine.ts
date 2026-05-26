@@ -1,8 +1,8 @@
 import { Line } from "../objects/PlottedObject";
 import { NodeEdge, TaperedEdge } from "../objects/Edges";
 import { Drawable } from "./Drawable";
-import { EnaGraphElement } from "./QEGraphLegacy";
 import { QEArray, QEElement } from "./QELayer";
+import { QEGraphElement } from "./QEGraph";
 
 export class QELine extends Drawable implements QEElement {
   __name__: string = "unnamed-line";
@@ -10,7 +10,7 @@ export class QELine extends Drawable implements QEElement {
   constructor(
     public __data__: Line,
     public parent: SVGElement,
-    public graph: EnaGraphElement,
+    public graph: QEGraphElement,
     public __children__: QEArray = new QEArray(),
   ) {
     super(__data__, parent, graph, __children__);

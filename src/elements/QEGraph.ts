@@ -8,6 +8,7 @@ import { QELine } from "./QELine";
 import { AxisPoint } from "../objects/AxisPoint";
 import { Edge, NodeEdge, TaperedEdge } from "../objects/Edges";
 import { Label, Line, Point } from "../objects/PlottedObject";
+import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
 import { QELabel } from "./QELabel";
 
@@ -105,6 +106,14 @@ function parseLabelMode(attr: string | null, defaultMode: number): number {
 export class QEGraphElement extends DrawableElement implements QEElement {
   static tagName: string = "qe-graph";
 
+  static get observedAttributes(): string[] {
+    return [
+      'group', 'unit', 'compare', 'also',
+      'labels', 'label-nodes', 'label-means', 'label-points',
+      'scale-points', 'points', 'confidence', 'outlier',
+    ];
+  }
+
   static style: string = `
     ${DrawableElement.style}
 
@@ -140,6 +149,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     return this._vizena;
   }
 
+  private _hasModel    = false;
+  private _renderPending = false;
+
   // SVG <rect> elements for per-group CI boxes, keyed by group name.
   // Managed directly (not via QELayer) so they render behind unit points.
   private _ciRects: Map<string, SVGRectElement> = new Map();
@@ -153,20 +165,6 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _nodeLabels:  Map<string, QELabel> = new Map();
   private _meanLabels:  Map<string, QELabel> = new Map();
   private _pointLabels: Map<string, QELabel> = new Map();
-
-  // Cached model received from the most recent model-updated event.
-  // Using event.detail decouples ena-graph from the parent-element assumption.
-  private _currentModel: any = null;
-
-  private _points: any = {
-    add: (points: DataFrame) => {
-      points.rows().forEach((row: DataFrameRow, i: number) => {
-        this.__data__.add_point(row);
-      });
-
-      this.__data__.__state__.setVariable("graph_updated_points", this.__data__.points );
-    }
-  }
 
   constructor() {
     super();
@@ -192,7 +190,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       const model = (e as CustomEvent).detail;
       if (!model) return;
-      this._currentModel = model;
+      this._hasModel = true;
 
       const dims = model.dimensions as string[];
 
@@ -246,12 +244,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         : 1;
 
       // ── Label display modes ──────────────────────────────────────────────────
-      // Attributes: label-nodes, label-means, label-points
+      // Attributes: labels (shorthand), label-nodes, label-means, label-points
       // Values: "on" | "off" | "click" | "auto"   (case-insensitive)
       // Defaults: nodes=ON, means=ON, points=OFF
-      const labelNodes  = parseLabelMode(this.getAttribute('label-nodes'),  Label.DISPLAY_TYPES.ON);
-      const labelMeans  = parseLabelMode(this.getAttribute('label-means'),  Label.DISPLAY_TYPES.ON);
-      const labelPoints = parseLabelMode(this.getAttribute('label-points'), Label.DISPLAY_TYPES.OFF);
+      // `labels` is a shorthand that applies to all three unless individually overridden.
+      const labelsShorthand = this.getAttribute('labels');
+      const labelNodes  = parseLabelMode(this.getAttribute('label-nodes')  ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
+      const labelMeans  = parseLabelMode(this.getAttribute('label-means')  ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
+      const labelPoints = parseLabelMode(this.getAttribute('label-points') ?? labelsShorthand, Label.DISPLAY_TYPES.OFF);
 
       // Use the cached labels <g> reference (set once in connectedCallback).
       const labelSvg = this._labelsGroup;
@@ -293,7 +293,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const group = groupColIdx >= 0 ? String(row[groupColIdx]) : null;
             const colorStr = group ? (groupColorMap[group] ?? '#888888') : '#888888';
 
-            const pt = rowToPoint(row, 'QEUNIT', colorStr, pointScale);
+            const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
             this.__data__.points.set(pt.ID, pt);
             pointsLayer.__data__.objects.set(pt.ID, pt);
 
@@ -577,7 +577,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         // ── Step 1: Populate node positions first (edges need to look them up) ─
         // Sizes will be overwritten after edge weights are computed.
         model.nodes.rows().forEach((row: DataFrameRow) => {
-          const pt = rowToPoint(row, 'code', '#444444');
+          const pt = rowToPoint(row, nodeIdCol, '#444444');
           pt.size = 3; // temporary default; overwritten below if edges are available
           nodeLayer.__data__.objects.set(pt.ID, pt);
         });
@@ -838,8 +838,21 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     });
   }
 
-  attributeChangedCallback(name: string, oldValue: string, newValue: string) {
-    // reserved for future reactive attribute handling
+  attributeChangedCallback(_name: string, oldValue: string | null, newValue: string | null): void {
+    if (oldValue === newValue) return;
+    if (!this._vizena || !this._hasModel) return;
+    if (this._renderPending) return;
+    this._renderPending = true;
+    // Batch synchronous attribute changes (e.g. setting group + compare + removing also)
+    // into a single re-render by deferring to the next microtask.
+    queueMicrotask(() => {
+      this._renderPending = false;
+      this._vizena?.dispatchEvent(new CustomEvent('model-updated', {
+        detail: this._vizena.model,
+        bubbles: true,
+        composed: true,
+      }));
+    });
   }
 
   connectedCallback(): void {
@@ -923,31 +936,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     svg.appendChild(defs);
 
     this.__data__.layers.forEach((layer: LayerLike) => {
-      let 
-        layer_g: QELayer = new QELayer(layer, this.svg_element, this)
-      ;
-
+      const layer_g: QELayer = new QELayer(layer as any, this.svg_element, this);
       this.__children__.push(layer_g);
     });
 
-    // point_layer.__children__.push(new_ena_point);
-    let 
-      // axisPointLayer: LayerLike | undefined = this.__data__.layers.search("layers", "axis_points"),
-      axisLineLayer: LayerLike | undefined =  this.__data__.layers.search("layers", "axis_lines")
-    ;
-    // if(axisPointLayer) {
-    //   [...axisPointLayer.objects.entries()].forEach(([id, point]: [string, AxisPoint]) => {
-    //     let new_ena_point = new QEPoint(point, this.svg_element, this);
-    //     console.log("Adding axis point: ", axisPointLayer, new_ena_point);
-    //     // this.__children__.push(new_ena_point);
-    //   });
-    // }
-    if(axisLineLayer) {
-      [...axisLineLayer.objects.entries()].forEach(([id, line]: [string, Line]) => {
-        let new_ena_line = new QELine(line, this.svg_element, this);
-        axisLineLayer.objects.set(id, line); 
-      });
-    }
     this.__data__.__state__.setVariable("graph_updated", this.__data__ );
 
     this.attach_events();
@@ -967,7 +959,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         this.zoom_level /= 1.1;
       }
       this.__data__.transform.zoom(this.zoom_level);
-      this.update(true);
+      this.update();
     });
 
     // Attach event for panning
@@ -1010,46 +1002,16 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       isPanning = false;
     });
 
-    this.svg_element.addEventListener("point-clicked", (ev: CustomEvent) => {
-      const model = this._currentModel ?? this.vizena?.model;
-      console.log("Model: ", model);
-      let
-        networkLayer = this.__children__.search("__children__", "network") as QELayer,
-        nodeLayer = networkLayer?.__children__.search("__children__", "nodes") as QELayer,
-        edgeLayer = networkLayer?.__children__.search("__children__", "edges") as QELayer,
-        activatedEdge: DataFrameRow | undefined = model?.edges.row(ev.detail.pointData.ID)
-      ;
-
-      if(networkLayer && activatedEdge) {
-        let
-          indices: number[] = activatedEdge.classes?.map( (c, i) => c === "ena.co.occurrence" ? i : null).filter(c => c) as number[],
-          columns: string[][] = indices?.map( (ind: number, j: number) =>  activatedEdge.names[ind].split(/\s&\s/) ),
-          nodes: [Point, Point][] = columns.map( (c, i) => c.map( (col, j) => nodeLayer.__data__.objects.get(col) ) ),
-          edges = nodes.map((n: [Point, Point], i: number) => {
-            let edge = new Edge(activatedEdge, n[0], n[1] );
-            edge.ID = activatedEdge.names[indices[i]];
-            edge.weight = activatedEdge.values[indices[i]];
-            edgeLayer?.__data__.objects.set(edge.ID, edge);
-            return edge;
-          })
-          edgeLayer.__data__.__state__.setVariable("layer_updated", edgeLayer.__data__);
-        ;
-        console.log("Columns: ", edges);
-        this.update_extremes();
-      }
-    });
-
     // ── Label interactions ───────────────────────────────────────────────────
     // CLICK mode: toggle label on point-clicked event
-    this.svg_element.addEventListener('point-clicked', (ev: CustomEvent) => {
+    this.svg_element.addEventListener('point-clicked', ((ev: CustomEvent) => {
       const id = ev.detail?.pointData?.ID;
       if (!id) return;
-      // Try all label maps
       const lbl = this._pointLabels.get(id)
                ?? this._meanLabels.get(id.replace('mean-', ''))
                ?? this._nodeLabels.get(id);
       if (lbl && lbl.displayMode === Label.DISPLAY_TYPES.CLICK) lbl.toggle();
-    });
+    }) as EventListener);
 
     // AUTO mode: show/hide labels via event delegation on the SVG.
     // We look for the nearest ancestor (or the target itself) that has
@@ -1099,7 +1061,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     
     this.wrapper?.appendChild(this.svg_element);
 
-    this.__children__.forEach((enaLayer: QELayer) => {
+    (this.__children__ as QELayer[]).forEach((enaLayer: QELayer) => {
       enaLayer.draw();
     });
   }
@@ -1159,7 +1121,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   update_layers() {
-    this.__children__.forEach((enaLayer: QELayer) => {
+    (this.__children__ as QELayer[]).forEach((enaLayer: QELayer) => {
       enaLayer.update();
     });
   }

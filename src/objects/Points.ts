@@ -6,7 +6,7 @@ export class Mean extends Point {
   private _confidence: ConfidenceInterval;
 
   constructor(dimensions: DimensionVector, o: any) {
-    super(dimensions, o);
+    super({ ...o, dimensions });
     this.visible = true;
     o.points.forEach((p: Point) => {
       this._points.set(p.ID, p);
@@ -64,7 +64,7 @@ export class Node extends Point {
   }
 
   constructor(dimensions: DimensionType, o: PlottedObjectOptions) { // graph?: any) {
-    super(dimensions, o);
+    super({ ...o, dimensions });
 
     this.active = false;
     this.visible = false;

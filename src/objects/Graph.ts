@@ -202,11 +202,7 @@ export class Graph {
   }
 
   add_point(p: DataFrameRow) {
-    let 
-      g: any = this,
-      point: Point = new Point(p);
-    ;
-    
+    const point: Point = new Point(p);
     this.points.set(point.ID, point);
 
     // if (g_.options.POINT && g_.options.POINT.label) {
@@ -235,7 +231,7 @@ export class Graph {
     ns.forEach((new_node) => {
       // if (g_.options.NODE && g_.options.NODE.label) {
       // new_node.label = new Label(new_node.meta[g_.options.NODE.label], new_node, g_);
-      new_node.label = new Label(new_node.ID, new_node, this);
+      new_node.label = new Label(new_node.ID, new_node);
       g_.labels.set(new_node.label.ID, new_node.label);
       // }
       g_.nodes.set(new_node.ID, new_node);
@@ -275,11 +271,11 @@ export class Graph {
     // ;
     // this.extremes = new Extremes(Math.ceil(max), Math.ceil(max), { x: 1, y: 1 }, { x: 1, y: 1 });
 
-    const search_layers: LayerLike[] | undefined = [
+    const search_layers = [
       this.layers.search("layers", "points"),
       this.layers.search("layers", "nodes")
-    ]
-    if(!search_layers || search_layers.length === 0) {
+    ].filter((l): l is LayerLike => l !== undefined);
+    if (search_layers.length === 0) {
       this.extremes = new Extremes(1, 1);
     }
     else {
