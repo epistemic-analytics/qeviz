@@ -20,7 +20,10 @@ export class Edge extends Line {
   }
 
   get base_color(): Color { return this._color };
-  get color(): Color { return this._color || new Color("#000000"); }
+  get color(): WeightedColor {
+    const base = this._color || new Color("#000000");
+    return new WeightedColor(base, Math.abs(this.weight));
+  }
   set color(c: Color) { this._color = c as any; }
 
   base_weight() { return this._weight };
