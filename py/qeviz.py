@@ -200,42 +200,71 @@ def model_data(
     return result
 
 
-def _html_template(
+def _build_attrs(opts: dict) -> str:
+    """Build the extra HTML attribute string for <qe-graph> from display options."""
+    def _attr(name: str, val) -> str:
+        return f' {name}="{val}"' if val is not None else ""
+
+    return (
+        _attr("group",        opts.get("group"))                              +
+        _attr("unit",         opts.get("unit"))                               +
+        _attr("compare",      opts.get("compare"))                            +
+        _attr("also",         opts.get("also"))                               +
+        _attr("label-nodes",  opts.get("label_nodes",  "on"))                 +
+        _attr("label-means",  opts.get("label_means",  "on"))                 +
+        _attr("label-points", opts.get("label_points", "off"))                +
+        ("" if opts.get("scale_points", True)  else ' scale-points="false"') +
+        ("" if opts.get("outlier",      True)  else ' outlier="false"')       +
+        (" points" if opts.get("show_points", False) else "")
+    )
+
+
+def _bundle_script_tag() -> str:
+    """Return a <script> tag with the inlined UMD bundle, or a src= fallback."""
+    bundle_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qeviz.umd.js")
+    if os.path.exists(bundle_path):
+        with open(bundle_path, "r", encoding="utf-8") as fh:
+            return f"<script>{fh.read()}</script>"
+    return '<script src="qeviz.umd.js"></script>'
+
+
+def _html_fragment(
     model: dict,
     options: Optional[dict] = None,
     width: int = 700,
     height: int = 600,
 ) -> str:
-    """Render model data into a self-contained HTML string."""
+    """Return an HTML fragment (no <html>/<head>) suitable for Jupyter inline display."""
     opts = options or {}
     model_json = json.dumps(model, default=str)
+    extra_attrs = _build_attrs(opts)
+    uid = f"qeviz-{int(time.time() * 1000) % 100000}"
+    return f"""{_bundle_script_tag()}
+<style>
+  #{uid}-graph {{ display: block; width: {width}px; height: {height}px; }}
+</style>
+<qe-visual id="{uid}-vis" style="display:none"></qe-visual>
+<qe-graph id="{uid}-graph" for="{uid}-vis"
+  style="width:{width}px;height:{height}px"
+  nodes{extra_attrs}>
+</qe-graph>
+<script>
+  (function() {{
+    document.getElementById('{uid}-vis').setModelData({model_json});
+  }})();
+</script>"""
 
-    # Inline the qeviz UMD bundle from the same directory as this file.
-    bundle_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qeviz.umd.js")
-    if os.path.exists(bundle_path):
-        with open(bundle_path, "r", encoding="utf-8") as fh:
-            bundle_js = fh.read()
-        script_tag = f"<script>{bundle_js}</script>"
-    else:
-        # Fallback: assume qeviz.umd.js is served alongside the HTML file
-        script_tag = '<script src="qeviz.umd.js"></script>'
 
-    def _attr(name: str, val) -> str:
-        return f' {name}="{val}"' if val is not None else ""
-
-    extra_attrs = (
-        _attr("group",        opts.get("group"))         +
-        _attr("unit",         opts.get("unit"))          +
-        _attr("compare",      opts.get("compare"))       +
-        _attr("also",         opts.get("also"))          +
-        _attr("label-nodes",  opts.get("label_nodes", "on"))  +
-        _attr("label-means",  opts.get("label_means",  "on"))  +
-        _attr("label-points", opts.get("label_points", "off")) +
-        ("" if opts.get("scale_points", True) else ' scale-points="false"') +
-        ("" if opts.get("outlier",       True) else ' outlier="false"')      +
-        (" points" if opts.get("show_points", False) else "")
-    )
-
+def _html_document(
+    model: dict,
+    options: Optional[dict] = None,
+    width: int = 700,
+    height: int = 600,
+) -> str:
+    """Return a self-contained HTML document for writing to a file."""
+    opts = options or {}
+    model_json = json.dumps(model, default=str)
+    extra_attrs = _build_attrs(opts)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -247,7 +276,7 @@ def _html_template(
     qe-visual {{ display: block; width: {width}px; height: {height}px; }}
     qe-graph  {{ display: block; width: 100%; height: 100%; }}
   </style>
-  {script_tag}
+  {_bundle_script_tag()}
 </head>
 <body>
   <qe-visual id="vis" style="display:none"></qe-visual>
@@ -273,7 +302,7 @@ def plot(
     """
     Display the qeviz plot inline in a Jupyter / IPython notebook.
 
-    Falls back to returning the HTML string if IPython is not available.
+    Falls back to returning the HTML fragment string if IPython is not available.
 
     Parameters
     ----------
@@ -291,12 +320,12 @@ def plot(
               ``outlier``      — ``False`` to hide outlier boxes
     width, height  Plot dimensions in pixels.
     """
-    html = _html_template(model, options, width, height)
+    fragment = _html_fragment(model, options, width, height)
     try:
         from IPython.display import HTML, display  # type: ignore
-        display(HTML(f'<div style="width:{width}px;height:{height}px">{html}</div>'))
+        display(HTML(f'<div style="width:{width}px;height:{height}px">{fragment}</div>'))
     except ImportError:
-        return html
+        return fragment
 
 
 def export_html(
@@ -324,7 +353,7 @@ def export_html(
     -------
     str  The resolved absolute path of the written file.
     """
-    html = _html_template(model, options, width, height)
+    html = _html_document(model, options, width, height)
     abs_path = os.path.abspath(path)
     with open(abs_path, "w", encoding="utf-8") as fh:
         fh.write(html)
