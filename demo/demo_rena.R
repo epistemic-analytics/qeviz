@@ -181,7 +181,7 @@ ona_json <- "null"
 if (!is.null(ona_model)) 
   ona_json <- jsonlite::toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
 
-group_names   <- sort(unique(as.data.frame(ena_set$points.rotated)$Condition))
+group_names   <- sort(unique(as.data.frame(ena_set$points)$Condition))
 group_options <- paste(
   sprintf('      <option value="group-%s">Group — %s</option>',
           group_names, group_names),
