@@ -218,7 +218,7 @@ html <- paste0(
 <p class="sub">
   Standard ENA (undirected) and ONA (directed) models fitted from
   <code>RS.data</code> using the rENA&nbsp;/&nbsp;ona R&nbsp;packages.<br>
-  Codes: ', paste(codeNames, collapse = ", "), '.
+  Codes: ', paste(codes, collapse = ", "), '.
   Groups: ', paste(group_names, collapse = ", "), '.
 </p>
 
@@ -230,12 +230,12 @@ html <- paste0(
       <option value="overlay">Overlay (both groups)</option>
     </select>
   </label>
-  <label>Labels:
-    <select id="sel-labels">
+  <label>Code labels:
+    <select id="sel-node-labels">
+      <option value="on" selected>On</option>
       <option value="auto">Auto</option>
-      <option value="on">On</option>
-      <option value="off">Off</option>
       <option value="click">Click</option>
+      <option value="off">Off</option>
     </select>
   </label>
 </div>
@@ -244,14 +244,14 @@ html <- paste0(
   <div class="card">
     <h2>Standard ENA — <code>directed: false</code></h2>
     <qe-visual id="vis-ena">
-      <qe-graph id="graph-ena" width="100%" height="440" points labels="auto"></qe-graph>
+      <qe-graph id="graph-ena" width="100%" height="440" points label-nodes="on"></qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ena"></div>
   </div>
   <div class="card">
     <h2>ONA — <code>directed: true</code></h2>
     <qe-visual id="vis-ona">
-      <qe-graph id="graph-ona" width="100%" height="440" points labels="auto"></qe-graph>
+      <qe-graph id="graph-ona" width="100%" height="440" points label-nodes="on"></qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ona"></div>
   </div>
@@ -301,9 +301,9 @@ document.getElementById("sel-mode").addEventListener("change", e => {
   });
 });
 
-document.getElementById("sel-labels").addEventListener("change", e => {
-  graphEna.setAttribute("labels", e.target.value);
-  graphOna.setAttribute("labels", e.target.value);
+document.getElementById("sel-node-labels").addEventListener("change", e => {
+  graphEna.setAttribute("label-nodes", e.target.value);
+  graphOna.setAttribute("label-nodes", e.target.value);
 });
 </script>
 </body>
