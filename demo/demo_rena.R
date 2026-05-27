@@ -238,20 +238,28 @@ html <- paste0(
       <option value="off">Off</option>
     </select>
   </label>
+  <label>Point labels:
+    <select id="sel-point-labels">
+      <option value="auto" selected>Auto</option>
+      <option value="on">On</option>
+      <option value="click">Click</option>
+      <option value="off">Off</option>
+    </select>
+  </label>
 </div>
 
 <div class="layout">
   <div class="card">
     <h2>Standard ENA — <code>directed: false</code></h2>
     <qe-visual id="vis-ena">
-      <qe-graph id="graph-ena" width="100%" height="440" points label-nodes="on"></qe-graph>
+      <qe-graph id="graph-ena" width="100%" height="440" points label-nodes="on" label-points="auto"></qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ena"></div>
   </div>
   <div class="card">
     <h2>ONA — <code>directed: true</code></h2>
     <qe-visual id="vis-ona">
-      <qe-graph id="graph-ona" width="100%" height="440" points label-nodes="on"></qe-graph>
+      <qe-graph id="graph-ona" width="100%" height="440" points label-nodes="on" label-points="auto"></qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ona"></div>
   </div>
@@ -304,6 +312,11 @@ document.getElementById("sel-mode").addEventListener("change", e => {
 document.getElementById("sel-node-labels").addEventListener("change", e => {
   graphEna.setAttribute("label-nodes", e.target.value);
   graphOna.setAttribute("label-nodes", e.target.value);
+});
+
+document.getElementById("sel-point-labels").addEventListener("change", e => {
+  graphEna.setAttribute("label-points", e.target.value);
+  graphOna.setAttribute("label-points", e.target.value);
 });
 </script>
 </body>
