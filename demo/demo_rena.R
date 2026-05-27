@@ -14,6 +14,7 @@
 #   remotes::install_github("epistemic-analytics/qe-packages/ona/R/ona@main")
 
 suppressPackageStartupMessages({
+  library(tma)
   library(rENA)
   library(jsonlite)
 })
@@ -22,34 +23,42 @@ suppressPackageStartupMessages({
 # ── Data ───────────────────────────────────────────────────────────────────────
 
 data(RS.data)
-
-# RS.data columns used as the unit and conversation delimiters:
-#   ENA_UNIT  — unique unit identifier (e.g. "FirstGame/steven z")
-#   Condition — group label ("FirstGame" or "SecondGame")
-#   GroupName — conversation delimiter (stanza boundary)
-
-codeNames <- c(
-  "Data", "Collaboration", "Justification",
-  "Mechanical.Reasoning", "Negotiation",
-  "Agency", "Systems.Thinking"
+  
+units_by <- c("Condition", "UserName");
+hoo_rules <- tma::conversation_rules(
+  (
+    Condition == UNIT$Condition & 
+    GroupName == UNIT$GroupName
+  )
+);
+codes = c('Data','Technical.Constraints','Performance.Parameters','Client.and.Consultant.Requests','Design.Reasoning','Collaboration');
+  
+context_model <- tma::contexts(
+  RS.data,
+  units_by = make.names(units_by),
+  hoo_rules = hoo_rules
 )
 
-
-# ── Accumulate co-occurrence data ──────────────────────────────────────────────
-
-accum <- ena.accumulate.data(
-  units        = RS.data[, c("ENA_UNIT", "Condition")],
-  conversation = RS.data[, c("ENA_UNIT", "GroupName")],
-  codes        = RS.data[, codeNames],
-  window.size.back = 4
+multidim_arr <- tma::context_tensor(
+  RS.data, 
+  sender_cols = NULL,
+  receiver_cols = NULL,
+  default_window = 8,
+  default_weight = 1
 )
 
+result_ena <- tma::accumulate(
+  tensor = multidim_arr, 
+  codes = codes,
+  context_model = context_model,
+  ordered = FALSE
+)
 
-# ── ENA set — SVD rotation ─────────────────────────────────────────────────────
-
-ena_set <- ena.make.set(
-  enadata     = accum,
-  rotation.by = ena.svd
+result_ona <- tma::accumulate(
+  tensor = multidim_arr, 
+  codes = codes,
+  context_model = context_model,
+  ordered = TRUE
 )
 
 
@@ -102,13 +111,13 @@ find_dims <- function(df) {
 extract_frames <- function(set, directed = FALSE) {
 
   # Nodes: code positions in rotated space
-  nodes_raw <- as.data.frame(set$rotation.set$nodes)
+  nodes_raw <- as.data.frame(set$rotation$nodes)
   dims      <- find_dims(nodes_raw)          # e.g. c("SVD1", "SVD2")
   nodes_df  <- nodes_raw[, c("code", dims)]
   names(nodes_df)[2:3] <- c("x", "y")
 
   # Points: unit positions in rotated space
-  pts_raw   <- as.data.frame(set$points.rotated)
+  pts_raw   <- as.data.frame(set$points)
   points_df <- pts_raw[, c("ENA_UNIT", "Condition", dims)]
   names(points_df)[3:4] <- c("x", "y")
 
@@ -125,7 +134,7 @@ extract_frames <- function(set, directed = FALSE) {
 
   list(
     directed    = directed,
-    updated     = as.integer(Sys.time()) * 1000L,
+    updated     = as.numeric(Sys.time()) * 1000L,
     id_col      = "ENA_UNIT",
     node_id_col = "code",
     x_col       = "x",
@@ -140,32 +149,12 @@ extract_frames <- function(set, directed = FALSE) {
 
 
 # ── Build ENA model data ───────────────────────────────────────────────────────
-
+ena_set <- rENA::model(result_ena)
 ena_model <- extract_frames(ena_set, directed = FALSE)
 
-
 # ── ONA model (requires `ona` package) ─────────────────────────────────────────
-#
-# ONA uses the full unfolded adjacency matrix: A→B and B→A are separate columns,
-# and self-connections A→A are included.  Set directed = TRUE so qeviz draws
-# arrowheads.
-
-if (requireNamespace("ona", quietly = TRUE)) {
-  library(ona)
-  accum_ona <- ona.accumulate.data(
-    units        = RS.data[, c("ENA_UNIT", "Condition")],
-    conversation = RS.data[, c("ENA_UNIT", "GroupName")],
-    codes        = RS.data[, codeNames],
-    window.size.back = 4
-  )
-  ona_set   <- ona.make.set(enadata = accum_ona)
-  ona_model <- extract_frames(ona_set, directed = TRUE)
-} else {
-  message("Package `ona` not installed — the ONA panel will be empty.")
-  message("Install with: remotes::install_github(",
-          '"epistemic-analytics/qe-packages/ona/R/ona@main")')
-  ona_model <- NULL
-}
+ona_set <- rENA::model(result_ona, directed = TRUE)
+ona_model <- extract_frames(ona_set, directed = TRUE)
 
 
 # ── Inline the qeviz bundle ────────────────────────────────────────────────────
@@ -188,9 +177,9 @@ bundle_js <- local({
 # ── Generate HTML ──────────────────────────────────────────────────────────────
 
 ena_json <- toJSON(ena_model, auto_unbox = TRUE, digits = 6, null = "null")
-ona_json <- if (!is.null(ona_model))
-              toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
-            else "null"
+ona_json <- "null"
+if (!is.null(ona_model)) 
+  ona_json <- jsonlite::toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
 
 group_names   <- sort(unique(as.data.frame(ena_set$points.rotated)$Condition))
 group_options <- paste(
