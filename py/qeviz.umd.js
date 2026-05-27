@@ -11,7 +11,7 @@ var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read fr
 var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
 var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
 
-  var _rowNumber, _rowName, _names, _parent, _classes, _name, _type, _rowNames, _parent2, _names2, _rowNames2, _classes2, _flipped, _names3;
+  var _rowNumber, _rowName, _names, _parent, _classes, _name, _type, _rowNames, _parent2, _names2, _rowNames2, _classes2, _flipped, _names3, _edge, _with_arrow, _arrow;
   const _DataFrameRow = class _DataFrameRow extends Array {
     constructor(names, values, rowName, parent, index) {
       super(...values);
@@ -590,18 +590,35 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       super(base);
       this.weight = weight;
     }
-    desaturate(alpha = 1) {
-      const rgbWhite = { r: 255, g: 255, b: 255 };
-      const rgbVal = Color.parseColor(this.base);
-      return {
-        r: Math.round(rgbWhite.r + (rgbVal.r - rgbWhite.r) * (alpha * Math.abs(this.weight))),
-        g: Math.round(rgbWhite.g + (rgbVal.g - rgbWhite.g) * (alpha * Math.abs(this.weight))),
-        b: Math.round(rgbWhite.b + (rgbVal.b - rgbWhite.b) * (alpha * Math.abs(this.weight)))
-      };
+    // Parse hex → HSL (h in degrees, s/l as percentages 0–100).
+    static toHSL(hex) {
+      const { r, g, b } = Color.parseColor(hex);
+      const rn = r / 255, gn = g / 255, bn = b / 255;
+      const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+      const l = (max + min) / 2;
+      if (max === min) return { h: 0, s: 0, l: l * 100 };
+      const d = max - min;
+      const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      let h;
+      switch (max) {
+        case rn:
+          h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+          break;
+        case gn:
+          h = ((bn - rn) / d + 2) / 6;
+          break;
+        default:
+          h = ((rn - gn) / d + 4) / 6;
+      }
+      return { h: h * 360, s: s * 100, l: l * 100 };
     }
-    toString(alpha = 1) {
-      const desaturated = this.desaturate(alpha);
-      return Color.rgb(desaturated.r, desaturated.g, desaturated.b);
+    // Returns hsla(...) with saturation and alpha both scaled by |weight|,
+    // matching the Web ENA visual convention: hue and lightness stay constant
+    // while heavy edges are vivid/opaque and light edges fade toward transparent.
+    toString() {
+      const { h, s, l } = _WeightedColor.toHSL(this.base);
+      const w = Math.min(1, Math.abs(this.weight));
+      return `hsla(${h.toFixed(2)}, ${(s * w).toFixed(2)}%, ${l.toFixed(2)}%, ${w.toFixed(4)})`;
     }
   };
   __name(_WeightedColor, "WeightedColor");
@@ -1814,6 +1831,162 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
   `;
   let DrawableElement = _DrawableElement;
+  const zoom_level = 1;
+  const _Edge = class _Edge extends Line {
+    constructor(data, from, to, weight = 0) {
+      super(data, from, to);
+      this._totalweight = 0;
+      this._weight = weight;
+    }
+    get base_color() {
+      return this._color;
+    }
+    get color() {
+      const base = this._color || new Color("#000000");
+      return new WeightedColor(base, Math.abs(this.weight));
+    }
+    set color(c) {
+      this._color = c;
+    }
+    base_weight() {
+      return this._weight;
+    }
+    get weight() {
+      let w = Array.isArray(this._weight) ? this._weight[0] - this._weight[1] : this._weight;
+      return w;
+    }
+    set weight(w) {
+      this._weight = w;
+    }
+    get totalweight() {
+      return this.weight;
+    }
+    set totalweight(w) {
+      this._totalweight = w;
+    }
+  };
+  __name(_Edge, "Edge");
+  let Edge = _Edge;
+  const _EdgeArrow = class _EdgeArrow extends PlottedObject {
+    constructor(edge) {
+      super(edge.dimensions || [], edge);
+      __privateAdd(this, _edge);
+      __privateSet(this, _edge, edge);
+    }
+    get edge() {
+      return __privateGet(this, _edge);
+    }
+    get path() {
+      let _this = __privateGet(this, _edge);
+      let _mid = _this.from_point, head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.7), nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.85), mid = Tools.Geometry.Line.midpoint(head, nock), rot_mid = Tools.Geometry.Line.rotate(_this.line, mid), rot_nock = Tools.Geometry.Line.rotate(_this.line, nock), mid_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_mid), mid_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_mid), nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock), nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock);
+      let p = `M${head.join(" ")} ${mid_int0.join(" ")} ${nock_int0.join(" ")}  ${mid.join(" ")} ${nock_int1.join(" ")}  ${mid_int1.join(" ")}z`;
+      return p;
+    }
+  };
+  _edge = new WeakMap();
+  __name(_EdgeArrow, "EdgeArrow");
+  let EdgeArrow = _EdgeArrow;
+  const _TaperedEdge = class _TaperedEdge extends Edge {
+    constructor(data, from, to) {
+      super(data, from, to);
+      __privateAdd(this, _with_arrow);
+      __privateAdd(this, _arrow);
+      this._path = "";
+      __privateSet(this, _with_arrow, false);
+      this._directions = [
+        "from",
+        "to"
+        /* TO */
+      ];
+      this.towards = "to";
+      if (__privateGet(this, _with_arrow) === true) {
+        __privateSet(this, _arrow, new EdgeArrow(this));
+      }
+    }
+    get path() {
+      return `M${this.from.x} ${this.from.y} L${this.base_pts[0].join(" ")} L${this.base_pts[1].join(" ")}z`;
+    }
+    static calculate_base_points(edg) {
+      const top = edg.towards;
+      const base = edg._directions.find((d) => d !== edg.towards);
+      const bx = edg[base].x, by = edg[base].y;
+      const tx = edg[top].x, ty = edg[top].y;
+      const dx = tx - bx, dy = ty - by;
+      const L = Math.hypot(dx, dy);
+      const wt = (edg.weight ?? 0) * zoom_level;
+      if (L === 0 || !isFinite(wt) || wt === 0) {
+        return [[tx, ty], [tx, ty]];
+      }
+      const px = -dy / L, py = dx / L;
+      const halfW = wt / 2;
+      return [
+        [tx + px * halfW, ty + py * halfW],
+        [tx - px * halfW, ty - py * halfW]
+      ];
+    }
+    get base_pts() {
+      return _TaperedEdge.calculate_base_points(this);
+    }
+    get arrow() {
+      return __privateGet(this, _arrow);
+    }
+    get with_arrow() {
+      return __privateGet(this, _with_arrow);
+    }
+    get from_point() {
+      return [this.from.x, this.from.y];
+    }
+  };
+  _with_arrow = new WeakMap();
+  _arrow = new WeakMap();
+  __name(_TaperedEdge, "TaperedEdge");
+  let TaperedEdge = _TaperedEdge;
+  const _TaperedWeightedMidpointEdge = class _TaperedWeightedMidpointEdge extends TaperedEdge {
+    constructor(data, from, to) {
+      super(data, from, to);
+      this._dataWeight = 0;
+      this._totalweight = data.totalweight ?? 0;
+      this._dataWeight = data.weight ?? this._weight;
+    }
+    get weighted_midpoint() {
+      return Tools.Geometry.Line.interpolate(this.line)(1 - this._dataWeight / this._totalweight);
+    }
+    get base_pts() {
+      return TaperedEdge.calculate_base_points(this);
+    }
+    static build_path(edg) {
+      if (edg._totalweight > 0) {
+        let p = `M${edg.weighted_midpoint[0]} ${edg.weighted_midpoint[1]} L${edg.base_pts[0].join(" ")} L${edg.base_pts[1].join(" ")}z`;
+        return p;
+      } else {
+        console.error("TaperedWeightedMidpointEdge: No totalweight, returning empty path");
+        return "";
+      }
+    }
+    get path() {
+      return _TaperedWeightedMidpointEdge.build_path(this);
+    }
+    get from_point() {
+      return this.weighted_midpoint;
+    }
+  };
+  __name(_TaperedWeightedMidpointEdge, "TaperedWeightedMidpointEdge");
+  let TaperedWeightedMidpointEdge = _TaperedWeightedMidpointEdge;
+  const _NodeEdge = class _NodeEdge extends Edge {
+    constructor(data, from, to) {
+      super(data, from, to);
+    }
+    static build_path(weight, to) {
+      let R = weight / 2, CX = to.x - R, R2 = R * 2, p = `M ${CX}, ${to.y} a ${R},${R} 0 1,0 ${R2},0 a ${R},${R} 0 1,0 -${R2},0`;
+      return p;
+    }
+    get path() {
+      let wt = this.weight * zoom_level;
+      return _NodeEdge.build_path(wt, this.to);
+    }
+  };
+  __name(_NodeEdge, "NodeEdge");
+  let NodeEdge = _NodeEdge;
   const _Drawable = class _Drawable {
     constructor(__data__, parent, graph, __children__ = new QEArray()) {
       this.__data__ = __data__;
@@ -1860,16 +2033,17 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element = this.create();
     }
     create() {
-      var _a, _b;
-      const meta = this.__data__.meta ?? {};
-      if (meta.isSelfConnection) {
+      if (this.__data__ instanceof NodeEdge) {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("fill", "none");
-        path.setAttribute("stroke", this.__data__.color.toString());
-        if (meta.isDirected) {
-          const c = (((_a = this.__data__.color) == null ? void 0 : _a.toString()) ?? "").replace("#", "");
-          path.setAttribute("marker-end", `url(#qe-arrow-${c})`);
-        }
+        path.setAttribute("fill", this.__data__.color.toString());
+        path.setAttribute("stroke", "none");
+        this.svg_element = path;
+        return path;
+      }
+      if (this.__data__ instanceof TaperedEdge) {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("fill", this.__data__.color.toString());
+        path.setAttribute("stroke", "none");
         this.svg_element = path;
         return path;
       }
@@ -1880,10 +2054,6 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       line.setAttribute("y2", this.__data__.to.y.toString());
       line.setAttribute("stroke-width", this.get_size().toString());
       line.setAttribute("stroke", this.__data__.color.toString());
-      if (meta.isDirected) {
-        const c = (((_b = this.__data__.color) == null ? void 0 : _b.toString()) ?? "").replace("#", "");
-        line.setAttribute("marker-end", `url(#qe-arrow-${c})`);
-      }
       this.svg_element = line;
       return line;
     }
@@ -1897,38 +2067,30 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
       const extent = ((_a = this.graph.__data__.extremes) == null ? void 0 : _a.x_max) ?? 1;
       const meta = this.__data__.meta ?? {};
-      const strokeColor = this.__data__.color.toString();
       if (meta.isMeanEdge) {
         const weight = typeof meta.weight === "number" ? meta.weight : 0;
         const maxW = typeof meta.maxWeight === "number" ? meta.maxWeight : 1;
         const opacity = typeof meta.opacity === "number" ? meta.opacity : Math.min(1, weight / (maxW || 1));
         const sw = (extent > 0 ? extent : 1) * 0.04 * (weight / (maxW || 1));
-        if (meta.isSelfConnection) {
-          const R = Math.max(sw * 2.5, (extent > 0 ? extent : 1) * 0.04);
-          const x = meta.selfX ?? this.__data__.from.x;
-          const y = meta.selfY ?? this.__data__.from.y;
-          const R2 = R * 2;
-          const d = `M ${x - R},${y} a ${R},${R} 0 1,0 ${R2},0 a ${R},${R} 0 1,0 -${R2},0`;
-          this.svg_element.setAttribute("d", d);
-          this.svg_element.setAttribute("stroke-width", (sw * 0.6).toString());
-          this.svg_element.setAttribute("stroke-opacity", opacity.toString());
-          if (meta.isDirected) {
-            const colorId = strokeColor.replace("#", "");
-            this.svg_element.setAttribute("marker-end", `url(#qe-arrow-${colorId})`);
-          }
+        const baseColor = this.__data__._color || new Color("#000000");
+        const edgeColor = new WeightedColor(baseColor, opacity).toString();
+        if (this.__data__ instanceof NodeEdge) {
+          this.svg_element.setAttribute("d", this.__data__.path);
+          this.svg_element.setAttribute("fill", edgeColor);
+          this.svg_element.setAttribute("stroke", "none");
+        } else if (this.__data__ instanceof TaperedEdge) {
+          this.__data__.weight = sw * 4;
+          this.svg_element.setAttribute("d", this.__data__.path);
+          this.svg_element.setAttribute("fill", edgeColor);
+          this.svg_element.setAttribute("stroke", "none");
         } else {
           this.svg_element.setAttribute("x1", this.__data__.from.x.toString());
           this.svg_element.setAttribute("y1", this.__data__.from.y.toString());
           this.svg_element.setAttribute("x2", this.__data__.to.x.toString());
           this.svg_element.setAttribute("y2", this.__data__.to.y.toString());
           this.svg_element.setAttribute("stroke-width", sw.toString());
-          this.svg_element.setAttribute("stroke-opacity", opacity.toString());
-          if (meta.isDirected) {
-            const colorId = strokeColor.replace("#", "");
-            this.svg_element.setAttribute("marker-end", `url(#qe-arrow-${colorId})`);
-          } else {
-            this.svg_element.removeAttribute("marker-end");
-          }
+          this.svg_element.setAttribute("stroke", edgeColor);
+          this.svg_element.removeAttribute("marker-end");
         }
       } else {
         this.svg_element.setAttribute("x1", this.__data__.from.x.toString());
@@ -1938,8 +2100,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const sw = (extent > 0 ? extent : 1) * 4e-3 * this.get_size();
         this.svg_element.setAttribute("stroke-width", sw.toString());
         this.svg_element.setAttribute("stroke-opacity", "1");
+        this.svg_element.setAttribute("stroke", this.__data__.color.toString());
       }
-      this.svg_element.setAttribute("stroke", strokeColor);
     }
     draw() {
       var _a;
@@ -2088,7 +2250,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     "AxisLine": QELine,
     "Point": QEPoint,
     "Line": QELine,
-    "Edge": QELine
+    "Edge": QELine,
+    "TaperedEdge": QELine,
+    "TaperedWeightedMidpointEdge": QELine,
+    "NodeEdge": QELine
   };
   const _QELayer = class _QELayer {
     constructor(__data__, parent, graph, __children__ = new QEArray()) {
@@ -2364,7 +2529,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element = this.create();
       console.log("Created ena-graph svg element: ", this.svg_element);
       document.addEventListener("model-updated", (e) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
         if (this._vizena && e.target !== this._vizena) return;
         const model = e.detail;
         if (!model) return;
@@ -2681,6 +2846,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const networkLayer = this.__children__.search("__children__", "network");
         const edgeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edges");
         const nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes");
+        const edgenodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edgenodes");
         if (((_i = model.nodes) == null ? void 0 : _i.rows) && nodeLayer) {
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
@@ -2783,20 +2949,66 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 if (w > 0) drawEdges.push({ col, pair, weight: w, color: primary.color });
               });
             }
-            const maxEdgeWeight = Math.max(1, ...drawEdges.map((e2) => e2.weight));
-            const nodeWeightSum = {};
             const isDirected = !!model.directed;
+            const maxEdgeWeight = Math.max(1, ...drawEdges.filter((e2) => e2.pair[0] !== e2.pair[1]).map((e2) => e2.weight));
+            const maxSelfWeight = Math.max(0, ...drawEdges.filter((e2) => e2.pair[0] === e2.pair[1]).map((e2) => e2.weight));
+            const nodeWeightSum = {};
+            drawEdges.forEach(({ pair, weight }) => {
+              const isSelf = pair[0] === pair[1];
+              if (isSelf && !isDirected) return;
+              nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
+              if (!isSelf) {
+                nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
+              }
+            });
+            const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
+            const nodeSizes = {};
+            model.nodes.rows().forEach((row) => {
+              const codeIdx = row.names.indexOf(nodeIdCol);
+              const id = codeIdx >= 0 ? String(row[codeIdx]) : "";
+              if (!id) return;
+              const pt = nodeLayer.__data__.objects.get(id);
+              if (!pt) return;
+              const w = nodeWeightSum[id] ?? 0;
+              pt.size = 2 + w / maxNodeWeight * 3;
+              nodeSizes[id] = pt.size;
+            });
+            const totalWeightByPair = {};
+            if (isDirected) {
+              drawEdges.forEach(({ pair, weight }) => {
+                const key = `${pair[0]}.${pair[1]}`;
+                totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
+              });
+            }
+            const extentForRadius = ((_l = this.__data__.extremes) == null ? void 0 : _l.x_max) ?? 1;
             drawEdges.forEach(({ col, pair, weight, color }) => {
               const fromNode = nodeLayer.__data__.objects.get(pair[0]);
               const toNode = nodeLayer.__data__.objects.get(pair[1]);
               if (!fromNode || !toNode) return;
               const isSelf = pair[0] === pair[1];
-              const opacity = Math.min(1, weight / maxEdgeWeight);
-              const edgeLine = new Line(
-                {},
-                new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} }),
-                new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x, toNode.y], meta: {} })
-              );
+              if (isSelf && !isDirected) return;
+              const classMax = isSelf ? Math.max(maxSelfWeight, 1e-9) : maxEdgeWeight;
+              const opacity = Math.min(1, weight / classMax);
+              const fromPt = new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} });
+              const toPt = new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x, toNode.y], meta: {} });
+              let edgeLine;
+              if (isSelf) {
+                edgeLine = new NodeEdge({}, fromPt, toPt);
+                const nodeR = extentForRadius * 0.015 * (nodeSizes[pair[0]] ?? 2);
+                const ratio = weight / Math.max(maxSelfWeight, 1e-9);
+                edgeLine.weight = 2 * nodeR * 0.8 * ratio;
+              } else if (isDirected) {
+                const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
+                const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
+                const totalweight = fwd + bwd;
+                edgeLine = new TaperedWeightedMidpointEdge(
+                  { weight, totalweight },
+                  fromPt,
+                  toPt
+                );
+              } else {
+                edgeLine = new Line({}, fromPt, toPt);
+              }
               edgeLine.ID = `edge-${col}`;
               edgeLine.color = new Color(color);
               edgeLine.meta = {
@@ -2804,29 +3016,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 weight,
                 maxWeight: maxEdgeWeight,
                 opacity,
-                isDirected,
-                isSelfConnection: isSelf,
-                // Self-connection rendering needs the node position at render time;
-                // store it here so QELine can draw the arc without looking up the node.
-                selfX: isSelf ? fromNode.x : void 0,
-                selfY: isSelf ? fromNode.y : void 0
+                isDirected
               };
-              edgeLayer.__data__.objects.set(edgeLine.ID, edgeLine);
-              nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
-              if (!isSelf) {
-                nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
-              }
+              const targetLayer = isSelf ? edgenodeLayer ?? edgeLayer : edgeLayer;
+              targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
             });
             edgeLayer.__data__.__state__.setVariable("layer_updated", edgeLayer.__data__);
-            const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
-            model.nodes.rows().forEach((row) => {
-              const codeIdx = row.names.indexOf(nodeIdCol);
-              const id = codeIdx >= 0 ? String(row[codeIdx]) : "";
-              const pt = nodeLayer.__data__.objects.get(id);
-              if (!pt) return;
-              const w = nodeWeightSum[id] ?? 0;
-              pt.size = 2 + w / maxNodeWeight * 3;
-            });
+            if (edgenodeLayer) edgenodeLayer.__data__.__state__.setVariable("layer_updated", edgenodeLayer.__data__);
           }
           if (labelSvg && labelNodes !== 0) {
             this._nodeLabels.forEach((lbl, id) => {
@@ -3110,51 +3306,6 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   `;
   let QEGraphElement = _QEGraphElement;
   customElements.define(QEGraphElement.tagName, QEGraphElement);
-  const _Edge = class _Edge extends Line {
-    constructor(data, from, to, weight = 0) {
-      super(data, from, to);
-      this._totalweight = 0;
-      this._weight = weight;
-    }
-    get base_color() {
-      return this._color;
-    }
-    get color() {
-      if (Array.isArray(this._color)) {
-        console.error("Edge color is an array, this should not happen");
-      }
-      const wc = this._color || new Color("#000000");
-      return new WeightedColor(wc, Math.abs(this.weight));
-    }
-    set color(c) {
-      let wc;
-      if (!(c instanceof WeightedColor)) {
-        wc = new WeightedColor(c, this.weight);
-      } else {
-        wc = c;
-        wc.weight = this.weight;
-      }
-      this._color = wc;
-    }
-    base_weight() {
-      return this._weight;
-    }
-    get weight() {
-      let w = Array.isArray(this._weight) ? this._weight[0] - this._weight[1] : this._weight;
-      return w;
-    }
-    set weight(w) {
-      this._weight = w;
-    }
-    get totalweight() {
-      return this.weight;
-    }
-    set totalweight(w) {
-      this._totalweight = w;
-    }
-  };
-  __name(_Edge, "Edge");
-  let Edge = _Edge;
   exports2.Color = Color;
   exports2.DataFrame = DataFrame;
   exports2.DataFrameColumn = DataFrameColumn;
