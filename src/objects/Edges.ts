@@ -250,14 +250,19 @@ export class TaperedMidpointEdge extends TaperedEdge {
 }
 
 export class TaperedWeightedMidpointEdge extends TaperedEdge {
+  // Preserve the original data weight so that QELine.update()'s
+  // `edge.weight = sw * 4` (which sets _weight for display sizing) doesn't
+  // corrupt the midpoint calculation.
+  private _dataWeight: number = 0;
 
   constructor(data: any, from: Node, to: Node) {
     super(data, from, to);
-    this._totalweight = data.totalweight;
+    this._totalweight = data.totalweight ?? 0;
+    this._dataWeight  = data.weight ?? this._weight;
   }
 
   get weighted_midpoint(): [number, number] {
-    return Tools.Geometry.Line.interpolate(this.line)(1 - (this.weight / this._totalweight));
+    return Tools.Geometry.Line.interpolate(this.line)(1 - (this._dataWeight / this._totalweight));
   }
 
   get base_pts(): [[number, number], [number, number]] {
