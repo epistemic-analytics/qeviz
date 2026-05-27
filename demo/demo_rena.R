@@ -1,19 +1,21 @@
 # demo/demo_rena.R
 #
-# Fit a standard ENA model and an ONA model from RS.data (rENA package) and
-# export a standalone HTML file that displays both side-by-side in qeviz.
+# Fit a standard ENA model and an ONA model from RS.data (rENA/tma packages)
+# and export a standalone HTML file that displays both side-by-side in qeviz.
 #
 # Run from the project root:
 #   Rscript demo/demo_rena.R
 #
-# Requirements:
-#   install.packages(c("rENA", "jsonlite"))
-#
-# ONA section requires the `ona` package:
-#   install.packages("remotes")
-#   remotes::install_github("epistemic-analytics/qe-packages/ona/R/ona@main")
+# Requirements: tma, rENA, jsonlite, and the qeviz R package.
+# Load qeviz from source if not installed:
+#   pkgload::load_all("R")
 
 suppressPackageStartupMessages({
+  if (requireNamespace("pkgload", quietly = TRUE)) {
+    pkgload::load_all("R", quiet = TRUE)   # load from source in project root
+  } else {
+    library(qeviz)
+  }
   library(tma)
   library(rENA)
   library(jsonlite)
@@ -23,147 +25,64 @@ suppressPackageStartupMessages({
 # ── Data ───────────────────────────────────────────────────────────────────────
 
 data(RS.data)
-  
-units_by <- c("Condition", "UserName");
+
+units_by  <- c("Condition", "UserName")
 hoo_rules <- tma::conversation_rules(
-  (
-    Condition == UNIT$Condition & 
-    GroupName == UNIT$GroupName
-  )
-);
-codes = c('Data','Technical.Constraints','Performance.Parameters','Client.and.Consultant.Requests','Design.Reasoning','Collaboration');
-  
+  (Condition %in% UNIT$Condition) & (GroupName %in% UNIT$GroupName)
+)
+codes <- c(
+  "Data", "Technical.Constraints", "Performance.Parameters",
+  "Client.and.Consultant.Requests", "Design.Reasoning", "Collaboration"
+)
+
 context_model <- tma::contexts(
   RS.data,
-  units_by = make.names(units_by),
+  units_by  = make.names(units_by),
   hoo_rules = hoo_rules
 )
 
 multidim_arr <- tma::context_tensor(
-  RS.data, 
-  sender_cols = NULL,
+  RS.data,
+  sender_cols   = NULL,
   receiver_cols = NULL,
   default_window = 8,
   default_weight = 1
 )
 
 result_ena <- tma::accumulate(
-  tensor = multidim_arr, 
-  codes = codes,
+  tensor        = multidim_arr,
+  codes         = codes,
   context_model = context_model,
-  ordered = FALSE
+  ordered       = FALSE
 )
 
 result_ona <- tma::accumulate(
-  tensor = multidim_arr, 
-  codes = codes,
+  tensor        = multidim_arr,
+  codes         = codes,
   context_model = context_model,
-  ordered = TRUE
+  ordered       = TRUE
 )
 
 
-# ── Helper functions ───────────────────────────────────────────────────────────
+# ── Build model data ───────────────────────────────────────────────────────────
 
-# Convert a data.frame to a QEFrame: { data: [...rows...], types: {...} }
-qe_frame <- function(df) {
-  df <- as.data.frame(df)
-  types <- vapply(df, function(col) {
-    if (is.character(col) || is.factor(col)) "character"
-    else if (is.logical(col))                "logical"
-    else if (is.integer(col))                "integer"
-    else                                     "numeric"
-  }, character(1L))
-  rows <- lapply(seq_len(nrow(df)), function(i) {
-    r <- as.list(df[i, , drop = FALSE])
-    lapply(r, function(v) if (is.factor(v)) as.character(v) else v)
-  })
-  list(data = rows, types = as.list(types))
-}
-
-# 95% CI group summaries — mean ± t(df=n-1, 0.975) * SE on each axis
-group_summary <- function(pts, x_col, y_col, group_col) {
-  groups <- sort(unique(pts[[group_col]]))
-  do.call(rbind, lapply(groups, function(g) {
-    sub  <- pts[pts[[group_col]] == g, ]
-    n    <- nrow(sub)
-    t_v  <- qt(0.975, df = max(1L, n - 1L))
-    x    <- sub[[x_col]];  y <- sub[[y_col]]
-    mx   <- mean(x, na.rm = TRUE);  my   <- mean(y, na.rm = TRUE)
-    se_x <- sd(x,  na.rm = TRUE) / sqrt(n)
-    se_y <- sd(y,  na.rm = TRUE) / sqrt(n)
-    data.frame(
-      group  = g, x = mx, y = my,
-      x.low  = mx - t_v * se_x, x.high = mx + t_v * se_x,
-      y.low  = my - t_v * se_y, y.high = my + t_v * se_y,
-      stringsAsFactors = FALSE
-    )
-  }))
-}
-
-# Names of the first two numeric columns (the rotated dimension axes)
-find_dims <- function(df) {
-  nm <- names(df)[vapply(df, is.numeric, logical(1L))]
-  if (length(nm) < 2L) stop("Expected at least two numeric dimension columns.")
-  nm[1:2]
-}
-
-# Extract nodes / points / edges / groups frames from an ena.set or ona.set
-extract_frames <- function(set, directed = FALSE) {
-
-  # Nodes: code positions in rotated space
-  nodes_raw <- as.data.frame(set$rotation$nodes)
-  dims      <- find_dims(nodes_raw)          # e.g. c("SVD1", "SVD2")
-  nodes_df  <- nodes_raw[, c("code", dims)]
-  names(nodes_df)[2:3] <- c("x", "y")
-
-  # Points: unit positions in rotated space
-  pts_raw   <- as.data.frame(set$points)
-  points_df <- pts_raw[, c("ENA_UNIT", "Condition", dims)]
-  names(points_df)[3:4] <- c("x", "y")
-
-  # Edges: normalized line weights, one row per unit.
-  # line.weights contains only the weight columns; join with meta.data for IDs.
-  meta_df   <- as.data.frame(set$meta.data)[, c("ENA_UNIT", "Condition")]
-  edges_raw <- as.data.frame(set$line.weights)
-  edges_df  <- cbind(meta_df, edges_raw)
-  # qeviz's edge parser expects "." separator (e.g. "Data.Collaboration")
-  names(edges_df) <- gsub(" & ", ".", names(edges_df), fixed = TRUE)
-
-  # Groups: pre-computed means + 95% CI bounds
-  groups_df <- group_summary(points_df, "x", "y", "Condition")
-
-  list(
-    directed    = directed,
-    updated     = as.numeric(Sys.time()) * 1000L,
-    id_col      = "ENA_UNIT",
-    node_id_col = "code",
-    x_col       = "x",
-    y_col       = "y",
-    group_col   = "Condition",
-    nodes       = qe_frame(nodes_df),
-    edges       = qe_frame(edges_df),
-    points      = qe_frame(points_df),
-    groups      = qe_frame(groups_df)
-  )
-}
-
-
-# ── Build ENA model data ───────────────────────────────────────────────────────
-ena_set <- rENA::model(result_ena)
-ena_model <- extract_frames(ena_set, directed = FALSE)
-
-# ── ONA model (requires `ona` package) ─────────────────────────────────────────
-ona_set <- rENA::model(result_ona, directed = TRUE)
-ona_model <- extract_frames(ona_set, directed = TRUE)
+ena_set   <- rENA::model(result_ena)
+ona_set   <- rENA::model(result_ona, directed = TRUE)
+ena_model <- qe_extract(ena_set, directed = FALSE)
+ona_model <- qe_extract(ona_set, directed = TRUE)
 
 
 # ── Inline the qeviz bundle ────────────────────────────────────────────────────
-# Look for the built UMD bundle next to the project root.
-# Run `npm run build` from the project root before generating HTML.
 
 bundle_js <- local({
-  candidates <- c("dist/qeviz.umd.js", "../dist/qeviz.umd.js")
-  for (p in candidates) {
+  # Prefer the copy embedded in the installed/loaded package
+  pkg_path <- system.file("qeviz.umd.js", package = "qeviz")
+  if (nzchar(pkg_path) && file.exists(pkg_path)) {
+    message("Using bundle: ", normalizePath(pkg_path))
+    return(paste(readLines(pkg_path, warn = FALSE), collapse = "\n"))
+  }
+  # Fall back to the dist/ build in the project root
+  for (p in c("dist/qeviz.umd.js", "../dist/qeviz.umd.js")) {
     if (file.exists(p)) {
       message("Using bundle: ", normalizePath(p))
       return(paste(readLines(p, warn = FALSE), collapse = "\n"))
@@ -176,10 +95,8 @@ bundle_js <- local({
 
 # ── Generate HTML ──────────────────────────────────────────────────────────────
 
-ena_json <- toJSON(ena_model, auto_unbox = TRUE, digits = 6, null = "null")
-ona_json <- "null"
-if (!is.null(ona_model)) 
-  ona_json <- jsonlite::toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
+ena_json <- jsonlite::toJSON(ena_model, auto_unbox = TRUE, digits = 6, null = "null")
+ona_json <- jsonlite::toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
 
 group_names   <- sort(unique(as.data.frame(ena_set$points)$Condition))
 group_options <- paste(
@@ -217,7 +134,7 @@ html <- paste0(
 <h1>qeviz — RS.data (rENA)</h1>
 <p class="sub">
   Standard ENA (undirected) and ONA (directed) models fitted from
-  <code>RS.data</code> using the rENA&nbsp;/&nbsp;ona R&nbsp;packages.<br>
+  <code>RS.data</code> using the rENA&nbsp;/&nbsp;tma R&nbsp;packages.<br>
   Codes: ', paste(codes, collapse = ", "), '.
   Groups: ', paste(group_names, collapse = ", "), '.
 </p>
@@ -288,7 +205,7 @@ const graphEna = document.getElementById("graph-ena");
 const graphOna = document.getElementById("graph-ona");
 
 visEna.setModelData(enaModel);
-if (onaModel) visOna.setModelData(onaModel);
+visOna.setModelData(onaModel);
 
 document.getElementById("sel-mode").addEventListener("change", e => {
   const val = e.target.value;

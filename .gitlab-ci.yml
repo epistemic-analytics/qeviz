@@ -1,0 +1,51 @@
+# .gitlab-ci.yml
+#
+# CI pipeline for qeviz.
+#
+# JavaScript / TypeScript build runs on every push to any branch.
+# The cranqe deployment is triggered only when R package sources change on main.
+
+include:
+  - project: 'epistemic-analytics/qe-packages/cranqe'
+    ref: main
+    file: '/ci-templates/trigger-cranqe.yml'
+
+# ── JS/TS build ────────────────────────────────────────────────────────────────
+
+build-js:
+  stage: build
+  image: node:20-alpine
+  rules:
+    - changes:
+        - src/**/*
+        - package.json
+        - package-lock.json
+        - vite.config.js
+        - tsconfig.json
+  script:
+    - npm ci
+    - npm run build
+    # Keep the R package bundle in sync with the JS build
+    - cp dist/qeviz.umd.js R/inst/qeviz.umd.js
+  artifacts:
+    paths:
+      - dist/
+      - R/inst/qeviz.umd.js
+    expire_in: 1 week
+
+# ── R package deployment (via cranqe) ─────────────────────────────────────────
+# The trigger-cranqe.yml template expects the following variables to be set
+# either here or in the project's CI/CD settings:
+#   CRANQE_PACKAGE_NAME  — name of the package in cranqe's packages.yaml
+#   CRANQE_SOURCE_DIR    — subdirectory containing the R package (default: "R")
+#
+# The template job is only triggered on main when R/ sources change.
+
+trigger-cranqe:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - R/**/*
+  variables:
+    CRANQE_PACKAGE_NAME: qeviz
+    CRANQE_SOURCE_DIR: R
