@@ -80,6 +80,7 @@ const
       "Line": QELine,
       "Edge": QELine,
       "TaperedEdge": QELine,
+      "TaperedWeightedMidpointEdge": QELine,
       "NodeEdge": QELine,
     }
 ;

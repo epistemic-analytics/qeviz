@@ -3,7 +3,7 @@ import { DrawableElement } from "./DrawableElement";
 import { QEArray, QEElement, QELayer } from "./QELayer";
 import QEVisualElement from "./QEVisual";
 import { DataFrameRow } from "../types/DataFrame";
-import { NodeEdge, TaperedEdge } from "../objects/Edges";
+import { NodeEdge, TaperedWeightedMidpointEdge } from "../objects/Edges";
 import { Label, Line, Point } from "../objects/PlottedObject";
 import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
@@ -742,6 +742,17 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           });
 
           // ── Step 8: Create edge objects ───────────────────────────────────────
+          // For directed models, TaperedWeightedMidpointEdge needs the combined
+          // weight of both directions (A→B + B→A) so the apex can be positioned
+          // proportionally along the edge.  Build a lookup keyed by "A.B".
+          const totalWeightByPair: Record<string, number> = {};
+          if (isDirected) {
+            drawEdges.forEach(({ pair, weight }) => {
+              const key = `${pair[0]}.${pair[1]}`;
+              totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
+            });
+          }
+
           const extentForRadius = (this.__data__ as any).extremes?.x_max ?? 1;
           drawEdges.forEach(({ col, pair, weight, color }) => {
             const fromNode = nodeLayer.__data__.objects.get(pair[0]);
@@ -761,7 +772,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const toPt   = new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x,   toNode.y],   meta: {} });
             // Pick the edge class by topology:
             //   • self-connection (A→A) → NodeEdge (filled circle at the node)
-            //   • directed (A→B)        → TaperedEdge (triangle, apex at "from")
+            //   • directed (A→B)        → TaperedWeightedMidpointEdge (triangle
+            //                             whose apex is placed proportionally
+            //                             to weight(A→B) / (weight(A→B) + weight(B→A)))
             //   • undirected            → Line (straight stroke)
             let edgeLine: Line;
             if (isSelf) {
@@ -776,7 +789,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               const ratio = weight / Math.max(maxSelfWeight, 1e-9);
               (edgeLine as any).weight = 2 * nodeR * 0.8 * ratio;
             } else if (isDirected) {
-              edgeLine = new TaperedEdge({}, fromPt as any, toPt as any);
+              const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
+              const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
+              const totalweight = fwd + bwd;
+              edgeLine = new TaperedWeightedMidpointEdge(
+                { weight, totalweight },
+                fromPt as any,
+                toPt   as any
+              );
             } else {
               edgeLine = new Line({}, fromPt, toPt);
             }
