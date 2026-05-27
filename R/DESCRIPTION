@@ -1,0 +1,24 @@
+Package: qeviz
+Title: Interactive ENA / ONA Network Visualizations
+Version: 0.1.0
+Authors@R: person("Cody", "Marquart", role = c("aut", "cre"),
+                  email = "cody.marquart@wisc.edu")
+Description: Generates interactive Epistemic Network Analysis (ENA) and
+    Ordered Network Analysis (ONA) visualizations using the qeviz web
+    component library. Provides helpers to convert rENA / tma model
+    objects into the qeviz ModelData format and render them as
+    self-contained HTML files or inline plots.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Imports:
+    jsonlite
+Suggests:
+    rENA,
+    tma,
+    rstudioapi,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
