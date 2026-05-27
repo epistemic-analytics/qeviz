@@ -2,13 +2,20 @@
 #
 # CI pipeline for qeviz.
 #
-# JavaScript / TypeScript build runs on every push to any branch.
-# The cranqe deployment is triggered only when R package sources change on main.
+# - build-js     : rebuilds the JS/TS bundle on src/ changes (all branches)
+# - test-py      : installs and tests the Python package on py/ changes
+# - trigger-cranqe    : deploys the R package via cranqe on main
+# - trigger-cranqe-py : deploys the Python package via cranqe on main
 
 include:
   - project: 'epistemic-analytics/qe-packages/cranqe'
     ref: main
     file: '/ci-templates/trigger-cranqe.yml'
+
+stages:
+  - build
+  - test
+  - deploy
 
 # ── JS/TS build ────────────────────────────────────────────────────────────────
 
@@ -25,23 +32,35 @@ build-js:
   script:
     - npm ci
     - npm run build
-    # Keep the R package bundle in sync with the JS build
+    # Keep both language package bundles in sync with the JS build
     - cp dist/qeviz.umd.js R/inst/qeviz.umd.js
+    - cp dist/qeviz.umd.js py/qeviz/qeviz.umd.js
   artifacts:
     paths:
       - dist/
       - R/inst/qeviz.umd.js
+      - py/qeviz/qeviz.umd.js
     expire_in: 1 week
 
+# ── Python package tests ───────────────────────────────────────────────────────
+
+test-py:
+  stage: test
+  image: python:3.11-slim
+  rules:
+    - changes:
+        - py/**/*
+  script:
+    - pip install --quiet "py/[dev]"
+    - python -m pytest py/tests/ -v
+
 # ── R package deployment (via cranqe) ─────────────────────────────────────────
-# The trigger-cranqe.yml template expects the following variables to be set
-# either here or in the project's CI/CD settings:
+# The trigger-cranqe.yml template expects:
 #   CRANQE_PACKAGE_NAME  — name of the package in cranqe's packages.yaml
-#   CRANQE_SOURCE_DIR    — subdirectory containing the R package (default: "R")
-#
-# The template job is only triggered on main when R/ sources change.
+#   CRANQE_SOURCE_DIR    — subdirectory containing the package source
 
 trigger-cranqe:
+  stage: deploy
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -49,3 +68,15 @@ trigger-cranqe:
   variables:
     CRANQE_PACKAGE_NAME: qeviz
     CRANQE_SOURCE_DIR: R
+
+# ── Python package deployment (via cranqe) ────────────────────────────────────
+
+trigger-cranqe-py:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - py/**/*
+  variables:
+    CRANQE_PACKAGE_NAME: qeviz
+    CRANQE_SOURCE_DIR: py
