@@ -523,8 +523,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 if (!unitId) return;
                 const pt = pointsLayer.__data__.objects.get(unitId) as Point | undefined;
                 if (!pt) return;
-                // Trim "::GroupName" suffix for brevity
-                const displayText = unitId.includes('::') ? unitId.split('::')[0] : unitId;
+                // Use the raw unit ID as the label text.
+                // TODO: support a label-format attribute or callback so callers
+                // can supply a custom display string (e.g. strip a prefix,
+                // extract a sub-field from a compound ID, etc.)
+                const displayText = unitId;
                 let lbl = this._pointLabels.get(unitId);
                 if (!lbl) {
                   lbl = new QELabel(displayText, pt, labelSvg, this, labelPoints);
