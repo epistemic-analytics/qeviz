@@ -2814,7 +2814,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   if (!unitId) return;
                   const pt = pointsLayer.__data__.objects.get(unitId);
                   if (!pt) return;
-                  const displayText = unitId.includes("::") ? unitId.split("::")[0] : unitId;
+                  const displayText = unitId;
                   let lbl = this._pointLabels.get(unitId);
                   if (!lbl) {
                     lbl = new QELabel(displayText, pt, labelSvg, this, labelPoints);
