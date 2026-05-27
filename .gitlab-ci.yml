@@ -40,6 +40,7 @@ build-js:
       - dist/
       - R/inst/qeviz.umd.js
       - py/qeviz/qeviz.umd.js
+
     expire_in: 1 week
 
 # ── Python package tests ───────────────────────────────────────────────────────

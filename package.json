@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "postbuild": "cp dist/qeviz.umd.js py/qeviz.umd.js && cp dist/qeviz.umd.js py/qeviz/qeviz.umd.js",
+    "postbuild": "cp dist/qeviz.umd.js py/qeviz/qeviz.umd.js",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit"
   },
