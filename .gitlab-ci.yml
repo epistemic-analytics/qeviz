@@ -40,7 +40,6 @@ build-js:
       - dist/
       - R/inst/qeviz.umd.js
       - py/qeviz/qeviz.umd.js
-
     expire_in: 1 week
 
 # ── Python package tests ───────────────────────────────────────────────────────
@@ -73,7 +72,7 @@ trigger-cranqe:
 # ── Python package deployment (via cranqe) ────────────────────────────────────
 
 trigger-cranqe-py:
-  stage: deploy
+  extends: trigger-cranqe
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
