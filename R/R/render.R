@@ -63,6 +63,44 @@ document.getElementById("vis").setModelData(model);
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+#' Return a qeviz plot as an embeddable HTML fragment
+#'
+#' Serialises `model` to JSON and returns a `<div>` containing the inlined
+#' qeviz bundle and a `<qe-visual>` / `<qe-graph>` pair.  Unlike [qe_html()],
+#' the result has no `<html>` or `<head>` wrapper, so it can be dropped
+#' directly into a larger HTML document — for example inside an R Markdown or
+#' Quarto document via `htmltools::HTML(qe_fragment(model))`.
+#'
+#' Each call generates a unique element ID so multiple fragments on the same
+#' page do not conflict.
+#'
+#' @param model       A `ModelData` list from [qe_model_data()] or [qe_extract()].
+#' @param height      CSS height string for the containing `<div>`. Default `"480px"`.
+#' @param graph_opts  Named list of `<qe-graph>` attribute overrides (see [qe_html()]).
+#'
+#' @return A character string of class `"html"` (compatible with
+#'   `htmltools::HTML()`) containing the fragment.
+#'
+#' @examples
+#' \dontrun{
+#' # Inside an R Markdown chunk with results='asis':
+#' htmltools::HTML(qe_fragment(model))
+#' }
+#'
+#' @export
+qe_fragment <- function(model, height = "480px", graph_opts = list()) {
+  json    <- jsonlite::toJSON(model, auto_unbox = TRUE, digits = 6, null = "null")
+  bundle  <- .bundle_js()
+  g_attrs <- .graph_attrs(graph_opts)
+  uid     <- paste0("qeviz", as.integer(proc.time()[["elapsed"]] * 1e4) %% 1e9L)
+
+  html <- sprintf(
+    '<div style="width:100%%;height:%s">\n<script>%s</script>\n<qe-visual id="%s">\n  <qe-graph %s></qe-graph>\n</qe-visual>\n<script>\ndocument.getElementById("%s").setModelData(%s);\n</script>\n</div>',
+    height, bundle, uid, g_attrs, uid, json
+  )
+  structure(html, class = c("html", "character"))
+}
+
 #' Return a qeviz plot as an HTML string
 #'
 #' Serialises `model` to JSON and wraps it in a self-contained HTML document

@@ -1,0 +1,136 @@
+---
+title: "ENA and ONA with RS.data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ENA and ONA with RS.data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  # Skip evaluation if tma / rENA are not available (e.g. CRAN check machines)
+  eval = requireNamespace("tma",  quietly = TRUE) &&
+         requireNamespace("rENA", quietly = TRUE)
+)
+```
+
+This article walks through fitting a standard **ENA** (undirected) model and
+an **ONA** (directed) model from the built-in `RS.data` dataset using the
+`tma` and `rENA` packages, then rendering both as live interactive plots with
+`qeviz`.
+
+## Data and model setup
+
+```{r packages, message=FALSE}
+library(qeviz)
+library(tma)
+library(rENA)
+
+data(RS.data)
+```
+
+Define the units, hand-over-hand (HOO) rules, and code set:
+
+```{r model-spec}
+units_by  <- c("Condition", "UserName")
+codes     <- c(
+  "Data", "Technical.Constraints", "Performance.Parameters",
+  "Client.and.Consultant.Requests", "Design.Reasoning", "Collaboration"
+)
+
+hoo_rules <- tma::conversation_rules(
+  (Condition %in% UNIT$Condition) & (GroupName %in% UNIT$GroupName)
+)
+```
+
+Accumulate co-occurrence tensors and fit both models:
+
+```{r accumulate, message=FALSE}
+context_model <- tma::contexts(
+  RS.data,
+  units_by  = make.names(units_by),
+  hoo_rules = hoo_rules
+)
+
+multidim_arr <- tma::context_tensor(
+  RS.data,
+  sender_cols    = NULL,
+  receiver_cols  = NULL,
+  default_window = 8,
+  default_weight = 1
+)
+
+result_ena <- tma::accumulate(
+  tensor        = multidim_arr,
+  codes         = codes,
+  context_model = context_model,
+  ordered       = FALSE
+)
+
+result_ona <- tma::accumulate(
+  tensor        = multidim_arr,
+  codes         = codes,
+  context_model = context_model,
+  ordered       = TRUE
+)
+
+ena_set <- rENA::model(result_ena)
+ona_set <- rENA::model(result_ona, directed = TRUE)
+```
+
+## Extract ModelData for qeviz
+
+`qe_extract()` reads the rotation nodes, unit points, edge weights, and group
+metadata from the set object and normalises them into the qeviz `ModelData`
+format:
+
+```{r extract}
+ena_model <- qe_extract(ena_set, directed = FALSE)
+ona_model <- qe_extract(ona_set, directed = TRUE)
+```
+
+## Standard ENA (undirected)
+
+Edge thickness reflects co-occurrence weight; all edges are symmetric.
+
+```{r ena-plot, results='asis', echo=FALSE}
+htmltools::HTML(qe_fragment(ena_model))
+```
+
+## ONA (directed)
+
+Directed edges are rendered as tapered arrows whose apex points toward the
+stronger directional contributor; thickness and opacity both scale with weight.
+
+```{r ona-plot, results='asis', echo=FALSE}
+htmltools::HTML(qe_fragment(ona_model))
+```
+
+## Exporting a standalone file
+
+To share or archive a plot, write it to a self-contained HTML file — no
+server, no internet connection required:
+
+```{r export, eval=FALSE}
+qe_export_html(ena_model, "ena_plot.html")
+qe_export_html(ona_model, "ona_plot.html", title = "ONA — RS.data")
+```
+
+## Customising the graph
+
+`graph_opts` accepts any `<qe-graph>` attribute:
+
+```{r opts, eval=FALSE}
+qe_fragment(
+  ena_model,
+  height     = "560px",
+  graph_opts = list(
+    "label-nodes"  = "auto",   # show node labels on hover only
+    "label-points" = "on",     # always show unit labels
+    height         = "540"
+  )
+)
+```

@@ -2,6 +2,7 @@
 
 export(qe_export_html)
 export(qe_extract)
+export(qe_fragment)
 export(qe_html)
 export(qe_model_data)
 export(qe_plot)
