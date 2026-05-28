@@ -12,6 +12,7 @@ import os
 import tempfile
 
 import pandas as pd
+import pytest
 
 import qeviz
 
@@ -161,3 +162,116 @@ def test_json_serializable():
     )
     serialized = json.dumps(m)
     assert len(serialized) > 100
+
+
+# ── from_pyena ────────────────────────────────────────────────────────────────
+# Uses a duck-typed mock so pyENA is not a test dependency.
+
+import numpy as np
+
+def _make_mock_pyena(n_units=8, n_codes=4, group_col="Condition"):
+    """Build a minimal object that quacks like a fitted pyena.ENA."""
+    rng = np.random.default_rng(42)
+    code_names = [f"Code{i}" for i in range(n_codes)]
+    conn_names = [
+        f"{code_names[i]}&{code_names[j]}"
+        for j in range(1, n_codes)
+        for i in range(j)
+    ]
+    n_conn  = len(conn_names)
+    units   = [f"G{g}::U{u}" for g in range(2) for u in range(n_units // 2)]
+    groups  = ["G0"] * (n_units // 2) + ["G1"] * (n_units // 2)
+
+    meta = pd.DataFrame({group_col: groups}, index=units)
+
+    class MockAccum:
+        pass
+
+    accum = MockAccum()
+    accum.meta             = meta
+    accum.units_           = units
+    accum.codes_           = code_names
+    accum.connection_names_= conn_names
+    accum.networks_        = rng.random((n_units, n_conn))
+
+    class MockENA:
+        pass
+
+    m = MockENA()
+    m.units_            = units
+    m.codes_            = code_names
+    m.connection_names_ = conn_names
+    m.networks_         = accum.networks_
+    m.normed_networks_  = rng.random((n_units, n_conn))
+    m.positions_        = rng.uniform(-1, 1, (n_codes, 2))
+    m.points_           = rng.uniform(-1, 1, (n_units, 2))
+    m.accum_            = accum
+    return m
+
+
+def test_from_pyena_basic_structure():
+    mock = _make_mock_pyena()
+    qm = qeviz.from_pyena(mock, group_col="Condition")
+    assert "nodes"   in qm
+    assert "edges"   in qm
+    assert "points"  in qm
+    assert "groups"  in qm
+    assert qm["directed"] is False
+
+
+def test_from_pyena_node_count():
+    mock = _make_mock_pyena(n_codes=4)
+    qm = qeviz.from_pyena(mock)
+    assert len(qm["nodes"]["data"]) == 4
+
+
+def test_from_pyena_unit_count():
+    mock = _make_mock_pyena(n_units=8)
+    qm = qeviz.from_pyena(mock, group_col="Condition")
+    assert len(qm["points"]["data"]) == 8
+
+
+def test_from_pyena_separator_normalised():
+    """Connection names must use '.' not '&'."""
+    mock = _make_mock_pyena()
+    qm = qeviz.from_pyena(mock)
+    edge_cols = list(qm["edges"]["types"].keys())
+    non_id_cols = [c for c in edge_cols if c != "QEUNIT"]
+    assert all("." in c for c in non_id_cols), "Expected '.' separator in edge columns"
+    assert not any("&" in c for c in non_id_cols), "Unexpected '&' in edge columns"
+
+
+def test_from_pyena_group_col_in_points():
+    mock = _make_mock_pyena()
+    qm = qeviz.from_pyena(mock, group_col="Condition")
+    assert qm["group_col"] == "Condition"
+    assert "Condition" in qm["points"]["types"]
+
+
+def test_from_pyena_two_groups():
+    mock = _make_mock_pyena()
+    qm = qeviz.from_pyena(mock, group_col="Condition")
+    group_vals = {row["Condition"] for row in qm["groups"]["data"]}
+    assert group_vals == {"G0", "G1"}
+
+
+def test_from_pyena_directed_flag():
+    mock = _make_mock_pyena()
+    assert qeviz.from_pyena(mock, directed=True)["directed"]  is True
+    assert qeviz.from_pyena(mock, directed=False)["directed"] is False
+
+
+def test_from_pyena_missing_group_col_raises():
+    mock = _make_mock_pyena()
+    with pytest.raises(ValueError, match="not found in model metadata"):
+        qeviz.from_pyena(mock, group_col="NonExistentCol")
+
+
+def test_from_pyena_no_group():
+    """from_pyena without group_col should still produce nodes + edges."""
+    mock = _make_mock_pyena()
+    qm = qeviz.from_pyena(mock)
+    assert "nodes"  in qm
+    assert "edges"  in qm
+    assert "points" in qm
+    assert "groups" not in qm

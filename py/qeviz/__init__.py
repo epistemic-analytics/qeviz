@@ -17,8 +17,23 @@ Quick start
     qeviz.plot(model)           # display in Jupyter
     qeviz.export_html(model, "output.html")   # write standalone HTML
 
-ENA workflow
-------------
+pyENA workflow
+--------------
+    import pyena
+    import qeviz
+
+    # 1. Create a composite unit key (mirrors R's units_by = c("Condition","UserName"))
+    df["unit_key"] = df["Condition"] + "::" + df["UserName"]
+
+    # 2. Fit the ENA model
+    model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES)
+
+    # 3. Convert to qeviz and visualise
+    qe_model = qeviz.from_pyena(model, group_col="Condition")
+    qeviz.plot(qe_model, options={"group": "FirstGame", "also": "SecondGame"})
+
+Manual workflow
+---------------
     # After running your Python ENA accumulation / rotation step you'll have:
     #   nodes_df  — one row per code, columns: code, SVD1, SVD2
     #   edges_df  — one row per unit, columns: QEUNIT, group, <code.code pairs>
@@ -37,6 +52,7 @@ Dependencies
     Required : pandas
     Optional : scipy  (for exact t-distribution CI; falls back to z=1.96 otherwise)
                IPython (for inline Jupyter display)
+               pyENA  (for from_pyena())
 """
 
 import json
@@ -108,7 +124,7 @@ def _group_summaries(
     Compute per-group mean positions and optional CI bounds.
 
     Returns a DataFrame with columns:
-        group, {dim_cols[0]}, {dim_cols[1]},
+        {group_col}, {dim_cols[0]}, {dim_cols[1]},
         and (if include_ci) {dim}.low, {dim}.high for each dim.
     """
     rows = []
@@ -116,7 +132,7 @@ def _group_summaries(
         sub = points_df[points_df[group_col] == g][dim_cols].apply(pd.to_numeric, errors="coerce")
         n = len(sub)
         means = sub.mean()
-        row = {"group": str(g)}
+        row = {group_col: str(g)}
         for d in dim_cols:
             row[d] = float(means[d])
         if include_ci and n >= 2:
@@ -358,6 +374,97 @@ def export_html(
     with open(abs_path, "w", encoding="utf-8") as fh:
         fh.write(html)
     return abs_path
+
+
+# ── pyENA integration ─────────────────────────────────────────────────────────
+
+def from_pyena(
+    model,
+    group_col: Optional[str] = None,
+    directed: bool = False,
+    id_col: str = "QEUNIT",
+) -> dict:
+    """
+    Convert a fitted pyENA model to a qeviz ModelData dict.
+
+    This is the Python equivalent of R's ``qe_extract()`` — it reads nodes,
+    unit positions, edge weights, and group metadata directly from a fitted
+    ``pyena.ENA`` instance so you do not need to build DataFrames by hand.
+
+    Parameters
+    ----------
+    model     A fitted ``pyena.ENA`` instance (after calling ``.fit()``).
+    group_col Column name in ``model.accum_.meta`` to use as the grouping
+              variable.  Must be a non-code column that was present in the
+              original DataFrame (e.g. ``"Condition"``).
+    directed  ``True`` for ONA / directed networks.  Default ``False``.
+    id_col    Name to give the unit-identifier column in the output frames.
+              Default ``"QEUNIT"``.
+
+    Returns
+    -------
+    dict  A ModelData dict ready to pass to :func:`plot` or :func:`export_html`.
+
+    Examples
+    --------
+    Basic ENA with group comparison::
+
+        model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES)
+        qe_model = qeviz.from_pyena(model, group_col="Condition")
+        qeviz.plot(qe_model, options={"group": "FirstGame", "also": "SecondGame"})
+
+    Mean-rotation ENA::
+
+        from pyena.rotations import mean_rotation
+        g1 = df_units["Condition"] == "FirstGame"
+        g2 = df_units["Condition"] == "SecondGame"
+        model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES,
+                                rotation=mean_rotation(g1, g2))
+        qe_model = qeviz.from_pyena(model, group_col="Condition")
+    """
+    # ── Nodes: one row per code with (x, y) position ─────────────────────────
+    nodes_df = pd.DataFrame({
+        "code": model.codes_,
+        "x":    model.positions_[:, 0],
+        "y":    model.positions_[:, 1],
+    })
+
+    # ── Edges: one row per unit, normalised connection weights ────────────────
+    # pyENA uses "&" separator ("Data&Design"); qeviz expects "." ("Data.Design")
+    conn_cols = [c.replace("&", ".") for c in model.connection_names_]
+    edges_df = pd.DataFrame(model.normed_networks_, columns=conn_cols)
+    edges_df.insert(0, id_col, model.units_)
+
+    # ── Points: one row per unit with projected (x, y) position ──────────────
+    points_df = pd.DataFrame({
+        id_col: model.units_,
+        "x":    model.points_[:, 0],
+        "y":    model.points_[:, 1],
+    })
+
+    # ── Attach group from unit-level metadata ─────────────────────────────────
+    if group_col is not None:
+        meta = model.accum_.meta
+        if group_col not in meta.columns:
+            raise ValueError(
+                f"group_col {group_col!r} not found in model metadata. "
+                f"Available columns: {list(meta.columns)}"
+            )
+        group_vals = meta.reindex(model.units_)[group_col].tolist()
+        points_df[group_col] = group_vals
+        edges_df[group_col]  = group_vals
+
+    return model_data(
+        nodes       = nodes_df,
+        edges       = edges_df,
+        points      = points_df,
+        id_col      = id_col,
+        node_id_col = "code",
+        x_col       = "x",
+        y_col       = "y",
+        group_col   = group_col,
+        directed    = directed,
+    )
 
 
 # ── ENA-namespaced convenience wrappers ───────────────────────────────────────
