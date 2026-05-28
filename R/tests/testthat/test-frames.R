@@ -53,7 +53,21 @@ test_that("find_dims errors when fewer than two numeric columns", {
 test_that("group_summary returns one row per group", {
   gs <- qeviz:::group_summary(points_df, "x", "y", "Condition")
   expect_equal(nrow(gs), 2L)
-  expect_setequal(gs$group, c("OA", "OB"))
+  expect_setequal(gs$Condition, c("OA", "OB"))
+})
+
+test_that("group_summary output column is named after group_col", {
+  gs <- qeviz:::group_summary(points_df, "x", "y", "Condition")
+  expect_true("Condition" %in% names(gs))
+  expect_false("group" %in% names(gs))
+
+  gs2 <- qeviz:::group_summary(points_df, "x", "y", "Condition")
+  names(points_df)[names(points_df) == "Condition"] <- "grp"
+  points_df2 <- points_df
+  names(points_df2)[names(points_df2) == "Condition"] <- "grp"
+  gs2 <- qeviz:::group_summary(points_df2, "x", "y", "grp")
+  expect_true("grp" %in% names(gs2))
+  expect_false("group" %in% names(gs2))
 })
 
 test_that("group_summary mean is within CI bounds", {
@@ -73,5 +87,5 @@ test_that("group_summary handles n = 1 without error", {
 
 test_that("group_summary groups are sorted", {
   gs <- qeviz:::group_summary(points_df, "x", "y", "Condition")
-  expect_equal(gs$group, sort(unique(points_df$Condition)))
+  expect_equal(gs$Condition, sort(unique(points_df$Condition)))
 })

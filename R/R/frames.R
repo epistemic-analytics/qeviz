@@ -68,11 +68,13 @@ group_summary <- function(pts, x_col, y_col, group_col) {
     mx   <- mean(x, na.rm = TRUE);  my <- mean(y, na.rm = TRUE)
     se_x <- sd(x,  na.rm = TRUE) / sqrt(n)
     se_y <- sd(y,  na.rm = TRUE) / sqrt(n)
-    data.frame(
-      group  = g, x = mx, y = my,
+    row <- data.frame(
+      x      = mx,            y      = my,
       x.low  = mx - t_v * se_x, x.high = mx + t_v * se_x,
       y.low  = my - t_v * se_y, y.high = my + t_v * se_y,
       stringsAsFactors = FALSE
     )
+    row[[group_col]] <- g
+    row[, c(group_col, "x", "y", "x.low", "x.high", "y.low", "y.high")]
   }))
 }

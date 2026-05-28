@@ -95,9 +95,18 @@ ona_model <- qe_extract(ona_set, directed = TRUE)
 ## Standard ENA (undirected)
 
 Edge thickness reflects co-occurrence weight; all edges are symmetric.
+Both groups are displayed in overlay mode so their means and point clouds
+can be compared directly.
 
 ```{r ena-plot, results='asis', echo=FALSE}
-htmltools::HTML(qe_fragment(ena_model))
+groups <- sapply(ena_model$groups$data, `[[`, ena_model$group_col)
+htmltools::HTML(qe_fragment(
+  ena_model,
+  graph_opts = list(
+    group = groups[1],
+    also  = groups[2]
+  )
+))
 ```
 
 ## ONA (directed)
@@ -106,7 +115,14 @@ Directed edges are rendered as tapered arrows whose apex points toward the
 stronger directional contributor; thickness and opacity both scale with weight.
 
 ```{r ona-plot, results='asis', echo=FALSE}
-htmltools::HTML(qe_fragment(ona_model))
+groups <- sapply(ona_model$groups$data, `[[`, ona_model$group_col)
+htmltools::HTML(qe_fragment(
+  ona_model,
+  graph_opts = list(
+    group = groups[1],
+    also  = groups[2]
+  )
+))
 ```
 
 ## Exporting a standalone file
