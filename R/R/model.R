@@ -34,19 +34,19 @@
 qe_model_data <- function(
     nodes,
     edges,
-    points,
-    groups    = NULL,
-    directed  = FALSE,
+    points      = NULL,
+    groups      = NULL,
+    directed    = FALSE,
     id_col      = "ENA_UNIT",
     node_id_col = "code",
     x_col       = "x",
     y_col       = "y",
     group_col   = "Condition"
 ) {
-  if (is.null(groups)) {
+  if (!is.null(points) && is.null(groups)) {
     groups <- group_summary(as.data.frame(points), x_col, y_col, group_col)
   }
-  list(
+  result <- list(
     directed    = directed,
     updated     = as.numeric(Sys.time()) * 1000L,
     id_col      = id_col,
@@ -55,10 +55,11 @@ qe_model_data <- function(
     y_col       = y_col,
     group_col   = group_col,
     nodes       = qe_frame(nodes),
-    edges       = qe_frame(edges),
-    points      = qe_frame(points),
-    groups      = qe_frame(groups)
+    edges       = qe_frame(edges)
   )
+  if (!is.null(points)) result$points <- qe_frame(points)
+  if (!is.null(groups)) result$groups <- qe_frame(groups)
+  result
 }
 
 #' Extract a qeviz ModelData list from an rENA / tma model object
