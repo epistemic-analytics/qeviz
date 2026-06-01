@@ -7,3 +7,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# Generated demo output
+demo/*.html
+demo/panels/
+demo/test_matched_mult_files/
