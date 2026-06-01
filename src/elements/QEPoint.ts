@@ -28,10 +28,13 @@ export class QEPoint extends Drawable implements QEElement {
     return (this.__data__ as any).shape === 'rect';
   }
 
-  /** Half-side length for square shapes, equivalent to circle radius. */
+  /** Half-side length for squares / radius for circles, in SVG user units.
+   *  Factor 0.006 keeps code-node diameters in the same visual range as rENA
+   *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
+   */
   computeRadius(): number {
     const extent = this.graph.__data__.extremes.x_max;
-    return (extent > 0 ? extent : 1) * 0.015 * this.__data__.size;
+    return (extent > 0 ? extent : 1) * 0.006 * this.__data__.size;
   }
 
   create() {
@@ -41,8 +44,8 @@ export class QEPoint extends Drawable implements QEElement {
     el.setAttribute('data-point-id', this.__data__.ID);
     el.setAttribute('fill', this.__data__.color.toString());
 
+    const r = this.computeRadius();
     if (this.isSquare) {
-      const r = this.computeRadius();
       el.setAttribute('x',      (this.x - r).toString());
       el.setAttribute('y',      (this.y - r).toString());
       el.setAttribute('width',  (r * 2).toString());
@@ -50,7 +53,7 @@ export class QEPoint extends Drawable implements QEElement {
     } else {
       el.setAttribute('cx', this.x.toString());
       el.setAttribute('cy', this.y.toString());
-      el.setAttribute('r',  this.__data__.size.toString());
+      el.setAttribute('r',  r.toString());
     }
 
     this.svg_element = el;

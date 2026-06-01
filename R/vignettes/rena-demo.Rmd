@@ -9,18 +9,16 @@ vignette: >
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  collapse  = TRUE,
-  comment   = "#>",
-  # Skip evaluation if tma / rENA are not available (e.g. CRAN check machines)
+  collapse = TRUE,
+  comment  = "#>",
   eval = requireNamespace("tma",  quietly = TRUE) &&
          requireNamespace("rENA", quietly = TRUE)
 )
 ```
 
 This article walks through fitting a standard **ENA** (undirected) model and
-an **ONA** (directed) model from the built-in `RS.data` dataset using the
-`tma` and `rENA` packages, then rendering both as live interactive plots with
-`qeviz`.
+an **ONA** (directed) model from the built-in `RS.data` dataset, then
+rendering both as live interactive plots with `qeviz`.
 
 ## Data and model setup
 
@@ -32,11 +30,9 @@ library(rENA)
 data(RS.data)
 ```
 
-Define the units, hand-over-hand (HOO) rules, and code set:
-
 ```{r model-spec}
-units_by  <- c("Condition", "UserName")
-codes     <- c(
+units_by <- c("Condition", "UserName")
+codes    <- c(
   "Data", "Technical.Constraints", "Performance.Parameters",
   "Client.and.Consultant.Requests", "Design.Reasoning", "Collaboration"
 )
@@ -45,8 +41,6 @@ hoo_rules <- tma::conversation_rules(
   (Condition %in% UNIT$Condition) & (GroupName %in% UNIT$GroupName)
 )
 ```
-
-Accumulate co-occurrence tensors and fit both models:
 
 ```{r accumulate, message=FALSE}
 context_model <- tma::contexts(
@@ -81,72 +75,128 @@ ena_set <- rENA::model(result_ena)
 ona_set <- rENA::model(result_ona, directed = TRUE)
 ```
 
-## Extract ModelData for qeviz
+## Creating a plot object
 
-`qe_extract()` reads the rotation nodes, unit points, edge weights, and group
-metadata from the set object and normalises them into the qeviz `ModelData`
-format:
+`qe_plot()` wraps a set object in a `qe_plot` that can be passed through the
+chain API.  No rendering happens yet — the plot is fully lazy.
 
-```{r extract}
-ena_model <- qe_extract(ena_set, directed = FALSE)
-ona_model <- qe_extract(ona_set, directed = TRUE)
+```{r plot-objects}
+qe_ena <- qe_plot(ena_set)
+qe_ona <- qe_plot(ona_set)
+```
+
+Inspect what groups and units are available:
+
+```{r introspect}
+qe_groups(qe_ena)
+head(qe_units(qe_ena))
 ```
 
 ## Standard ENA (undirected)
 
-Edge thickness reflects co-occurrence weight; all edges are symmetric.
-Both groups are displayed in overlay mode so their means and point clouds
-can be compared directly.
+Show both group mean networks overlaid.  Each chain call returns a new
+`qe_plot` — the original is unchanged.
 
-```{r ena-plot, results='asis', echo=FALSE}
-groups <- sapply(ena_model$groups$data, `[[`, ena_model$group_col)
-htmltools::HTML(qe_fragment(
-  ena_model,
-  graph_opts = list(
-    group = groups[1],
-    also  = groups[2]
-  )
-))
+```{r ena-overlay, results='asis', echo=TRUE}
+p <- qe_ena |>
+  qe_group() |>                                  # show all group means + CI
+  qe_edges(qe_groups(qe_ena)[1],
+           also = qe_groups(qe_ena)[2])          # overlay both networks
+
+htmltools::HTML(qe_fragment(p))
+```
+
+Compare groups by subtraction — positive weights favour the first group,
+negative weights favour the second:
+
+```{r ena-subtraction, results='asis', echo=TRUE}
+p_sub <- qe_ena |>
+  qe_group() |>
+  qe_edges(qe_groups(qe_ena)[1],
+           compare = qe_groups(qe_ena)[2])
+
+htmltools::HTML(qe_fragment(p_sub))
 ```
 
 ## ONA (directed)
 
 Directed edges are rendered as tapered arrows whose apex points toward the
-stronger directional contributor; thickness and opacity both scale with weight.
+stronger directional contributor.
 
-```{r ona-plot, results='asis', echo=FALSE}
-groups <- sapply(ona_model$groups$data, `[[`, ona_model$group_col)
-htmltools::HTML(qe_fragment(
-  ona_model,
-  graph_opts = list(
-    group = groups[1],
-    also  = groups[2]
-  )
-))
+```{r ona-plot, results='asis', echo=TRUE}
+p_ona <- qe_ona |>
+  qe_group() |>
+  qe_edges(qe_groups(qe_ona)[1], also = qe_groups(qe_ona)[2])
+
+htmltools::HTML(qe_fragment(p_ona))
 ```
 
-## Exporting a standalone file
+## Individual unit networks
 
-To share or archive a plot, write it to a self-contained HTML file — no
-server, no internet connection required:
+Use `qe_units()` to list unit IDs, then pass one to `qe_edges(unit = ...)`.
+The group mean markers stay visible so the individual network can be read
+in context.
+
+```{r unit-network, results='asis', echo=TRUE}
+unit_id <- qe_units(qe_ena)[1]
+cat("Plotting unit:", unit_id, "\n")
+
+p_unit <- qe_ena |>
+  qe_group() |>             # show all group means for context
+  qe_edges(unit = unit_id)  # individual edge network
+
+htmltools::HTML(qe_fragment(p_unit))
+```
+
+## Adding unit points
+
+`qe_points()` overlays the individual unit scatter dots:
+
+```{r with-points, results='asis', echo=TRUE}
+p_pts <- qe_ena |>
+  qe_group() |>
+  qe_edges(qe_groups(qe_ena)[1]) |>
+  qe_points()
+
+htmltools::HTML(qe_fragment(p_pts))
+```
+
+## Label control
+
+`qe_labels()` controls label visibility for nodes, group means, and unit
+points independently.  Accepted values: `"on"`, `"off"`, `"click"`,
+`"auto"`.
+
+```{r labels, results='asis', echo=TRUE}
+p_labels <- qe_ena |>
+  qe_group() |>
+  qe_edges(qe_groups(qe_ena)[1]) |>
+  qe_points() |>
+  qe_labels(nodes = "auto", means = "on", points = "click")
+
+htmltools::HTML(qe_fragment(p_labels))
+```
+
+## Exporting standalone files
+
+`qe_export_html()` writes a self-contained HTML file — no server or
+internet connection required:
 
 ```{r export, eval=FALSE}
-qe_export_html(ena_model, "ena_plot.html")
-qe_export_html(ona_model, "ona_plot.html", title = "ONA — RS.data")
+qe_export_html(qe_ena |> qe_group() |> qe_edges(qe_groups(qe_ena)[1]),
+               "ena_plot.html")
+
+qe_export_html(qe_ona |> qe_group() |> qe_edges(qe_groups(qe_ona)[1]),
+               "ona_plot.html")
 ```
 
-## Customising the graph
+Branching from a common base works naturally since each chain call copies
+the plot:
 
-`graph_opts` accepts any `<qe-graph>` attribute:
+```{r branching, eval=FALSE}
+base <- qe_ena |> qe_group()
 
-```{r opts, eval=FALSE}
-qe_fragment(
-  ena_model,
-  height     = "560px",
-  graph_opts = list(
-    "label-nodes"  = "auto",   # show node labels on hover only
-    "label-points" = "on",     # always show unit labels
-    height         = "540"
-  )
-)
+qe_export_html(qe_edges(base, qe_groups(qe_ena)[1]), "group1.html")
+qe_export_html(qe_edges(base, qe_groups(qe_ena)[2]), "group2.html")
+qe_export_html(qe_edges(base, unit = qe_units(qe_ena)[1]), "unit1.html")
 ```

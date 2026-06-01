@@ -64,24 +64,30 @@ result_ona <- tma::accumulate(
 )
 
 
-# ── Build model data ───────────────────────────────────────────────────────────
+# ── Build plot objects ─────────────────────────────────────────────────────────
 
-ena_set   <- rENA::model(result_ena)
-ona_set   <- rENA::model(result_ona, directed = TRUE)
-ena_model <- qe_extract(ena_set, directed = FALSE)
-ona_model <- qe_extract(ona_set, directed = TRUE)
+ena_set <- rENA::model(result_ena)
+ona_set <- rENA::model(result_ona, directed = TRUE)
+
+qe_ena  <- qe_plot(ena_set)
+qe_ona  <- qe_plot(ona_set)
+
+group_names   <- qe_groups(qe_ena)
+group_options <- paste(
+  sprintf('      <option value="group-%s">Group — %s</option>',
+          group_names, group_names),
+  collapse = "\n"
+)
 
 
 # ── Inline the qeviz bundle ────────────────────────────────────────────────────
 
 bundle_js <- local({
-  # Prefer the copy embedded in the installed/loaded package
   pkg_path <- system.file("qeviz.umd.js", package = "qeviz")
   if (nzchar(pkg_path) && file.exists(pkg_path)) {
     message("Using bundle: ", normalizePath(pkg_path))
     return(paste(readLines(pkg_path, warn = FALSE), collapse = "\n"))
   }
-  # Fall back to the dist/ build in the project root
   for (p in c("dist/qeviz.umd.js", "../dist/qeviz.umd.js")) {
     if (file.exists(p)) {
       message("Using bundle: ", normalizePath(p))
@@ -93,17 +99,13 @@ bundle_js <- local({
 })
 
 
+# ── Serialize model data ───────────────────────────────────────────────────────
+
+ena_json <- jsonlite::toJSON(qe_ena$model, auto_unbox = TRUE, digits = 6, null = "null")
+ona_json <- jsonlite::toJSON(qe_ona$model, auto_unbox = TRUE, digits = 6, null = "null")
+
+
 # ── Generate HTML ──────────────────────────────────────────────────────────────
-
-ena_json <- jsonlite::toJSON(ena_model, auto_unbox = TRUE, digits = 6, null = "null")
-ona_json <- jsonlite::toJSON(ona_model, auto_unbox = TRUE, digits = 6, null = "null")
-
-group_names   <- sort(unique(as.data.frame(ena_set$points)$Condition))
-group_options <- paste(
-  sprintf('      <option value="group-%s">Group — %s</option>',
-          group_names, group_names),
-  collapse = "\n"
-)
 
 html <- paste0(
 '<!DOCTYPE html>
@@ -145,6 +147,7 @@ html <- paste0(
 ', group_options, '
       <option value="subtract">Subtraction (', group_names[1], ' − ', group_names[2], ')</option>
       <option value="overlay">Overlay (both groups)</option>
+      <option value="means">Means only (no network)</option>
     </select>
   </label>
   <label>Code labels:
@@ -167,16 +170,24 @@ html <- paste0(
 
 <div class="layout">
   <div class="card">
-    <h2>Standard ENA — <code>directed: false</code></h2>
+    <h2>Standard ENA &mdash; <code>directed: false</code></h2>
     <qe-visual id="vis-ena">
-      <qe-graph id="graph-ena" width="100%" height="440" points label-nodes="on" label-points="auto"></qe-graph>
+      <qe-graph id="graph-ena" width="100%" height="440">
+        <qe-nodes label="on"></qe-nodes>
+        <qe-means confidence label="on"></qe-means>
+        <qe-points label="auto"></qe-points>
+      </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ena"></div>
   </div>
   <div class="card">
-    <h2>ONA — <code>directed: true</code></h2>
+    <h2>ONA &mdash; <code>directed: true</code></h2>
     <qe-visual id="vis-ona">
-      <qe-graph id="graph-ona" width="100%" height="440" points label-nodes="on" label-points="auto"></qe-graph>
+      <qe-graph id="graph-ona" width="100%" height="440">
+        <qe-nodes label="on"></qe-nodes>
+        <qe-means confidence label="on"></qe-means>
+        <qe-points label="auto"></qe-points>
+      </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ona"></div>
   </div>
@@ -188,7 +199,7 @@ const enaModel = ', ena_json, ';
 const onaModel = ', ona_json, ';
 
 const PALETTE = ["#4477AA","#EE6677","#228833","#CCBB44","#66CCEE","#AA3377"];
-const groups  = enaModel.groups.data.map(r => r.group);
+const groups  = enaModel.groups.data.map(r => r[enaModel.group_col]);
 
 ["ena", "ona"].forEach(id => {
   const el = document.getElementById("legend-" + id);
@@ -207,34 +218,48 @@ const graphOna = document.getElementById("graph-ona");
 visEna.setModelData(enaModel);
 visOna.setModelData(onaModel);
 
+// Manipulate <qe-edges> child elements — add/remove/update to change the
+// active edge network.  The MutationObserver in <qe-graph> triggers a
+// re-render whenever child elements are added, removed, or have attributes
+// changed.
+function applyMode(graph, val) {
+  const existing = graph.querySelector("qe-edges");
+  if (existing) existing.remove();
+
+  if (val === "means") return;   // no edges — means/points only
+
+  const el = document.createElement("qe-edges");
+  if (val === "subtract") {
+    el.setAttribute("group",   groups[0]);
+    el.setAttribute("compare", groups[1]);
+  } else if (val === "overlay") {
+    el.setAttribute("group", groups[0]);
+    el.setAttribute("also",  groups[1]);
+  } else {
+    // "group-<name>"
+    el.setAttribute("group", val.replace("group-", ""));
+  }
+  graph.appendChild(el);
+}
+
 document.getElementById("sel-mode").addEventListener("change", e => {
-  const val = e.target.value;
-  [graphEna, graphOna].forEach(g => {
-    if (val === "subtract") {
-      g.setAttribute("group",   groups[0]);
-      g.setAttribute("compare", groups[1]);
-      g.removeAttribute("also");
-    } else if (val === "overlay") {
-      g.setAttribute("group", groups[0]);
-      g.setAttribute("also",  groups[1]);
-      g.removeAttribute("compare");
-    } else {
-      g.setAttribute("group", val.replace("group-", ""));
-      g.removeAttribute("compare");
-      g.removeAttribute("also");
-    }
-  });
+  applyMode(graphEna, e.target.value);
+  applyMode(graphOna, e.target.value);
 });
 
 document.getElementById("sel-node-labels").addEventListener("change", e => {
-  graphEna.setAttribute("label-nodes", e.target.value);
-  graphOna.setAttribute("label-nodes", e.target.value);
+  graphEna.querySelector("qe-nodes").setAttribute("label", e.target.value);
+  graphOna.querySelector("qe-nodes").setAttribute("label", e.target.value);
 });
 
 document.getElementById("sel-point-labels").addEventListener("change", e => {
-  graphEna.setAttribute("label-points", e.target.value);
-  graphOna.setAttribute("label-points", e.target.value);
+  graphEna.querySelector("qe-points")?.setAttribute("label", e.target.value);
+  graphOna.querySelector("qe-points")?.setAttribute("label", e.target.value);
 });
+
+// Apply initial selection
+applyMode(graphEna, document.getElementById("sel-mode").value);
+applyMode(graphOna, document.getElementById("sel-mode").value);
 </script>
 </body>
 </html>')

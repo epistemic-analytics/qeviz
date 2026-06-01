@@ -1,5 +1,5 @@
 import { Line } from "../objects/PlottedObject";
-import { NodeEdge, TaperedEdge } from "../objects/Edges";
+import { NodeEdge, TaperedEdge, EdgeArrow } from "../objects/Edges";
 import { Color, WeightedColor } from "../objects/Color";
 import { Drawable } from "./Drawable";
 import { QEArray, QEElement } from "./QELayer";
@@ -7,6 +7,8 @@ import { QEGraphElement } from "./QEGraph";
 
 export class QELine extends Drawable implements QEElement {
   __name__: string = "unnamed-line";
+  // Optional second element for the direction-indicator chevron on directed edges.
+  private _arrow_el: SVGPathElement | null = null;
 
   constructor(
     public __data__: Line,
@@ -30,8 +32,9 @@ export class QELine extends Drawable implements QEElement {
     }
 
     if (this.__data__ instanceof TaperedEdge) {
-      // Directed edges render as filled triangles via TaperedEdge.path —
-      // the taper itself shows direction, so no arrow marker is needed.
+      // Directed edges render as filled triangles via TaperedEdge.path.
+      // A second SVG path is reserved for the direction-indicator chevron;
+      // it is populated lazily in update() once meta.isDirected is known.
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('fill',   this.__data__.color.toString());
       path.setAttribute('stroke', 'none');
@@ -66,7 +69,12 @@ export class QELine extends Drawable implements QEElement {
       const weight  = typeof meta.weight    === 'number' ? meta.weight    : 0;
       const maxW    = typeof meta.maxWeight === 'number' ? meta.maxWeight : 1;
       const opacity = typeof meta.opacity   === 'number' ? meta.opacity   : Math.min(1, weight / (maxW || 1));
-      const sw      = (extent > 0 ? extent : 1) * 0.04 * (weight / (maxW || 1));
+      // Target ≈ multiplier×5 in plotly-px to match rENA (ena.plot.network
+      // default: multiplier=5, width = raw_weight × 5).  For a ±2.66-extent
+      // coordinate space rendered at ~460px, 1 data-unit ≈ 86px, so
+      // rENA's max stroke (0.47 × 5 ≈ 2.4px) ≈ 0.028 data units.
+      // Factor 0.011 × extent(2.66) × 1.0 ≈ 0.029 → ~2.5px at 86px/unit.
+      const sw      = (extent > 0 ? extent : 1) * 0.011 * (weight / (maxW || 1));
 
       // Build a WeightedColor from the stored base color + normalized weight so
       // that toString() produces hsla(h, s*w%, l%, w) — matching the Web ENA
@@ -75,6 +83,14 @@ export class QELine extends Drawable implements QEElement {
       const edgeColor = new WeightedColor(baseColor, opacity).toString();
 
       if (this.__data__ instanceof NodeEdge) {
+        // Recompute display radius here using the live extent (extremes.x_max).
+        // The weight stored at creation time is a placeholder (0) because
+        // extremes are not yet computed when the edge objects are first built.
+        const nodeSize = typeof meta.nodeSize === 'number' ? meta.nodeSize : 2;
+        const nodeR    = extent * 0.006 * nodeSize;
+        // Inner dot diameter = nodeR × 0.55 × opacity so the outer dark ring
+        // (nodeR − inner_r ≈ 0.45 × nodeR) is clearly visible.
+        (this.__data__ as NodeEdge).weight = 2 * nodeR * 0.55 * opacity;
         (this.svg_element as SVGPathElement).setAttribute('d', (this.__data__ as NodeEdge).path);
         this.svg_element.setAttribute('fill',   edgeColor);
         this.svg_element.setAttribute('stroke', 'none');
@@ -85,6 +101,38 @@ export class QELine extends Drawable implements QEElement {
         (this.svg_element as SVGPathElement).setAttribute('d', (this.__data__ as TaperedEdge).path);
         this.svg_element.setAttribute('fill',   edgeColor);
         this.svg_element.setAttribute('stroke', 'none');
+
+        // ── Direction-indicator chevron ──────────────────────────────────────
+        // For directed mean edges, overlay an EdgeArrow chevron filled with a
+        // more-opaque/saturated version of the edge colour.  Rendered over the
+        // semi-transparent triangle body, the fully-opaque fill reads as a
+        // visibly darker notch that indicates the direction without introducing
+        // a foreign colour.
+        if (meta.isDirected) {
+          try {
+            const arrow = new EdgeArrow(this.__data__ as any);
+            const arrowPath = arrow.path;
+            // Discard degenerate paths that contain NaN or Infinity (geometry
+            // collapsed — zero-length edge, parallel lines, etc.).
+            if (arrowPath && !arrowPath.includes('NaN') && !arrowPath.includes('Infinity')) {
+              if (!this._arrow_el) {
+                this._arrow_el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                this._arrow_el.setAttribute('stroke', 'none');
+              }
+              if (!this._arrow_el.parentElement) {
+                this.parent.appendChild(this._arrow_el);
+              }
+              this._arrow_el.setAttribute('d', arrowPath);
+              // Fully opaque base colour — rendered on top of the semi-transparent
+              // triangle it produces a clearly darker same-hue chevron shape.
+              const arrowColor = baseColor.toString();
+              this._arrow_el.setAttribute('fill', arrowColor);
+            }
+          } catch (_) {
+            // EdgeArrow geometry degenerates for very short or zero-weight edges —
+            // silently skip rather than crashing the render loop.
+          }
+        }
       } else {
         // Regular undirected edge
         (this.svg_element as SVGLineElement).setAttribute('x1', this.__data__.from.x.toString());
@@ -110,5 +158,8 @@ export class QELine extends Drawable implements QEElement {
 
   draw() {
     this.parent?.appendChild(this.svg_element);
+    if (this._arrow_el) {
+      this.parent?.appendChild(this._arrow_el);
+    }
   }
 }

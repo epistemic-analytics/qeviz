@@ -79,8 +79,11 @@ qe_model_data <- function(
 #' `"."` so qeviz's edge parser can resolve them (e.g. `"Data & Collab"`
 #' becomes `"Data.Collab"`).
 #'
-#' @param set       A model set object from `rENA::model()`.
-#' @param directed  Logical.  `TRUE` for ONA (ordered/directed) models.
+#' @param set       A model set object from `rENA::model()` or `ona::model()`.
+#' @param directed  Logical, or `NULL` (default).  When `NULL`, directionality
+#'   is detected automatically: sets with class `"ena.ordered.set"` (ONA) are
+#'   treated as directed; standard ENA sets are treated as undirected.  Pass
+#'   `TRUE` or `FALSE` explicitly only if you need to override the default.
 #' @param id_col      Unit-ID column name in the set's meta/points frames.
 #' @param node_id_col Code-ID column name in the nodes frame.
 #' @param group_col   Group column name.
@@ -101,11 +104,20 @@ qe_model_data <- function(
 #' @export
 qe_extract <- function(
     set,
-    directed    = FALSE,
+    directed    = NULL,
     id_col      = "ENA_UNIT",
     node_id_col = "code",
     group_col   = "Condition"
 ) {
+  # ── Directionality ─────────────────────────────────────────────────────────
+  # Ordered (ONA) sets carry class "ena.ordered.set", which means the
+  # line.weights matrix is asymmetric (A→B and B→A are distinct columns).
+  # Auto-detect from the set class so callers don't have to specify it.
+  # An explicit directed = TRUE/FALSE overrides the auto-detection.
+  if (is.null(directed)) {
+    directed <- inherits(set, "ena.ordered.set")
+  }
+
   # ── Nodes ──────────────────────────────────────────────────────────────────
   nodes_raw <- as.data.frame(set$rotation$nodes)
   dims      <- find_dims(nodes_raw)
@@ -139,4 +151,83 @@ qe_extract <- function(
     y_col       = "y",
     group_col   = group_col
   )
+}
+
+#' List the group names in a model
+#'
+#' Returns the unique group names present in a `ModelData` list or `qe_plot`
+#' object.  Useful when a dataset has more than two groups and you want to
+#' iterate over them or validate a group name before passing it to
+#' [qe_group()].
+#'
+#' @param x A `qe_plot` object or a `ModelData` list from [qe_model_data()] /
+#'   [qe_extract()].
+#'
+#' @return A character vector of group names, in the order they appear in the
+#'   model's group summary table.
+#'
+#' @examples
+#' \dontrun{
+#' model <- qe_extract(set)
+#' qe_groups(model)
+#' #> [1] "FirstGame"  "SecondGame"
+#'
+#' # Useful for iterating over all groups:
+#' lapply(qe_groups(model), function(g) {
+#'   qe_plot(model) |> qe_group(g) |> qe_export_html(paste0(g, ".html"))
+#' })
+#' }
+#'
+#' @export
+qe_groups <- function(x) {
+  model <- if (inherits(x, "qe_plot")) x$model
+           else if (inherits(x, "ena.set")) qe_extract(x)
+           else x
+  gcol  <- model$group_col %||% "Condition"
+  vapply(model$groups$data, function(row) {
+    v <- row[[gcol]]
+    if (is.null(v)) NA_character_ else as.character(v)
+  }, character(1L))
+}
+
+#' List the unit IDs in a model
+#'
+#' Returns the unit IDs present in a `ModelData` list or `qe_plot` object.
+#' Unit IDs are the values in the model's `id_col` column (default
+#' `"ENA_UNIT"`), typically in compound form `"Group::Name"` as produced by
+#' rENA / tma.  Pass any of these strings to [qe_edges()] as the `unit`
+#' argument to plot an individual unit's edge network.
+#'
+#' @param x A `qe_plot` object or a `ModelData` list from [qe_model_data()] /
+#'   [qe_extract()].
+#'
+#' @return A character vector of unit IDs, in the order they appear in the
+#'   model's points table.  Returns `character(0)` if the model has no points
+#'   frame.
+#'
+#' @examples
+#' \dontrun{
+#' model <- qe_extract(set)
+#' qe_units(model)
+#' #> [1] "FirstGame::steven z"    "FirstGame::akash v"
+#' #> [3] "SecondGame::steven z"   ...
+#'
+#' # Plot one unit's edge network alongside both group means:
+#' qe_plot(set) |>
+#'   qe_group() |>
+#'   qe_points() |>
+#'   qe_edges(unit = "FirstGame::steven z")
+#' }
+#'
+#' @export
+qe_units <- function(x) {
+  model  <- if (inherits(x, "qe_plot")) x$model
+             else if (inherits(x, "ena.set")) qe_extract(x)
+             else x
+  id_col <- model$id_col %||% "ENA_UNIT"
+  if (is.null(model$points)) return(character(0L))
+  vapply(model$points$data, function(row) {
+    v <- row[[id_col]]
+    if (is.null(v)) NA_character_ else as.character(v)
+  }, character(1L))
 }

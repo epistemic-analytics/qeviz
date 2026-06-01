@@ -9,31 +9,102 @@
   paste(readLines(path, warn = FALSE), collapse = "\n")
 }
 
-# ── Internal: build a <qe-graph> attribute string ─────────────────────────────
+# ── Internal: accept either a raw rENA set, a pre-extracted ModelData list,
+#             or a qe_plot object ────────────────────────────────────────────
+#
+# • ena.set objects  → qe_extract() with any forwarded args
+# • qe_plot objects  → return the model slot directly
+# • anything else    → assumed to be a ModelData list already
+.to_model <- function(x, ...) {
+  if (inherits(x, "qe_plot"))  return(x$model)
+  if (inherits(x, "ena.set"))  return(qe_extract(x, ...))
+  x
+}
 
-.graph_attrs <- function(opts) {
-  defaults <- list(
-    width          = "100%",
-    height         = "440",
-    points         = TRUE,
-    "label-nodes"  = "on",
-    "label-points" = "auto"
-  )
-  # Merge user overrides (user values win)
-  merged <- utils::modifyList(defaults, opts)
-  parts <- mapply(function(k, v) {
-    if (isTRUE(v))       k                          # boolean flag attribute
-    else if (isFALSE(v)) NULL                        # omit false flags
-    else                 sprintf('%s="%s"', k, v)
-  }, names(merged), merged, SIMPLIFY = FALSE)
-  paste(Filter(Negate(is.null), parts), collapse = " ")
+# ── Internal: resolve graph_opts from a qe_plot object or plain list ──────────
+# When x is a qe_plot, its stored opts are used as the base; the caller can
+# still pass graph_opts to override individual keys.
+.resolve_opts <- function(x, graph_opts = list()) {
+  base <- if (inherits(x, "qe_plot")) x$graph_opts else list()
+  utils::modifyList(base, graph_opts)
+}
+
+# ── Internal: resolve title ───────────────────────────────────────────────────
+.resolve_title <- function(x, title) {
+  if (!is.null(title)) return(title)
+  if (inherits(x, "qe_plot")) x$title else "qeviz"
+}
+
+# ── Internal: build the <qe-graph> element with child layer elements ──────────
+#
+# Each declarative child element maps directly to a rendering layer:
+#   <qe-nodes>  — code-node labels (always rendered; controls label mode)
+#   <qe-means>  — group mean markers + CI boxes  (omit to hide)
+#   <qe-points> — unit scatter dots              (omit to hide)
+#   <qe-edges>  — edge network                   (omit to hide)
+#
+# Presence of a child = the layer renders.
+# Absence            = the layer is hidden.
+# DOM order          = SVG render order (later children draw on top).
+
+.build_graph_element <- function(opts) {
+  w <- opts[["width"]]  %||% "100%"
+  h <- opts[["height"]] %||% "440"
+  children <- character(0)
+
+  # ── <qe-nodes> — always emitted; controls node label mode ────────────────
+  node_label <- opts[["label-nodes"]] %||% "on"
+  children <- c(children,
+    sprintf('    <qe-nodes label="%s"></qe-nodes>', node_label))
+
+  # ── <qe-means> — show group means + optional CI boxes ────────────────────
+  # Omit entirely only if explicitly suppressed (not currently exposed in API;
+  # defaults to present so `qe_plot(set)` always shows group means).
+  means_parts <- character(0)
+  if (!is.null(opts[["groups"]]))
+    means_parts <- c(means_parts, sprintf('groups="%s"', opts[["groups"]]))
+  if (!isFALSE(opts[["confidence"]]))
+    means_parts <- c(means_parts, "confidence")
+  means_label <- opts[["label-means"]] %||% "on"
+  means_parts <- c(means_parts, sprintf('label="%s"', means_label))
+  children <- c(children,
+    sprintf('    <qe-means %s></qe-means>', paste(means_parts, collapse = " ")))
+
+  # ── <qe-points> — unit scatter dots (only when points = TRUE) ────────────
+  if (isTRUE(opts[["points"]])) {
+    pt_label <- opts[["label-points"]] %||% "auto"
+    children <- c(children,
+      sprintf('    <qe-points label="%s"></qe-points>', pt_label))
+  }
+
+  # ── <qe-edges> — edge network (omit when no primary target or suppressed) ─
+  # Emitted only when at least one of group/unit is set (or compare/also are,
+  # though those require a primary).  The R chain functions validate this.
+  if (!identical(opts[["edges"]], "false")) {
+    edge_parts <- character(0)
+    if (!is.null(opts[["group"]]))
+      edge_parts <- c(edge_parts, sprintf('group="%s"',   opts[["group"]]))
+    if (!is.null(opts[["unit"]]))
+      edge_parts <- c(edge_parts, sprintf('unit="%s"',    opts[["unit"]]))
+    if (!is.null(opts[["compare"]]))
+      edge_parts <- c(edge_parts, sprintf('compare="%s"', opts[["compare"]]))
+    if (!is.null(opts[["also"]]))
+      edge_parts <- c(edge_parts, sprintf('also="%s"',    opts[["also"]]))
+    if (length(edge_parts) > 0) {
+      children <- c(children,
+        sprintf('    <qe-edges %s></qe-edges>', paste(edge_parts, collapse = " ")))
+    }
+  }
+
+  children_str <- paste(children, collapse = "\n")
+  sprintf('<qe-graph width="%s" height="%s">\n%s\n  </qe-graph>', w, h, children_str)
 }
 
 # ── Internal: build the full HTML document string ─────────────────────────────
 
 .build_html <- function(model_json, title = "qeviz", graph_opts = list()) {
-  bundle  <- .bundle_js()
-  g_attrs <- .graph_attrs(graph_opts)
+  bundle     <- .bundle_js()
+  graph_elem <- .build_graph_element(graph_opts)
 
   sprintf('<!DOCTYPE html>
 <html lang="en">
@@ -43,14 +114,14 @@
   <title>%s</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; background: #fff; }
     qe-visual { display: block; width: 100%%; height: 480px; }
     qe-graph  { display: block; width: 100%%; height: 100%%; }
   </style>
 </head>
 <body>
 <qe-visual id="vis">
-  <qe-graph id="graph" %s></qe-graph>
+  %s
 </qe-visual>
 <script>%s</script>
 <script>
@@ -58,126 +129,358 @@ const model = %s;
 document.getElementById("vis").setModelData(model);
 </script>
 </body>
-</html>', title, g_attrs, bundle, model_json)
+</html>', title, graph_elem, bundle, model_json)
 }
 
-# ── Public API ─────────────────────────────────────────────────────────────────
+# ── NULL-coalescing helper ─────────────────────────────────────────────────────
+`%||%` <- function(a, b) if (!is.null(a)) a else b
 
-#' Return a qeviz plot as an embeddable HTML fragment
+
+# ══ qe_plot object ════════════════════════════════════════════════════════════
+
+#' Create a qeviz plot object
 #'
-#' Serialises `model` to JSON and returns a `<div>` containing the inlined
-#' qeviz bundle and a `<qe-visual>` / `<qe-graph>` pair.  Unlike [qe_html()],
-#' the result has no `<html>` or `<head>` wrapper, so it can be dropped
-#' directly into a larger HTML document — for example inside an R Markdown or
-#' Quarto document via `htmltools::HTML(qe_fragment(model))`.
+#' Returns a `qe_plot` object that can be customised with chained `qe_*()`
+#' functions and rendered by printing, [qe_export_html()], or [qe_html()].
 #'
-#' Each call generates a unique element ID so multiple fragments on the same
-#' page do not conflict.
+#' `width` and `height` set the plot dimensions and can be supplied here rather
+#' than in a separate sizing call.
 #'
-#' @param model       A `ModelData` list from [qe_model_data()] or [qe_extract()].
-#' @param height      CSS height string for the containing `<div>`. Default `"480px"`.
-#' @param graph_opts  Named list of `<qe-graph>` attribute overrides (see [qe_html()]).
+#' @param x       Either a raw rENA / tma / ona set object **or** a `ModelData`
+#'   list from [qe_model_data()] / [qe_extract()].
+#' @param title   Window / tab title used when the plot is saved or opened.
+#' @param width   CSS width string. Default `"100%"`.
+#' @param height  Plot height in pixels (numeric) or any CSS string. Default `440`.
+#' @param ...     Additional arguments forwarded to [qe_extract()] when `x` is a
+#'   raw set (e.g. `group_col = "Condition"`).  Directionality is detected
+#'   automatically from the set class and rarely needs to be overridden.
 #'
-#' @return A character string of class `"html"` (compatible with
-#'   `htmltools::HTML()`) containing the fragment.
+#' @return An object of class `qe_plot`.
 #'
 #' @examples
 #' \dontrun{
-#' # Inside an R Markdown chunk with results='asis':
-#' htmltools::HTML(qe_fragment(model))
+#' qe_plot(set)
+#' qe_plot(set, height = 600) |> qe_group("FirstGame")
 #' }
 #'
 #' @export
-qe_fragment <- function(model, height = "480px", graph_opts = list()) {
-  json    <- jsonlite::toJSON(model, auto_unbox = TRUE, digits = 6, null = "null")
-  bundle  <- .bundle_js()
-  g_attrs <- .graph_attrs(graph_opts)
-  uid     <- paste0("qeviz", as.integer(proc.time()[["elapsed"]] * 1e4) %% 1e9L)
-
-  html <- sprintf(
-    '<div style="width:100%%;height:%s">\n<script>%s</script>\n<qe-visual id="%s">\n  <qe-graph %s></qe-graph>\n</qe-visual>\n<script>\ndocument.getElementById("%s").setModelData(%s);\n</script>\n</div>',
-    height, bundle, uid, g_attrs, uid, json
+qe_plot <- function(x, title = "qeviz", width = "100%", height = 440, ...) {
+  p <- structure(
+    list(
+      model      = .to_model(x, ...),
+      title      = title,
+      graph_opts = list()
+    ),
+    class = "qe_plot"
   )
-  structure(html, class = c("html", "character"))
+  p$graph_opts$width  <- width
+  p$graph_opts$height <- as.character(height)
+  p
 }
+
+#' Render a qe_plot object in the viewer
+#'
+#' Called automatically when a `qe_plot` object is returned at the top level
+#' of the console.  Writes to a temp file and opens the RStudio viewer or
+#' the system browser.
+#'
+#' @param x A `qe_plot` object.
+#' @param ... Ignored.
+#' @export
+print.qe_plot <- function(x, ...) {
+  tmp <- tempfile(fileext = ".html")
+  qe_export_html(x, tmp, open = TRUE)
+  invisible(x)
+}
+
+
+# ══ Chain functions ════════════════════════════════════════════════════════════
+
+#' Select which group means to display
+#'
+#' Controls which groups' mean markers and CI boxes appear in the plot.  This
+#' is independent of edge rendering — use [qe_edges()] to select whose network
+#' to draw.
+#'
+#' @param p         A `qe_plot` object.
+#' @param ...       Group names to show means for.  Supply one or more strings,
+#'   each matching a value in the model's group column.  Omit entirely to show
+#'   means for **all** groups in the model (the default).
+#' @param by        The metadata column used for grouping (e.g. `"Condition"`).
+#'   Optional — used to validate against the column baked into the model at
+#'   extraction time.  An error is raised if the column name does not match.
+#' @param intervals Logical.  Show 95% CI box(es) around group mean(s).
+#'   Default `TRUE`.
+#'
+#' @return The modified `qe_plot` object.
+#'
+#' @examples
+#' \dontrun{
+#' # Show means for all groups (default)
+#' qe_plot(set) |> qe_group()
+#'
+#' # Show means for specific groups only
+#' qe_plot(set) |> qe_group("FirstGame", "SecondGame")
+#'
+#' # Explicit column name — validates against model
+#' qe_plot(set) |> qe_group("FirstGame", by = "Condition")
+#' }
+#'
+#' @export
+qe_group <- function(p, ..., by = NULL, intervals = TRUE) {
+  requested <- c(...)   # character vector of group names, or length-0
+
+  # Validate `by` against the model's group_col
+  if (!is.null(by)) {
+    model_gcol <- if (inherits(p, "qe_plot")) p$model$group_col else p$group_col
+    if (!is.null(model_gcol) && !identical(by, model_gcol)) {
+      stop(sprintf(
+        "qe_group(): by = %s does not match the model's group column (%s).\n",
+        dQuote(by), dQuote(model_gcol)
+      ), call. = FALSE)
+    }
+  }
+
+  # Validate requested group names against model
+  if (length(requested) > 0) {
+    available <- qe_groups(p)
+    bad <- requested[!requested %in% available]
+    if (length(bad) > 0) {
+      stop(sprintf(
+        "qe_group(): group(s) not found in model: %s\nAvailable: %s",
+        paste(dQuote(bad), collapse = ", "),
+        paste(dQuote(available), collapse = ", ")
+      ), call. = FALSE)
+    }
+    # Comma-separated list → `groups` attribute (means filter)
+    p$graph_opts$groups <- paste(requested, collapse = ",")
+  } else {
+    # No names → show all groups; remove any previous filter
+    p$graph_opts$groups <- NULL
+  }
+
+  p$graph_opts$confidence <- intervals
+  p
+}
+
+#' Select which edge network to draw
+#'
+#' Controls edge rendering.  Supply **either** a group name (`group`) **or** a
+#' specific unit ID (`unit`) as the primary edge source; `compare` or `also`
+#' optionally bring in a second group for subtraction or overlay.  Omitting both
+#' `group` and `unit` (or calling `qe_edges(show = FALSE)`) suppresses the edge
+#' network entirely, leaving only group means and unit points visible.
+#'
+#' Use [qe_units()] to inspect the unit IDs present in the model.
+#'
+#' @param p       A `qe_plot` object.
+#' @param group   Name of the primary group whose **mean** edge network to draw.
+#'   Must match a value in the model's group column.  Mutually exclusive with
+#'   `unit`.
+#' @param unit    ID of a single unit whose **individual** edge network to draw
+#'   (e.g. `"FirstGame::steven z"`).  Mutually exclusive with `group`.
+#'   `compare` and `also` are not supported when `unit` is supplied.
+#' @param compare Name of a second group to subtract (`group − compare`).
+#'   Positive differences use the primary colour; negative use the secondary.
+#'   Cannot be combined with `unit`.
+#' @param also    Name of a second group to overlay alongside `group`.
+#'   Cannot be combined with `unit`.
+#' @param show    Logical.  `FALSE` suppresses all edge rendering regardless of
+#'   other arguments.  Default `TRUE`.
+#'
+#' @return The modified `qe_plot` object.
+#'
+#' @examples
+#' \dontrun{
+#' # Single group mean network
+#' qe_plot(set) |> qe_edges("FirstGame")
+#'
+#' # Individual unit network
+#' qe_plot(set) |> qe_edges(unit = "FirstGame::steven z")
+#'
+#' # Individual unit + show all group means
+#' qe_plot(set) |> qe_group() |> qe_edges(unit = "FirstGame::steven z")
+#'
+#' # Subtraction
+#' qe_plot(set) |> qe_edges("FirstGame", compare = "SecondGame")
+#'
+#' # Overlay
+#' qe_plot(set) |> qe_edges("FirstGame", also = "SecondGame")
+#'
+#' # No edges (means and/or points only)
+#' qe_plot(set) |> qe_group() |> qe_edges(show = FALSE)
+#' }
+#'
+#' @export
+qe_edges <- function(p, group = NULL, unit = NULL,
+                     compare = NULL, also = NULL, show = TRUE) {
+  if (!is.null(group) && !is.null(unit))
+    stop("qe_edges(): supply either 'group' or 'unit', not both.", call. = FALSE)
+
+  if (!show) {
+    # TypeScript reads getAttribute('edges') !== 'false', so we must emit the
+    # string "false" — a logical FALSE would be omitted and edges would stay on.
+    p$graph_opts$edges   <- "false"
+    p$graph_opts$group   <- NULL
+    p$graph_opts$unit    <- NULL
+    p$graph_opts$compare <- NULL
+    p$graph_opts$also    <- NULL
+    return(p)
+  }
+
+  available_groups <- qe_groups(p)
+  available_units  <- qe_units(p)
+
+  # Validate group-based targets
+  .check_group <- function(name, arg) {
+    if (!is.null(name) && !name %in% available_groups) {
+      stop(sprintf(
+        "qe_edges(): %s = %s not found in model.\nAvailable groups: %s",
+        arg, dQuote(name),
+        paste(dQuote(available_groups), collapse = ", ")
+      ), call. = FALSE)
+    }
+  }
+  .check_group(group,   "group")
+  .check_group(compare, "compare")
+  .check_group(also,    "also")
+
+  # Validate unit ID
+  if (!is.null(unit) && !unit %in% available_units) {
+    stop(sprintf(
+      "qe_edges(): unit = %s not found in model.\nUse qe_units() to see available unit IDs.",
+      dQuote(unit)
+    ), call. = FALSE)
+  }
+
+  if (!is.null(compare) && !is.null(also))
+    stop("qe_edges(): supply either 'compare' or 'also', not both.", call. = FALSE)
+
+  if (!is.null(unit) && (!is.null(compare) || !is.null(also)))
+    stop("qe_edges(): 'compare' and 'also' cannot be combined with 'unit'.", call. = FALSE)
+
+  p$graph_opts$edges   <- TRUE
+  p$graph_opts$group   <- group
+  p$graph_opts$unit    <- unit
+  p$graph_opts$compare <- compare
+  p$graph_opts$also    <- also
+  p
+}
+
+#' Show or hide unit points
+#'
+#' @param p    A `qe_plot` object.
+#' @param show Logical. Default `TRUE`.
+#' @return The modified `qe_plot` object.
+#' @export
+qe_points <- function(p, show = TRUE) {
+  p$graph_opts$points <- show
+  p
+}
+
+#' Control label visibility
+#'
+#' @param p      A `qe_plot` object.
+#' @param nodes  Label mode for code nodes.  One of `"on"`, `"off"`,
+#'   `"click"`, `"auto"`. Default `"on"`.
+#' @param means  Label mode for group means. Default `"on"`.
+#' @param points Label mode for unit points. Default `"auto"`.
+#' @return The modified `qe_plot` object.
+#' @export
+qe_labels <- function(p, nodes = "on", means = "on", points = "auto") {
+  p$graph_opts[["label-nodes"]]  <- nodes
+  p$graph_opts[["label-means"]]  <- means
+  p$graph_opts[["label-points"]] <- points
+  p
+}
+
+
+# ══ Output functions ═══════════════════════════════════════════════════════════
+# All three accept a qe_plot object, a raw ena.set, or a plain ModelData list.
 
 #' Return a qeviz plot as an HTML string
 #'
-#' Serialises `model` to JSON and wraps it in a self-contained HTML document
-#' with the qeviz bundle inlined.  Useful for embedding in R Markdown / Quarto
-#' via `htmltools::HTML()`, or for writing to a file manually.
-#'
-#' @param model       A `ModelData` list from [qe_model_data()] or [qe_extract()].
-#' @param title       `<title>` text for the HTML document.
-#' @param graph_opts  Named list of `<qe-graph>` attribute overrides.
-#'   Defaults: `width="100%"`, `height="440"`, `points` (flag),
-#'   `label-nodes="on"`, `label-points="auto"`.
-#'   Pass `list("label-nodes" = "off")` to suppress node labels, etc.
-#'
+#' @param x           A `qe_plot` object, a raw rENA / tma / ona set, or a
+#'   `ModelData` list from [qe_model_data()] / [qe_extract()].
+#' @param title       `<title>` text. Defaults to the title stored in the
+#'   `qe_plot` object when one is supplied.
+#' @param graph_opts  Named list of `<qe-graph>` attribute overrides.  When `x`
+#'   is a `qe_plot` object the stored opts are used as the base; keys supplied
+#'   here take precedence.
+#' @param ...         Additional arguments forwarded to [qe_extract()] when `x`
+#'   is a raw set.
 #' @return A single character string containing a complete HTML document.
-#'
 #' @examples
 #' \dontrun{
-#' html <- qe_html(model)
-#' writeLines(html, "plot.html")
+#' writeLines(qe_html(set), "plot.html")
+#' writeLines(qe_html(qe_plot(set) |> qe_group("FirstGame")), "plot.html")
 #' }
-#'
 #' @export
-qe_html <- function(model, title = "qeviz", graph_opts = list()) {
-  json <- jsonlite::toJSON(model, auto_unbox = TRUE, digits = 6, null = "null")
-  .build_html(json, title = title, graph_opts = graph_opts)
+qe_html <- function(x, title = NULL, graph_opts = list(), ...) {
+  model <- .to_model(x, ...)
+  opts  <- .resolve_opts(x, graph_opts)
+  ttl   <- .resolve_title(x, title)
+  json  <- jsonlite::toJSON(model, auto_unbox = TRUE, digits = 6, null = "null")
+  .build_html(json, title = ttl, graph_opts = opts)
 }
 
 #' Write a self-contained qeviz HTML file
 #'
-#' Equivalent to [qe_html()] but writes directly to `file`.
-#'
-#' @param model      A `ModelData` list.
+#' @param x          A `qe_plot` object, a raw rENA / tma / ona set, or a
+#'   `ModelData` list.
 #' @param file       Output file path (should end in `.html`).
-#' @param title      `<title>` text.
-#' @param graph_opts Named list of `<qe-graph>` attribute overrides (see [qe_html()]).
-#' @param open       If `TRUE` (default when interactive), open the file in the
-#'   RStudio viewer or default browser after writing.
-#'
+#' @param title      `<title>` text (defaults to stored title for `qe_plot` objects).
+#' @param graph_opts Named list of `<qe-graph>` attribute overrides.
+#' @param open       If `TRUE` (default when interactive), open after writing.
+#' @param ...        Additional arguments forwarded to [qe_extract()] when `x`
+#'   is a raw set.
 #' @return The normalised `file` path, invisibly.
-#'
 #' @examples
 #' \dontrun{
-#' qe_export_html(model, "ena_plot.html")
+#' qe_export_html(set, "ena_plot.html")
+#' qe_export_html(qe_plot(set) |> qe_group("FirstGame"), "fg.html")
 #' }
-#'
 #' @export
-qe_export_html <- function(model, file, title = "qeviz",
-                           graph_opts = list(), open = interactive()) {
-  html <- qe_html(model, title = title, graph_opts = graph_opts)
+qe_export_html <- function(x, file, title = NULL, graph_opts = list(),
+                           open = interactive(), ...) {
+  html <- qe_html(x, title = title, graph_opts = graph_opts, ...)
   writeLines(html, file)
   if (open) .open_viewer(file)
   invisible(normalizePath(file))
 }
 
-#' Display a qeviz plot interactively
+#' Return a qeviz plot as an embeddable HTML fragment
 #'
-#' Writes the plot to a temporary HTML file and opens it in the RStudio
-#' viewer pane (if available) or the system browser.
+#' Returns a `<div>` with the inlined bundle and a `<qe-visual>` / `<qe-graph>`
+#' pair — no `<html>` wrapper, suitable for R Markdown / Quarto via
+#' `htmltools::HTML()`.
 #'
-#' @param model      A `ModelData` list.
-#' @param title      Window / tab title.
-#' @param graph_opts Named list of `<qe-graph>` attribute overrides (see [qe_html()]).
-#'
-#' @return The path to the temporary HTML file, invisibly.
-#'
+#' @param x           A `qe_plot` object, a raw rENA / tma / ona set, or a
+#'   `ModelData` list.
+#' @param height      CSS height of the containing `<div>`. Default `"480px"`.
+#' @param graph_opts  Named list of `<qe-graph>` attribute overrides.
+#' @param ...         Additional arguments forwarded to [qe_extract()] when `x`
+#'   is a raw set.
+#' @return A character string of class `"html"`.
 #' @examples
 #' \dontrun{
-#' qe_plot(model)
-#' qe_plot(model, graph_opts = list("label-nodes" = "off", height = "600"))
+#' htmltools::HTML(qe_fragment(set))
+#' htmltools::HTML(qe_fragment(qe_plot(set) |> qe_group("FirstGame")))
 #' }
-#'
 #' @export
-qe_plot <- function(model, title = "qeviz", graph_opts = list()) {
-  tmp <- tempfile(fileext = ".html")
-  qe_export_html(model, tmp, title = title, graph_opts = graph_opts, open = FALSE)
-  .open_viewer(tmp)
-  invisible(tmp)
+qe_fragment <- function(x, height = "480px", graph_opts = list(), ...) {
+  model      <- .to_model(x, ...)
+  opts       <- .resolve_opts(x, graph_opts)
+  json       <- jsonlite::toJSON(model, auto_unbox = TRUE, digits = 6, null = "null")
+  bundle     <- .bundle_js()
+  graph_elem <- .build_graph_element(opts)
+  uid        <- paste0("qeviz", as.integer(proc.time()[["elapsed"]] * 1e4) %% 1e9L)
+
+  html <- sprintf(
+    '<div style="width:100%%;height:%s">\n<script>%s</script>\n<qe-visual id="%s">\n  %s\n</qe-visual>\n<script>\ndocument.getElementById("%s").setModelData(%s);\n</script>\n</div>',
+    height, bundle, uid, graph_elem, uid, json
+  )
+  structure(html, class = c("html", "character"))
 }
 
 # ── Internal: open a file in RStudio viewer or browser ────────────────────────

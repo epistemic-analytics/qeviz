@@ -8,6 +8,7 @@ import { Label, Line, Point } from "../objects/PlottedObject";
 import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
 import { QELabel } from "./QELabel";
+import "./QEChildElements.js";
 
 // Accessible color palette for group assignment (Paul Tol's bright scheme)
 const GROUP_PALETTE = [
@@ -104,10 +105,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   static tagName: string = "qe-graph";
 
   static get observedAttributes(): string[] {
+    // Only layout / shorthand attributes live on <qe-graph> itself.
+    // Layer-specific config (group, unit, compare, also, points, edges,
+    // confidence, groups) lives on child elements and is observed via
+    // MutationObserver in connectedCallback().
     return [
-      'group', 'unit', 'compare', 'also',
+      'width', 'height', 'for',
+      'scale-points',
       'labels', 'label-nodes', 'label-means', 'label-points',
-      'scale-points', 'points', 'confidence', 'outlier',
     ];
   }
 
@@ -146,8 +151,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     return this._vizena;
   }
 
-  private _hasModel    = false;
+  private _hasModel      = false;
   private _renderPending = false;
+  private _childObserver: MutationObserver | null = null;
 
   // SVG <rect> elements for per-group CI boxes, keyed by group name.
   // Managed directly (not via QELayer) so they render behind unit points.
@@ -196,6 +202,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const nodeIdCol  = model.node_id_col;
       const groupColName = model.group_col;
 
+      // ── Layer config (read once from child elements) ─────────────────────────
+      const config = this._readLayerConfig();
+
       // ── Group color map ──────────────────────────────────────────────────────
       // Priority: (1) points groupCol, (2) groups frame row names, (3) empty.
       const groupColorMap: Record<string, string> = {};
@@ -215,13 +224,30 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         });
       }
 
+      // ── Active groups for MEANS display ─────────────────────────────────────
+      // `groups` attribute: comma-separated list of group names whose means and
+      // CI boxes should be rendered.  Default (attribute absent or empty): show
+      // means for ALL groups present in the model.
+      //
+      // Means display is intentionally independent of edge selection.  The edge
+      // section below reads `group` / `compare` / `also` to determine which
+      // network(s) to draw; those attributes have no effect here.
+      const _allGroupNames_ = Object.keys(groupColorMap);
+      const activeMeanGroups: Set<string> = (config.activeMeanGroups && config.activeMeanGroups.trim())
+        ? new Set(
+            config.activeMeanGroups.split(',')
+              .map(s => s.trim())
+              .filter(g => groupColorMap[g])   // silently drop names not in model
+          )
+        : new Set(_allGroupNames_);            // default: every group
+
       // ── Point-to-node coordinate scaling ────────────────────────────────────
       // Unit point coordinates are in a different (typically much smaller) range
-      // than code node coordinates. When scale-points is enabled (default true),
-      // we rescale all unit/mean point coordinates so the outermost point lands
-      // at the same radius as the outermost node, spreading the cloud to fill the
-      // network rather than collapsing it near the origin.
-      const scalePointsEnabled = this.getAttribute('scale-points') !== 'false';
+      // Unit/mean point coordinates are rescaled by default so the outermost point
+      // aligns with the outermost code node — matching the ENA Web Tool default.
+      // Set scale-points="false" on <qe-graph> to show raw SVD coordinates
+      // (points cluster near origin relative to code nodes).
+      const scalePointsEnabled = config.scalePoints;
 
       const getExtent = (rows: DataFrameRow[]): number => {
         let max = 0;
@@ -240,15 +266,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         ? maxNodeExtent / maxPointExtent
         : 1;
 
-      // ── Label display modes ──────────────────────────────────────────────────
-      // Attributes: labels (shorthand), label-nodes, label-means, label-points
-      // Values: "on" | "off" | "click" | "auto"   (case-insensitive)
-      // Defaults: nodes=ON, means=ON, points=OFF
-      // `labels` is a shorthand that applies to all three unless individually overridden.
-      const labelsShorthand = this.getAttribute('labels');
-      const labelNodes  = parseLabelMode(this.getAttribute('label-nodes')  ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
-      const labelMeans  = parseLabelMode(this.getAttribute('label-means')  ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
-      const labelPoints = parseLabelMode(this.getAttribute('label-points') ?? labelsShorthand, Label.DISPLAY_TYPES.OFF);
+      // ── Label display modes — sourced from config (child elements or shorthand) ──
+      const labelNodes  = config.labelNodes;
+      const labelMeans  = config.labelMeans;
+      const labelPoints = config.labelPoints;
 
       // Use the cached labels <g> reference (set once in connectedCallback).
       const labelSvg = this._labelsGroup;
@@ -281,7 +302,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         n: number; color: string;
       }> = {};
 
-      if (this.hasAttribute('points') && model.points?.rows) {
+      // <qe-points> presence controls unit-dot visibility.
+      // <qe-means> presence controls mean markers and CI boxes.
+      const showUnitPoints = config.showPoints;
+      if (model.points?.rows) {
         const pointsLayer = this.__children__.search('__children__', 'points') as QELayer;
         if (pointsLayer) {
           model.points.rows().forEach((row: DataFrameRow) => {
@@ -290,11 +314,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const group = groupColIdx >= 0 ? String(row[groupColIdx]) : null;
             const colorStr = group ? (groupColorMap[group] ?? '#888888') : '#888888';
 
-            const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
-            this.__data__.points.set(pt.ID, pt);
-            pointsLayer.__data__.objects.set(pt.ID, pt);
+            // Only add unit dots to the layer when 'points' attribute is present.
+            if (showUnitPoints) {
+              const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+              this.__data__.points.set(pt.ID, pt);
+              pointsLayer.__data__.objects.set(pt.ID, pt);
+            }
 
-            // Accumulate for mean + variance (raw values — scale/negate applied later)
+            // Always accumulate for mean + variance (needed for Path B even without dots)
             if (group) {
               const xIdx = row.names.indexOf(dims[0]);
               const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
@@ -319,19 +346,34 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           //
           // Deprecated frames (model.confidence, model.outlier) are still respected
           // in path B for backward compatibility with rENA adapters not yet updated.
+          //
+          // Means rendering is guarded by config.showMeans (<qe-means> presence).
+          // When absent, activeGroupRows is kept empty so the labels section below
+          // also skips mean labels cleanly.
 
           const hasGroupsFrame = !!(model.groups?.rows && model.groups.rows().length > 0);
+
+          // Rows from the groups frame that are active in the current view.
+          // Empty when <qe-means> is absent so downstream label logic is consistent.
+          const activeGroupRows: DataFrameRow[] = (config.showMeans && hasGroupsFrame)
+            ? model.groups.rows().filter((r: DataFrameRow) => {
+                const g = r.rowName ?? String(r[0]);
+                return activeMeanGroups.size === 0 || activeMeanGroups.has(g);
+              })
+            : [];
+
+          if (config.showMeans) {
           const pointsLayerSvg = pointsLayer.svg_element as SVGGElement | null;
           const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 0.008;
 
           if (hasGroupsFrame) {
             // ── Path A: groups frame ─────────────────────────────────────────
-            // Remove CI/outlier rects for groups no longer in the frame.
-            const groupFrameNames = new Set(model.groups.rows().map((r: DataFrameRow) => r.rowName ?? String(r[0])));
-            this._ciRects.forEach((el, g) => { if (!groupFrameNames.has(g)) { el.remove(); this._ciRects.delete(g); } });
-            this._outlierRects.forEach((el, g) => { if (!groupFrameNames.has(g)) { el.remove(); this._outlierRects.delete(g); } });
+            // Remove CI/outlier rects for groups no longer active.
+            const activeNames = new Set(activeGroupRows.map((r: DataFrameRow) => r.rowName ?? String(r[0])));
+            this._ciRects.forEach((el, g) => { if (!activeNames.has(g)) { el.remove(); this._ciRects.delete(g); } });
+            this._outlierRects.forEach((el, g) => { if (!activeNames.has(g)) { el.remove(); this._outlierRects.delete(g); } });
 
-            model.groups.rows().forEach((row: DataFrameRow) => {
+            activeGroupRows.forEach((row: DataFrameRow) => {
               const group = row.rowName ?? String(row[0]);
               const color = groupColorMap[group] ?? '#888888';
               const xIdx = row.names.indexOf(dims[0]);
@@ -346,7 +388,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 meta: { group },
               });
               meanPt.color = new Color(color);
-              meanPt.size  = 1.5;
+              meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
               meanPt.shape = 'rect';
               this.__data__.points.set(meanPt.ID, meanPt);
               pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
@@ -390,14 +432,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 meta: { group },
               });
               meanPt.color = new Color(color);
-              meanPt.size  = 1.5;
+              meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
               meanPt.shape = 'rect';
               this.__data__.points.set(meanPt.ID, meanPt);
               pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
             });
 
             // ── CI boxes (deprecated confidence frame or JS fallback) ────────
-            const showCI = this.getAttribute('confidence') !== 'false';
+            const showCI = config.showCI;
             if (showCI) {
               this._ciRects.forEach((el, g) => {
                 if (!groupSums[g]) { el.remove(); this._ciRects.delete(g); }
@@ -467,7 +509,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             }
 
             // ── Outlier boxes (deprecated model.outlier frame) ───────────────
-            const showOutlier = this.getAttribute('outlier') !== 'false';
+            const showOutlier = true; // legacy frame; presence of model.outlier guards rendering
             if (showOutlier && model.outlier?.rows) {
               this._outlierRects.forEach((el, g) => {
                 if (!groupColorMap[g]) { el.remove(); this._outlierRects.delete(g); }
@@ -504,6 +546,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               });
             }
           } // end Path B
+          } // end config.showMeans
 
           // ── Labels ──────────────────────────────────────────────────────────
           if (labelSvg) {
@@ -538,10 +581,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               });
             }
 
-            // Mean labels — use groups frame rows if available, else groupSums keys
+            // Mean labels — use active groups frame rows if available, else groupSums keys
             if (labelMeans !== 0) {
               const meanGroupNames: string[] = hasGroupsFrame
-                ? model.groups.rows().map((r: DataFrameRow) => r.rowName ?? String(r[0]))
+                ? activeGroupRows.map((r: DataFrameRow) => r.rowName ?? String(r[0]))
                 : Object.keys(groupSums);
 
               meanGroupNames.forEach((group: string) => {
@@ -573,16 +616,19 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // must be drawn here so the dot is visible on top of the code node.
       const edgenodeLayer = networkLayer?.__children__.search('__children__', 'edgenodes') as QELayer;
 
+      const edgesEnabled = config.showEdges;
       if (model.nodes?.rows && nodeLayer) {
-        // ── Step 1: Populate node positions first (edges need to look them up) ─
-        // Sizes will be overwritten after edge weights are computed.
+        // ── Step 1: Populate node positions first ─────────────────────────────
+        // Nodes are always placed so they anchor the coordinate space (extremes).
+        // Sizes will be overwritten after edge weights are computed; when edges
+        // are hidden the default size is used instead.
         model.nodes.rows().forEach((row: DataFrameRow) => {
           const pt = rowToPoint(row, nodeIdCol, '#444444');
-          pt.size = 3; // temporary default; overwritten below if edges are available
+          pt.size = 2; // default when no edge weights available
           nodeLayer.__data__.objects.set(pt.ID, pt);
         });
 
-        if (edgeLayer && model.edges?.rows) {
+        if (edgesEnabled && edgeLayer && model.edges?.rows) {
           // ── Step 2: Build unit→group lookup from points data ─────────────────
           const unitGroupMap: Record<string, string> = {};
           if (groupColName && model.points?.rows) {
@@ -666,18 +712,18 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           //    unit subtraction       — unit="A" compare="B"
           //    two groups overlaid    — group="FirstGame" also="SecondGame"
           //
-          const unitAttr    = this.getAttribute('unit');
-          const groupAttr   = this.getAttribute('group');
-          const compareAttr = this.getAttribute('compare');
-          const alsoAttr    = this.getAttribute('also');
+          // Edge selection: group / compare / also are edge-only attributes.
+          // No `group` → no edge network drawn (only means are shown).
+          const unitAttr    = config.edgeUnit;
+          const groupAttr   = config.edgeGroup;
+          const compareAttr = config.edgeCompare;
+          const alsoAttr    = config.edgeAlso;
 
-          const allGroupNames = Object.keys(groupColorMap);
-
-          // Primary target
-          const primaryId = unitAttr ?? groupAttr ?? allGroupNames[0] ?? null;
+          // Primary edge target — unit overrides group; no default to first group.
+          const primaryId = unitAttr ?? groupAttr ?? null;
           const primary   = primaryId ? resolve(primaryId) : null;
 
-          // Optional secondary target
+          // Optional secondary target for subtraction or overlay.
           const secondaryId = compareAttr ?? alsoAttr ?? null;
           const secondary   = secondaryId ? resolve(secondaryId) : null;
           const isSubtract  = !!compareAttr;
@@ -717,9 +763,15 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // NodeEdge dot radii must fit *inside* each code node, so we need the
           // host node's effective radius at edge-creation time.  Pre-tally
           // weights and apply sizes up front.
-          const isDirected   = !!(model as any).directed;
-          const maxEdgeWeight = Math.max(1, ...drawEdges.filter(e => e.pair[0] !== e.pair[1]).map(e => e.weight));
-          const maxSelfWeight = Math.max(0, ...drawEdges.filter(e => e.pair[0] === e.pair[1]).map(e => e.weight));
+          const isDirected    = !!(model as any).directed;
+          // Normalize against the actual max weight in this render, not a hard
+          // floor of 1.  ENA line weights are typically ≪ 1 (e.g. 0.05–0.5);
+          // using Math.max(1, ...) would cap saturation/opacity at the raw weight
+          // value (e.g. 0.47 max → only 47% vivid), making all edges look faded.
+          const nonSelfWeights = drawEdges.filter(e => e.pair[0] !== e.pair[1]).map(e => e.weight);
+          const maxEdgeWeight  = nonSelfWeights.length > 0 ? Math.max(...nonSelfWeights) : 1e-9;
+          const selfWeights    = drawEdges.filter(e => e.pair[0] === e.pair[1]).map(e => e.weight);
+          const maxSelfWeight  = selfWeights.length > 0 ? Math.max(...selfWeights) : 0;
           const nodeWeightSum: Record<string, number> = {};
           drawEdges.forEach(({ pair, weight }) => {
             const isSelf = pair[0] === pair[1];
@@ -782,15 +834,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             let edgeLine: Line;
             if (isSelf) {
               edgeLine = new NodeEdge({}, fromPt as any, toPt as any);
-              // NodeEdge.path uses .weight as the dot's DIAMETER.  Scale the
-              // dot to a fraction of the host node's radius so it always sits
-              // visibly inside the node:
-              //   nodeRadius = extent · 0.015 · nodeSize  (matches QEPoint)
-              //   R          = nodeRadius · 0.8 · (weight / maxSelfWeight)
-              //   diameter   = 2R
-              const nodeR = extentForRadius * 0.015 * (nodeSizes[pair[0]] ?? 2);
-              const ratio = weight / Math.max(maxSelfWeight, 1e-9);
-              (edgeLine as any).weight = 2 * nodeR * 0.8 * ratio;
+              // Actual display size is deferred to QELine.update() so it uses
+              // the live extremes.x_max (which is not yet computed here).
+              // Set a placeholder weight; update() will overwrite it.
+              (edgeLine as any).weight = 0;
             } else if (isDirected) {
               const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
               const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
@@ -806,11 +853,18 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             edgeLine.ID    = `edge-${col}`;
             edgeLine.color = new Color(color);
             (edgeLine as any).meta = {
-              isMeanEdge: true,
+              isMeanEdge:   true,
               weight,
-              maxWeight:  maxEdgeWeight,
+              // NodeEdge compares within the self-loop class; cross-pair edges
+              // compare within their own class.  Store the correct denominator
+              // so QELine.update() can compute opacity and display size properly.
+              maxWeight:    isSelf ? maxSelfWeight : maxEdgeWeight,
               opacity,
               isDirected,
+              isSelf,
+              // nodeSize is needed by QELine.update() to compute the NodeEdge
+              // display radius at update time (when extremes.x_max is available).
+              nodeSize:     isSelf ? (nodeSizes[pair[0]] ?? 2) : undefined,
             };
             // Self-connections go in the `edgenodes` layer (above `nodes` in
             // draw order) so the dot is visible on top of the code node.
@@ -858,13 +912,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     });
   }
 
-  attributeChangedCallback(_name: string, oldValue: string | null, newValue: string | null): void {
-    if (oldValue === newValue) return;
+  // ── Shared re-render scheduler ───────────────────────────────────────────────
+  // Batches synchronous attribute / child-list changes into a single microtask
+  // so that e.g. adding <qe-edges> and setting its attributes in the same tick
+  // only triggers one render cycle.
+  private _scheduleRerender(): void {
     if (!this._vizena || !this._hasModel) return;
     if (this._renderPending) return;
     this._renderPending = true;
-    // Batch synchronous attribute changes (e.g. setting group + compare + removing also)
-    // into a single re-render by deferring to the next microtask.
     queueMicrotask(() => {
       this._renderPending = false;
       this._vizena?.dispatchEvent(new CustomEvent('model-updated', {
@@ -873,6 +928,73 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         composed: true,
       }));
     });
+  }
+
+  // ── Layer configuration reader ────────────────────────────────────────────────
+  // Reads child element presence / attributes to determine what each layer
+  // should render.  Called once at the top of every model-updated handler so
+  // all rendering decisions are derived from a single snapshot.
+  private _readLayerConfig(): {
+    // Nodes
+    labelNodes: number;
+    scalePoints: boolean;
+    // Means
+    showMeans: boolean;
+    activeMeanGroups: string | null;
+    showCI: boolean;
+    labelMeans: number;
+    // Points
+    showPoints: boolean;
+    labelPoints: number;
+    // Edges
+    showEdges: boolean;
+    edgeGroup: string | null;
+    edgeUnit: string | null;
+    edgeCompare: string | null;
+    edgeAlso: string | null;
+  } {
+    const nodesEl  = this.querySelector('qe-nodes');
+    const meansEl  = this.querySelector('qe-means');
+    const pointsEl = this.querySelector('qe-points');
+    const edgesEl  = this.querySelector('qe-edges');
+    const labelsShorthand = this.getAttribute('labels');
+
+    return {
+      // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
+      labelNodes: parseLabelMode(
+        nodesEl?.getAttribute('label') ?? this.getAttribute('label-nodes') ?? labelsShorthand,
+        Label.DISPLAY_TYPES.ON
+      ),
+      scalePoints: this.getAttribute('scale-points') !== 'false',
+
+      // Means — presence of <qe-means> = show; absence = hide.
+      showMeans:        !!meansEl,
+      activeMeanGroups: meansEl?.getAttribute('groups') ?? null,
+      showCI:           !!meansEl && meansEl.hasAttribute('confidence'),
+      labelMeans: parseLabelMode(
+        meansEl?.getAttribute('label') ?? this.getAttribute('label-means') ?? labelsShorthand,
+        Label.DISPLAY_TYPES.ON
+      ),
+
+      // Points — presence of <qe-points> = show unit dots.
+      showPoints: !!pointsEl,
+      labelPoints: parseLabelMode(
+        pointsEl?.getAttribute('label') ?? this.getAttribute('label-points') ?? labelsShorthand,
+        Label.DISPLAY_TYPES.OFF
+      ),
+
+      // Edges — presence of <qe-edges> = draw a network.
+      showEdges:   !!edgesEl,
+      edgeGroup:   edgesEl?.getAttribute('group')   ?? null,
+      edgeUnit:    edgesEl?.getAttribute('unit')     ?? null,
+      edgeCompare: edgesEl?.getAttribute('compare')  ?? null,
+      edgeAlso:    edgesEl?.getAttribute('also')     ?? null,
+    };
+  }
+
+  attributeChangedCallback(_name: string, oldValue: string | null, newValue: string | null): void {
+    if (oldValue === newValue) return;
+    this._scheduleRerender();
   }
 
   connectedCallback(): void {
@@ -884,6 +1006,21 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
 
     this.appendChild(this.svg_element);
+
+    // Watch for child layer element additions/removals and attribute changes.
+    // Any mutation schedules a re-render via the same microtask batch used by
+    // attributeChangedCallback, so synchronous DOM mutations collapse to one pass.
+    this._childObserver = new MutationObserver(() => this._scheduleRerender());
+    this._childObserver.observe(this, {
+      childList:       true,
+      attributes:      true,
+      subtree:         true,
+      attributeFilter: [
+        'group', 'unit', 'compare', 'also',
+        'groups', 'confidence', 'label',
+        'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
+      ],
+    });
     // Find the associated ena-visual: check 'for' attribute first, then nearest
     // ancestor, then first one on the page. This lets ena-graph work as a child,
     // a sibling, or anywhere else in the document.
@@ -912,6 +1049,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         graphLayer.svg_element.appendChild(this._labelsGroup);
       }
     }
+  }
+
+  disconnectedCallback(): void {
+    this._childObserver?.disconnect();
+    this._childObserver = null;
   }
 
   create(): SVGElement {

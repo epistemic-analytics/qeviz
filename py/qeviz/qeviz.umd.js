@@ -590,35 +590,76 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       super(base);
       this.weight = weight;
     }
-    // Parse hex → HSL (h in degrees, s/l as percentages 0–100).
-    static toHSL(hex) {
+    // Parse hex → HSV (h in [0, 360), s/v in [0, 1]).
+    static toHSV(hex) {
       const { r, g, b } = Color.parseColor(hex);
       const rn = r / 255, gn = g / 255, bn = b / 255;
       const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
-      const l = (max + min) / 2;
-      if (max === min) return { h: 0, s: 0, l: l * 100 };
       const d = max - min;
-      const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      let h;
-      switch (max) {
-        case rn:
-          h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
-          break;
-        case gn:
-          h = ((bn - rn) / d + 2) / 6;
-          break;
-        default:
-          h = ((rn - gn) / d + 4) / 6;
+      const v = max;
+      const s = max === 0 ? 0 : d / max;
+      let h = 0;
+      if (d > 0) {
+        switch (max) {
+          case rn:
+            h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+            break;
+          case gn:
+            h = ((bn - rn) / d + 2) / 6;
+            break;
+          default:
+            h = ((rn - gn) / d + 4) / 6;
+        }
       }
-      return { h: h * 360, s: s * 100, l: l * 100 };
+      return { h: h * 360, s, v };
     }
-    // Returns hsla(...) with saturation and alpha both scaled by |weight|,
-    // matching the Web ENA visual convention: hue and lightness stay constant
-    // while heavy edges are vivid/opaque and light edges fade toward transparent.
+    // Convert HSV + alpha → rgba() CSS string.
+    static hsvToRgba(h, s, v, a) {
+      const c = v * s;
+      const x = c * (1 - Math.abs(h / 60 % 2 - 1));
+      const m = v - c;
+      let r = 0, g = 0, b = 0;
+      if (h < 60) {
+        r = c;
+        g = x;
+        b = 0;
+      } else if (h < 120) {
+        r = x;
+        g = c;
+        b = 0;
+      } else if (h < 180) {
+        r = 0;
+        g = c;
+        b = x;
+      } else if (h < 240) {
+        r = 0;
+        g = x;
+        b = c;
+      } else if (h < 300) {
+        r = x;
+        g = 0;
+        b = c;
+      } else {
+        r = c;
+        g = 0;
+        b = x;
+      }
+      return `rgba(${Math.round((r + m) * 255)},${Math.round((g + m) * 255)},${Math.round((b + m) * 255)},${a.toFixed(4)})`;
+    }
+    // Returns rgba(...) matching rENA's edge-color convention (ena.plot.network):
+    //   • hue and value (brightness) are preserved from the base color
+    //   • HSV saturation is set to |weight| directly (0 = grey, 1 = fully vivid)
+    //   • alpha is also set to |weight|
+    //
+    // rENA converts the input color to HSV, replaces the S component with the
+    // normalized edge weight, and additionally sets plotly element opacity to the
+    // same value.  Working in HSV (not HSL) is essential: palette colors like
+    // #EE6677 have HSL lightness ≈ 67%, so 100% HSL saturation still looks
+    // washed-out, whereas HSV value ≈ 0.93 gives the expected vivid output.
     toString() {
-      const { h, s, l } = _WeightedColor.toHSL(this.base);
+      const { h, v } = _WeightedColor.toHSV(this.base);
       const w = Math.min(1, Math.abs(this.weight));
-      return `hsla(${h.toFixed(2)}, ${(s * w).toFixed(2)}%, ${l.toFixed(2)}%, ${w.toFixed(4)})`;
+      return _WeightedColor.hsvToRgba(h, w, v, w);
     }
   };
   __name(_WeightedColor, "WeightedColor");
@@ -2030,6 +2071,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.graph = graph;
       this.__children__ = __children__;
       this.__name__ = "unnamed-line";
+      this._arrow_el = null;
       this.svg_element = this.create();
     }
     create() {
@@ -2071,10 +2113,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const weight = typeof meta.weight === "number" ? meta.weight : 0;
         const maxW = typeof meta.maxWeight === "number" ? meta.maxWeight : 1;
         const opacity = typeof meta.opacity === "number" ? meta.opacity : Math.min(1, weight / (maxW || 1));
-        const sw = (extent > 0 ? extent : 1) * 0.04 * (weight / (maxW || 1));
+        const sw = (extent > 0 ? extent : 1) * 0.011 * (weight / (maxW || 1));
         const baseColor = this.__data__._color || new Color("#000000");
         const edgeColor = new WeightedColor(baseColor, opacity).toString();
         if (this.__data__ instanceof NodeEdge) {
+          const nodeSize = typeof meta.nodeSize === "number" ? meta.nodeSize : 2;
+          const nodeR = extent * 6e-3 * nodeSize;
+          this.__data__.weight = 2 * nodeR * 0.55 * opacity;
           this.svg_element.setAttribute("d", this.__data__.path);
           this.svg_element.setAttribute("fill", edgeColor);
           this.svg_element.setAttribute("stroke", "none");
@@ -2083,6 +2128,25 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           this.svg_element.setAttribute("d", this.__data__.path);
           this.svg_element.setAttribute("fill", edgeColor);
           this.svg_element.setAttribute("stroke", "none");
+          if (meta.isDirected) {
+            try {
+              const arrow = new EdgeArrow(this.__data__);
+              const arrowPath = arrow.path;
+              if (arrowPath && !arrowPath.includes("NaN") && !arrowPath.includes("Infinity")) {
+                if (!this._arrow_el) {
+                  this._arrow_el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                  this._arrow_el.setAttribute("stroke", "none");
+                }
+                if (!this._arrow_el.parentElement) {
+                  this.parent.appendChild(this._arrow_el);
+                }
+                this._arrow_el.setAttribute("d", arrowPath);
+                const arrowColor = baseColor.toString();
+                this._arrow_el.setAttribute("fill", arrowColor);
+              }
+            } catch (_) {
+            }
+          }
         } else {
           this.svg_element.setAttribute("x1", this.__data__.from.x.toString());
           this.svg_element.setAttribute("y1", this.__data__.from.y.toString());
@@ -2104,8 +2168,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
     }
     draw() {
-      var _a;
+      var _a, _b;
       (_a = this.parent) == null ? void 0 : _a.appendChild(this.svg_element);
+      if (this._arrow_el) {
+        (_b = this.parent) == null ? void 0 : _b.appendChild(this._arrow_el);
+      }
     }
   };
   __name(_QELine, "QELine");
@@ -2129,18 +2196,21 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     get isSquare() {
       return this.__data__.shape === "rect";
     }
-    /** Half-side length for square shapes, equivalent to circle radius. */
+    /** Half-side length for squares / radius for circles, in SVG user units.
+     *  Factor 0.006 keeps code-node diameters in the same visual range as rENA
+     *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
+     */
     computeRadius() {
       const extent = this.graph.__data__.extremes.x_max;
-      return (extent > 0 ? extent : 1) * 0.015 * this.__data__.size;
+      return (extent > 0 ? extent : 1) * 6e-3 * this.__data__.size;
     }
     create() {
       const tag = this.isSquare ? "rect" : "circle";
       const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
       el.setAttribute("data-point-id", this.__data__.ID);
       el.setAttribute("fill", this.__data__.color.toString());
+      const r = this.computeRadius();
       if (this.isSquare) {
-        const r = this.computeRadius();
         el.setAttribute("x", (this.x - r).toString());
         el.setAttribute("y", (this.y - r).toString());
         el.setAttribute("width", (r * 2).toString());
@@ -2148,7 +2218,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       } else {
         el.setAttribute("cx", this.x.toString());
         el.setAttribute("cy", this.y.toString());
-        el.setAttribute("r", this.__data__.size.toString());
+        el.setAttribute("r", r.toString());
       }
       this.svg_element = el;
       el.addEventListener("click", (event) => {
@@ -2450,6 +2520,30 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   };
   __name(_QELabel, "QELabel");
   let QELabel = _QELabel;
+  const _QENodesElement = class _QENodesElement extends HTMLElement {
+  };
+  __name(_QENodesElement, "QENodesElement");
+  _QENodesElement.tagName = "qe-nodes";
+  let QENodesElement = _QENodesElement;
+  const _QEMeansElement = class _QEMeansElement extends HTMLElement {
+  };
+  __name(_QEMeansElement, "QEMeansElement");
+  _QEMeansElement.tagName = "qe-means";
+  let QEMeansElement = _QEMeansElement;
+  const _QEPointsElement = class _QEPointsElement extends HTMLElement {
+  };
+  __name(_QEPointsElement, "QEPointsElement");
+  _QEPointsElement.tagName = "qe-points";
+  let QEPointsElement = _QEPointsElement;
+  const _QEEdgesElement = class _QEEdgesElement extends HTMLElement {
+  };
+  __name(_QEEdgesElement, "QEEdgesElement");
+  _QEEdgesElement.tagName = "qe-edges";
+  let QEEdgesElement = _QEEdgesElement;
+  customElements.define(QENodesElement.tagName, QENodesElement);
+  customElements.define(QEMeansElement.tagName, QEMeansElement);
+  customElements.define(QEPointsElement.tagName, QEPointsElement);
+  customElements.define(QEEdgesElement.tagName, QEEdgesElement);
   const GROUP_PALETTE = [
     "#4477AA",
     "#EE6677",
@@ -2516,6 +2610,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.__children__ = new QEArray();
       this._hasModel = false;
       this._renderPending = false;
+      this._childObserver = null;
       this._ciRects = /* @__PURE__ */ new Map();
       this._outlierRects = /* @__PURE__ */ new Map();
       this._labelsGroup = null;
@@ -2538,6 +2633,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const unitIdCol = model.unit_id_col;
         const nodeIdCol = model.node_id_col;
         const groupColName = model.group_col;
+        const config = this._readLayerConfig();
         const groupColorMap = {};
         if (groupColName && ((_a = model.points) == null ? void 0 : _a.names)) {
           const groupCol = model.points.col(groupColName);
@@ -2553,7 +2649,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             if (!groupColorMap[g]) groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
           });
         }
-        const scalePointsEnabled = this.getAttribute("scale-points") !== "false";
+        const _allGroupNames_ = Object.keys(groupColorMap);
+        const activeMeanGroups = config.activeMeanGroups && config.activeMeanGroups.trim() ? new Set(
+          config.activeMeanGroups.split(",").map((s) => s.trim()).filter((g) => groupColorMap[g])
+          // silently drop names not in model
+        ) : new Set(_allGroupNames_);
+        const scalePointsEnabled = config.scalePoints;
         const getExtent = /* @__PURE__ */ __name((rows) => {
           let max = 0;
           rows.forEach((row) => {
@@ -2567,10 +2668,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const maxNodeExtent = ((_c = model.nodes) == null ? void 0 : _c.rows) ? getExtent(model.nodes.rows()) : 0;
         const maxPointExtent = ((_d = model.points) == null ? void 0 : _d.rows) ? getExtent(model.points.rows()) : 0;
         const pointScale = scalePointsEnabled && maxPointExtent > 0 && maxNodeExtent > 0 ? maxNodeExtent / maxPointExtent : 1;
-        const labelsShorthand = this.getAttribute("labels");
-        const labelNodes = parseLabelMode(this.getAttribute("label-nodes") ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
-        const labelMeans = parseLabelMode(this.getAttribute("label-means") ?? labelsShorthand, Label.DISPLAY_TYPES.ON);
-        const labelPoints = parseLabelMode(this.getAttribute("label-points") ?? labelsShorthand, Label.DISPLAY_TYPES.OFF);
+        const labelNodes = config.labelNodes;
+        const labelMeans = config.labelMeans;
+        const labelPoints = config.labelPoints;
         const labelSvg = this._labelsGroup;
         const rowToPoint = /* @__PURE__ */ __name((row, idCol, colorStr, scale = 1) => {
           const idIdx = row.names.indexOf(idCol);
@@ -2589,16 +2689,19 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           return pt;
         }, "rowToPoint");
         const groupSums = {};
-        if (this.hasAttribute("points") && ((_e = model.points) == null ? void 0 : _e.rows)) {
+        const showUnitPoints = config.showPoints;
+        if ((_e = model.points) == null ? void 0 : _e.rows) {
           const pointsLayer = this.__children__.search("__children__", "points");
           if (pointsLayer) {
             model.points.rows().forEach((row) => {
               const groupColIdx = groupColName ? row.names.indexOf(groupColName) : -1;
               const group = groupColIdx >= 0 ? String(row[groupColIdx]) : null;
               const colorStr = group ? groupColorMap[group] ?? "#888888" : "#888888";
-              const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
-              this.__data__.points.set(pt.ID, pt);
-              pointsLayer.__data__.objects.set(pt.ID, pt);
+              if (showUnitPoints) {
+                const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+                this.__data__.points.set(pt.ID, pt);
+                pointsLayer.__data__.objects.set(pt.ID, pt);
+              }
               if (group) {
                 const xIdx = row.names.indexOf(dims[0]);
                 const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
@@ -2614,94 +2717,46 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               }
             });
             const hasGroupsFrame = !!(((_f = model.groups) == null ? void 0 : _f.rows) && model.groups.rows().length > 0);
-            const pointsLayerSvg = pointsLayer.svg_element;
-            const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 8e-3;
-            if (hasGroupsFrame) {
-              const groupFrameNames = new Set(model.groups.rows().map((r) => r.rowName ?? String(r[0])));
-              this._ciRects.forEach((el, g) => {
-                if (!groupFrameNames.has(g)) {
-                  el.remove();
-                  this._ciRects.delete(g);
-                }
-              });
-              this._outlierRects.forEach((el, g) => {
-                if (!groupFrameNames.has(g)) {
-                  el.remove();
-                  this._outlierRects.delete(g);
-                }
-              });
-              model.groups.rows().forEach((row) => {
-                const group = row.rowName ?? String(row[0]);
-                const color = groupColorMap[group] ?? "#888888";
-                const xIdx = row.names.indexOf(dims[0]);
-                const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
-                const mx = xIdx >= 0 ? Number(row[xIdx]) * pointScale : 0;
-                const my = yIdx >= 0 ? -Number(row[yIdx]) * pointScale : 0;
-                const meanPt = new Point({
-                  ID: `mean-${group}`,
-                  dimensions: [mx, my],
-                  meta: { group }
-                });
-                meanPt.color = new Color(color);
-                meanPt.size = 1.5;
-                meanPt.shape = "rect";
-                this.__data__.points.set(meanPt.ID, meanPt);
-                pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
-                const bounds = readIntervalBounds(row, dims[0], dims[1]);
-                if (bounds) {
-                  const rect_x = bounds.x_low * pointScale;
-                  const rect_y = -bounds.y_high * pointScale;
-                  const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
-                  const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
-                  let el = this._ciRects.get(group);
-                  if (!el) {
-                    el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                    el.setAttribute("data-ci-group", group);
-                    this._ciRects.set(group, el);
-                  }
-                  el.setAttribute("x", rect_x.toString());
-                  el.setAttribute("y", rect_y.toString());
-                  el.setAttribute("width", rect_width.toString());
-                  el.setAttribute("height", rect_height.toString());
-                  el.setAttribute("fill", "none");
-                  el.setAttribute("stroke", color);
-                  el.setAttribute("stroke-width", sw.toString());
-                  el.setAttribute("stroke-opacity", "0.8");
-                  el.setAttribute("stroke-dasharray", `${sw * 4} ${sw * 3}`);
-                  if (pointsLayerSvg && !el.parentElement) {
-                    pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
-                  }
-                }
-              });
-            } else {
-              Object.entries(groupSums).forEach(([group, { x, y, n, color }]) => {
-                const meanPt = new Point({
-                  ID: `mean-${group}`,
-                  dimensions: [x / n * pointScale, -(y / n) * pointScale],
-                  meta: { group }
-                });
-                meanPt.color = new Color(color);
-                meanPt.size = 1.5;
-                meanPt.shape = "rect";
-                this.__data__.points.set(meanPt.ID, meanPt);
-                pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
-              });
-              const showCI = this.getAttribute("confidence") !== "false";
-              if (showCI) {
+            const activeGroupRows = config.showMeans && hasGroupsFrame ? model.groups.rows().filter((r) => {
+              const g = r.rowName ?? String(r[0]);
+              return activeMeanGroups.size === 0 || activeMeanGroups.has(g);
+            }) : [];
+            if (config.showMeans) {
+              const pointsLayerSvg = pointsLayer.svg_element;
+              const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 8e-3;
+              if (hasGroupsFrame) {
+                const activeNames = new Set(activeGroupRows.map((r) => r.rowName ?? String(r[0])));
                 this._ciRects.forEach((el, g) => {
-                  if (!groupSums[g]) {
+                  if (!activeNames.has(g)) {
                     el.remove();
                     this._ciRects.delete(g);
                   }
                 });
-                if ((_g = model.confidence) == null ? void 0 : _g.rows) {
-                  model.confidence.rows().forEach((row) => {
-                    const groupIdx = row.names.indexOf(groupColName ?? "group");
-                    const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
-                    if (!group) return;
-                    const color = groupColorMap[group] ?? "#888888";
-                    const bounds = readIntervalBounds(row, dims[0], dims[1]);
-                    if (!bounds) return;
+                this._outlierRects.forEach((el, g) => {
+                  if (!activeNames.has(g)) {
+                    el.remove();
+                    this._outlierRects.delete(g);
+                  }
+                });
+                activeGroupRows.forEach((row) => {
+                  const group = row.rowName ?? String(row[0]);
+                  const color = groupColorMap[group] ?? "#888888";
+                  const xIdx = row.names.indexOf(dims[0]);
+                  const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
+                  const mx = xIdx >= 0 ? Number(row[xIdx]) * pointScale : 0;
+                  const my = yIdx >= 0 ? -Number(row[yIdx]) * pointScale : 0;
+                  const meanPt = new Point({
+                    ID: `mean-${group}`,
+                    dimensions: [mx, my],
+                    meta: { group }
+                  });
+                  meanPt.color = new Color(color);
+                  meanPt.size = 4;
+                  meanPt.shape = "rect";
+                  this.__data__.points.set(meanPt.ID, meanPt);
+                  pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
+                  const bounds = readIntervalBounds(row, dims[0], dims[1]);
+                  if (bounds) {
                     const rect_x = bounds.x_low * pointScale;
                     const rect_y = -bounds.y_high * pointScale;
                     const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
@@ -2724,74 +2779,127 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                     if (pointsLayerSvg && !el.parentElement) {
                       pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                     }
+                  }
+                });
+              } else {
+                Object.entries(groupSums).forEach(([group, { x, y, n, color }]) => {
+                  const meanPt = new Point({
+                    ID: `mean-${group}`,
+                    dimensions: [x / n * pointScale, -(y / n) * pointScale],
+                    meta: { group }
                   });
-                } else {
-                  Object.entries(groupSums).forEach(([group, { x, y, x2, y2, n, color }]) => {
-                    if (n < 2) return;
-                    const μx = x / n, μy = y / n;
-                    const rawVarX = x2 / n - μx * μx;
-                    const rawVarY = y2 / n - μy * μy;
-                    const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
-                    const cx = μx * pointScale, cy = -μy * pointScale;
-                    let el = this._ciRects.get(group);
+                  meanPt.color = new Color(color);
+                  meanPt.size = 4;
+                  meanPt.shape = "rect";
+                  this.__data__.points.set(meanPt.ID, meanPt);
+                  pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
+                });
+                const showCI = config.showCI;
+                if (showCI) {
+                  this._ciRects.forEach((el, g) => {
+                    if (!groupSums[g]) {
+                      el.remove();
+                      this._ciRects.delete(g);
+                    }
+                  });
+                  if ((_g = model.confidence) == null ? void 0 : _g.rows) {
+                    model.confidence.rows().forEach((row) => {
+                      const groupIdx = row.names.indexOf(groupColName ?? "group");
+                      const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
+                      if (!group) return;
+                      const color = groupColorMap[group] ?? "#888888";
+                      const bounds = readIntervalBounds(row, dims[0], dims[1]);
+                      if (!bounds) return;
+                      const rect_x = bounds.x_low * pointScale;
+                      const rect_y = -bounds.y_high * pointScale;
+                      const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
+                      const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                      let el = this._ciRects.get(group);
+                      if (!el) {
+                        el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        el.setAttribute("data-ci-group", group);
+                        this._ciRects.set(group, el);
+                      }
+                      el.setAttribute("x", rect_x.toString());
+                      el.setAttribute("y", rect_y.toString());
+                      el.setAttribute("width", rect_width.toString());
+                      el.setAttribute("height", rect_height.toString());
+                      el.setAttribute("fill", "none");
+                      el.setAttribute("stroke", color);
+                      el.setAttribute("stroke-width", sw.toString());
+                      el.setAttribute("stroke-opacity", "0.8");
+                      el.setAttribute("stroke-dasharray", `${sw * 4} ${sw * 3}`);
+                      if (pointsLayerSvg && !el.parentElement) {
+                        pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
+                      }
+                    });
+                  } else {
+                    Object.entries(groupSums).forEach(([group, { x, y, x2, y2, n, color }]) => {
+                      if (n < 2) return;
+                      const μx = x / n, μy = y / n;
+                      const rawVarX = x2 / n - μx * μx;
+                      const rawVarY = y2 / n - μy * μy;
+                      const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
+                      const cx = μx * pointScale, cy = -μy * pointScale;
+                      let el = this._ciRects.get(group);
+                      if (!el) {
+                        el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        el.setAttribute("data-ci-group", group);
+                        this._ciRects.set(group, el);
+                      }
+                      el.setAttribute("x", (cx - halfW).toString());
+                      el.setAttribute("y", (cy - halfH).toString());
+                      el.setAttribute("width", (halfW * 2).toString());
+                      el.setAttribute("height", (halfH * 2).toString());
+                      el.setAttribute("fill", "none");
+                      el.setAttribute("stroke", color);
+                      el.setAttribute("stroke-width", sw.toString());
+                      el.setAttribute("stroke-opacity", "0.8");
+                      el.setAttribute("stroke-dasharray", `${sw * 4} ${sw * 3}`);
+                      if (pointsLayerSvg && !el.parentElement) {
+                        pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
+                      }
+                    });
+                  }
+                }
+                if ((_h = model.outlier) == null ? void 0 : _h.rows) {
+                  this._outlierRects.forEach((el, g) => {
+                    if (!groupColorMap[g]) {
+                      el.remove();
+                      this._outlierRects.delete(g);
+                    }
+                  });
+                  model.outlier.rows().forEach((row) => {
+                    const groupIdx = row.names.indexOf(groupColName ?? "group");
+                    const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
+                    if (!group) return;
+                    const color = groupColorMap[group] ?? "#888888";
+                    const bounds = readIntervalBounds(row, dims[0], dims[1]);
+                    if (!bounds) return;
+                    const rect_x = bounds.x_low * pointScale;
+                    const rect_y = -bounds.y_high * pointScale;
+                    const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
+                    const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                    let el = this._outlierRects.get(group);
                     if (!el) {
                       el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                      el.setAttribute("data-ci-group", group);
-                      this._ciRects.set(group, el);
+                      el.setAttribute("data-outlier-group", group);
+                      this._outlierRects.set(group, el);
                     }
-                    el.setAttribute("x", (cx - halfW).toString());
-                    el.setAttribute("y", (cy - halfH).toString());
-                    el.setAttribute("width", (halfW * 2).toString());
-                    el.setAttribute("height", (halfH * 2).toString());
+                    el.setAttribute("x", rect_x.toString());
+                    el.setAttribute("y", rect_y.toString());
+                    el.setAttribute("width", rect_width.toString());
+                    el.setAttribute("height", rect_height.toString());
                     el.setAttribute("fill", "none");
                     el.setAttribute("stroke", color);
                     el.setAttribute("stroke-width", sw.toString());
-                    el.setAttribute("stroke-opacity", "0.8");
-                    el.setAttribute("stroke-dasharray", `${sw * 4} ${sw * 3}`);
+                    el.setAttribute("stroke-opacity", "0.5");
+                    el.setAttribute("stroke-dasharray", `${sw * 2} ${sw * 2}`);
                     if (pointsLayerSvg && !el.parentElement) {
                       pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                     }
                   });
                 }
-              }
-              const showOutlier = this.getAttribute("outlier") !== "false";
-              if (showOutlier && ((_h = model.outlier) == null ? void 0 : _h.rows)) {
-                this._outlierRects.forEach((el, g) => {
-                  if (!groupColorMap[g]) {
-                    el.remove();
-                    this._outlierRects.delete(g);
-                  }
-                });
-                model.outlier.rows().forEach((row) => {
-                  const groupIdx = row.names.indexOf(groupColName ?? "group");
-                  const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
-                  if (!group) return;
-                  const color = groupColorMap[group] ?? "#888888";
-                  const bounds = readIntervalBounds(row, dims[0], dims[1]);
-                  if (!bounds) return;
-                  const rect_x = bounds.x_low * pointScale;
-                  const rect_y = -bounds.y_high * pointScale;
-                  const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
-                  const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
-                  let el = this._outlierRects.get(group);
-                  if (!el) {
-                    el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                    el.setAttribute("data-outlier-group", group);
-                    this._outlierRects.set(group, el);
-                  }
-                  el.setAttribute("x", rect_x.toString());
-                  el.setAttribute("y", rect_y.toString());
-                  el.setAttribute("width", rect_width.toString());
-                  el.setAttribute("height", rect_height.toString());
-                  el.setAttribute("fill", "none");
-                  el.setAttribute("stroke", color);
-                  el.setAttribute("stroke-width", sw.toString());
-                  el.setAttribute("stroke-opacity", "0.5");
-                  el.setAttribute("stroke-dasharray", `${sw * 2} ${sw * 2}`);
-                  if (pointsLayerSvg && !el.parentElement) {
-                    pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
-                  }
-                });
               }
             }
             if (labelSvg) {
@@ -2825,7 +2933,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 });
               }
               if (labelMeans !== 0) {
-                const meanGroupNames = hasGroupsFrame ? model.groups.rows().map((r) => r.rowName ?? String(r[0])) : Object.keys(groupSums);
+                const meanGroupNames = hasGroupsFrame ? activeGroupRows.map((r) => r.rowName ?? String(r[0])) : Object.keys(groupSums);
                 meanGroupNames.forEach((group) => {
                   const meanId = `mean-${group}`;
                   const pt = pointsLayer.__data__.objects.get(meanId);
@@ -2847,13 +2955,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const edgeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edges");
         const nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes");
         const edgenodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edgenodes");
+        const edgesEnabled = config.showEdges;
         if (((_i = model.nodes) == null ? void 0 : _i.rows) && nodeLayer) {
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
-            pt.size = 3;
+            pt.size = 2;
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
-          if (edgeLayer && ((_j = model.edges) == null ? void 0 : _j.rows)) {
+          if (edgesEnabled && edgeLayer && ((_j = model.edges) == null ? void 0 : _j.rows)) {
             const unitGroupMap = {};
             if (groupColName && ((_k = model.points) == null ? void 0 : _k.rows)) {
               model.points.rows().forEach((row) => {
@@ -2916,12 +3025,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const color = groupOfUnit ? groupColorMap[groupOfUnit] ?? "#888888" : "#888888";
               return { weights: getUnitEdges(id), color, label: id };
             }, "resolve");
-            const unitAttr = this.getAttribute("unit");
-            const groupAttr = this.getAttribute("group");
-            const compareAttr = this.getAttribute("compare");
-            const alsoAttr = this.getAttribute("also");
-            const allGroupNames = Object.keys(groupColorMap);
-            const primaryId = unitAttr ?? groupAttr ?? allGroupNames[0] ?? null;
+            const unitAttr = config.edgeUnit;
+            const groupAttr = config.edgeGroup;
+            const compareAttr = config.edgeCompare;
+            const alsoAttr = config.edgeAlso;
+            const primaryId = unitAttr ?? groupAttr ?? null;
             const primary = primaryId ? resolve(primaryId) : null;
             const secondaryId = compareAttr ?? alsoAttr ?? null;
             const secondary = secondaryId ? resolve(secondaryId) : null;
@@ -2950,8 +3058,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               });
             }
             const isDirected = !!model.directed;
-            const maxEdgeWeight = Math.max(1, ...drawEdges.filter((e2) => e2.pair[0] !== e2.pair[1]).map((e2) => e2.weight));
-            const maxSelfWeight = Math.max(0, ...drawEdges.filter((e2) => e2.pair[0] === e2.pair[1]).map((e2) => e2.weight));
+            const nonSelfWeights = drawEdges.filter((e2) => e2.pair[0] !== e2.pair[1]).map((e2) => e2.weight);
+            const maxEdgeWeight = nonSelfWeights.length > 0 ? Math.max(...nonSelfWeights) : 1e-9;
+            const selfWeights = drawEdges.filter((e2) => e2.pair[0] === e2.pair[1]).map((e2) => e2.weight);
+            const maxSelfWeight = selfWeights.length > 0 ? Math.max(...selfWeights) : 0;
             const nodeWeightSum = {};
             drawEdges.forEach(({ pair, weight }) => {
               const isSelf = pair[0] === pair[1];
@@ -2980,7 +3090,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
               });
             }
-            const extentForRadius = ((_l = this.__data__.extremes) == null ? void 0 : _l.x_max) ?? 1;
+            ((_l = this.__data__.extremes) == null ? void 0 : _l.x_max) ?? 1;
             drawEdges.forEach(({ col, pair, weight, color }) => {
               const fromNode = nodeLayer.__data__.objects.get(pair[0]);
               const toNode = nodeLayer.__data__.objects.get(pair[1]);
@@ -2994,9 +3104,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               let edgeLine;
               if (isSelf) {
                 edgeLine = new NodeEdge({}, fromPt, toPt);
-                const nodeR = extentForRadius * 0.015 * (nodeSizes[pair[0]] ?? 2);
-                const ratio = weight / Math.max(maxSelfWeight, 1e-9);
-                edgeLine.weight = 2 * nodeR * 0.8 * ratio;
+                edgeLine.weight = 0;
               } else if (isDirected) {
                 const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
                 const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
@@ -3014,9 +3122,16 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               edgeLine.meta = {
                 isMeanEdge: true,
                 weight,
-                maxWeight: maxEdgeWeight,
+                // NodeEdge compares within the self-loop class; cross-pair edges
+                // compare within their own class.  Store the correct denominator
+                // so QELine.update() can compute opacity and display size properly.
+                maxWeight: isSelf ? maxSelfWeight : maxEdgeWeight,
                 opacity,
-                isDirected
+                isDirected,
+                isSelf,
+                // nodeSize is needed by QELine.update() to compute the NodeEdge
+                // display radius at update time (when extremes.x_max is available).
+                nodeSize: isSelf ? nodeSizes[pair[0]] ?? 2 : void 0
               };
               const targetLayer = isSelf ? edgenodeLayer ?? edgeLayer : edgeLayer;
               targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
@@ -3057,25 +3172,24 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
     static get observedAttributes() {
       return [
-        "group",
-        "unit",
-        "compare",
-        "also",
+        "width",
+        "height",
+        "for",
+        "scale-points",
         "labels",
         "label-nodes",
         "label-means",
-        "label-points",
-        "scale-points",
-        "points",
-        "confidence",
-        "outlier"
+        "label-points"
       ];
     }
     get vizena() {
       return this._vizena;
     }
-    attributeChangedCallback(_name2, oldValue, newValue) {
-      if (oldValue === newValue) return;
+    // ── Shared re-render scheduler ───────────────────────────────────────────────
+    // Batches synchronous attribute / child-list changes into a single microtask
+    // so that e.g. adding <qe-edges> and setting its attributes in the same tick
+    // only triggers one render cycle.
+    _scheduleRerender() {
       if (!this._vizena || !this._hasModel) return;
       if (this._renderPending) return;
       this._renderPending = true;
@@ -3089,6 +3203,49 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         }));
       });
     }
+    // ── Layer configuration reader ────────────────────────────────────────────────
+    // Reads child element presence / attributes to determine what each layer
+    // should render.  Called once at the top of every model-updated handler so
+    // all rendering decisions are derived from a single snapshot.
+    _readLayerConfig() {
+      const nodesEl = this.querySelector("qe-nodes");
+      const meansEl = this.querySelector("qe-means");
+      const pointsEl = this.querySelector("qe-points");
+      const edgesEl = this.querySelector("qe-edges");
+      const labelsShorthand = this.getAttribute("labels");
+      return {
+        // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
+        labelNodes: parseLabelMode(
+          (nodesEl == null ? void 0 : nodesEl.getAttribute("label")) ?? this.getAttribute("label-nodes") ?? labelsShorthand,
+          Label.DISPLAY_TYPES.ON
+        ),
+        scalePoints: this.getAttribute("scale-points") !== "false",
+        // Means — presence of <qe-means> = show; absence = hide.
+        showMeans: !!meansEl,
+        activeMeanGroups: (meansEl == null ? void 0 : meansEl.getAttribute("groups")) ?? null,
+        showCI: !!meansEl && meansEl.hasAttribute("confidence"),
+        labelMeans: parseLabelMode(
+          (meansEl == null ? void 0 : meansEl.getAttribute("label")) ?? this.getAttribute("label-means") ?? labelsShorthand,
+          Label.DISPLAY_TYPES.ON
+        ),
+        // Points — presence of <qe-points> = show unit dots.
+        showPoints: !!pointsEl,
+        labelPoints: parseLabelMode(
+          (pointsEl == null ? void 0 : pointsEl.getAttribute("label")) ?? this.getAttribute("label-points") ?? labelsShorthand,
+          Label.DISPLAY_TYPES.OFF
+        ),
+        // Edges — presence of <qe-edges> = draw a network.
+        showEdges: !!edgesEl,
+        edgeGroup: (edgesEl == null ? void 0 : edgesEl.getAttribute("group")) ?? null,
+        edgeUnit: (edgesEl == null ? void 0 : edgesEl.getAttribute("unit")) ?? null,
+        edgeCompare: (edgesEl == null ? void 0 : edgesEl.getAttribute("compare")) ?? null,
+        edgeAlso: (edgesEl == null ? void 0 : edgesEl.getAttribute("also")) ?? null
+      };
+    }
+    attributeChangedCallback(_name2, oldValue, newValue) {
+      if (oldValue === newValue) return;
+      this._scheduleRerender();
+    }
     connectedCallback() {
       var _a;
       const w = this.getAttribute("width");
@@ -3096,6 +3253,26 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (w) this.style.width = isNaN(Number(w)) ? w : `${w}px`;
       if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
       this.appendChild(this.svg_element);
+      this._childObserver = new MutationObserver(() => this._scheduleRerender());
+      this._childObserver.observe(this, {
+        childList: true,
+        attributes: true,
+        subtree: true,
+        attributeFilter: [
+          "group",
+          "unit",
+          "compare",
+          "also",
+          "groups",
+          "confidence",
+          "label",
+          "scale-points",
+          "labels",
+          "label-nodes",
+          "label-means",
+          "label-points"
+        ]
+      });
       const forId = this.getAttribute("for");
       this._vizena = (forId ? document.getElementById(forId) : null) ?? this.closest("qe-visual") ?? ((_a = this.parentElement) == null ? void 0 : _a.closest("qe-visual")) ?? document.querySelector("qe-visual");
       this.draw();
@@ -3111,6 +3288,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           graphLayer.svg_element.appendChild(this._labelsGroup);
         }
       }
+    }
+    disconnectedCallback() {
+      var _a;
+      (_a = this._childObserver) == null ? void 0 : _a.disconnect();
+      this._childObserver = null;
     }
     create() {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -3313,10 +3495,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   exports2.DataFrameRow = DataFrameRow;
   exports2.Edge = Edge;
   exports2.Graph = Graph;
+  exports2.QEEdgesElement = QEEdgesElement;
   exports2.QEGraphElement = QEGraphElement;
   exports2.QELayer = QELayer;
   exports2.QELine = QELine;
+  exports2.QEMeansElement = QEMeansElement;
+  exports2.QENodesElement = QENodesElement;
   exports2.QEPoint = QEPoint;
+  exports2.QEPointsElement = QEPointsElement;
   exports2.QEVisualElement = QEVisualElement;
   exports2.WeightedColor = WeightedColor;
   exports2.vizENA = vizENA;

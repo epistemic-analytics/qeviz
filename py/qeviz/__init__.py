@@ -2,82 +2,81 @@
 qeviz — Python adapter for the qeviz visualization library.
 
 Converts pandas DataFrames to the qeviz ModelData format and provides
-utilities for rendering in Jupyter and exporting standalone HTML.
+a chainable plot object for Jupyter display and standalone HTML export.
 
 Quick start
 -----------
-    import pandas as pd
+::
+
     import qeviz
 
-    # Minimal example — nodes + edges only (no unit points)
-    model = qeviz.model_data(
-        nodes = nodes_df,       # columns: code, SVD1, SVD2
-        edges = edges_df,       # columns: QEUNIT, A.B, A.C, ...
-    )
-    qeviz.plot(model)           # display in Jupyter
-    qeviz.export_html(model, "output.html")   # write standalone HTML
+    # From DataFrames
+    p = qeviz.plot(nodes_df, edges_df, points_df, group_col="Condition")
+    p                                       # auto-display in Jupyter
+    p.group("FirstGame").points().show()    # chain + explicit display
 
-pyENA workflow
---------------
-    import pyena
-    import qeviz
+    # From a fitted pyENA model
+    p = qeviz.from_pyena(model, group_col="Condition")
+    p.edges("FirstGame", also="SecondGame")
+    p.edges(unit="FirstGame::alice")
 
-    # 1. Create a composite unit key (mirrors R's units_by = c("Condition","UserName"))
-    df["unit_key"] = df["Condition"] + "::" + df["UserName"]
+    # Introspect available groups / units
+    p.groups()   # ["FirstGame", "SecondGame"]
+    p.units()    # ["FirstGame::alice", ...]
 
-    # 2. Fit the ENA model
-    model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES)
+    # Export to file
+    p.export_html("output.html")
 
-    # 3. Convert to qeviz and visualise
-    qe_model = qeviz.from_pyena(model, group_col="Condition")
-    qeviz.plot(qe_model, options={"group": "FirstGame", "also": "SecondGame"})
+Chain API
+---------
+All chain methods return a *new* ``QEPlot`` — the original is unchanged.
 
-Manual workflow
----------------
-    # After running your Python ENA accumulation / rotation step you'll have:
-    #   nodes_df  — one row per code, columns: code, SVD1, SVD2
-    #   edges_df  — one row per unit, columns: QEUNIT, group, <code.code pairs>
-    #   points_df — one row per unit, columns: QEUNIT, group, SVD1, SVD2
+``plot_obj.group(*names, intervals=True)``
+    Which group means (and CI boxes) to show.  Omit names → all groups.
 
-    model = qeviz.model_data(
-        nodes     = nodes_df,
-        edges     = edges_df,
-        points    = points_df,
-        group_col = "group",
-    )
-    qeviz.plot(model, options={"group": "Treatment"})
+``plot_obj.edges(group, *, unit, compare, also, show)``
+    Which edge network to draw.  Omit → no network rendered.
+
+``plot_obj.points(show=True)``
+    Show or hide individual unit scatter dots.
+
+``plot_obj.labels(nodes, means, points)``
+    Label visibility: ``"on" | "off" | "click" | "auto"``.
 
 Dependencies
 ------------
-    Required : pandas
-    Optional : scipy  (for exact t-distribution CI; falls back to z=1.96 otherwise)
-               IPython (for inline Jupyter display)
-               pyENA  (for from_pyena())
+Required : pandas
+Optional : scipy  (exact t-distribution CIs; falls back to lookup table)
+           IPython (Jupyter inline display)
+           pyENA  (for :func:`from_pyena`)
 """
 
+from __future__ import annotations
+
+import copy
 import json
 import math
 import os
 import time
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+# ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _qe_frame(df: pd.DataFrame) -> dict:
-    """Convert a pandas DataFrame to a QEFrame dict ``{data: [...], types: {...}}``."""
+    """Convert a pandas DataFrame to a QEFrame ``{data: [...], types: {...}}``."""
     _type_map = {
-        "object":   "character",
-        "string":   "character",
-        "int64":    "integer",
-        "int32":    "integer",
-        "int16":    "integer",
-        "int8":     "integer",
-        "float64":  "numeric",
-        "float32":  "numeric",
-        "bool":     "logical",
+        "object":  "character",
+        "string":  "character",
+        "int64":   "integer",
+        "int32":   "integer",
+        "int16":   "integer",
+        "int8":    "integer",
+        "float64": "numeric",
+        "float32": "numeric",
+        "bool":    "logical",
     }
     types = {
         col: _type_map.get(str(df[col].dtype), "character")
@@ -85,7 +84,7 @@ def _qe_frame(df: pd.DataFrame) -> dict:
     }
     data = []
     for _, row in df.iterrows():
-        row_dict = {}
+        row_dict: dict = {}
         for col, val in row.items():
             if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
                 row_dict[col] = None
@@ -98,19 +97,18 @@ def _qe_frame(df: pd.DataFrame) -> dict:
 
 
 def _t_quantile(p: float, df: int) -> float:
-    """Upper t-quantile, with scipy if available and a lookup table fallback."""
+    """Upper t-quantile with scipy if available, lookup-table fallback."""
     try:
-        from scipy import stats as _stats
+        from scipy import stats as _stats   # type: ignore
         return float(_stats.t.ppf(p, df=df))
     except ImportError:
         pass
-    # Rough lookup: good to ±0.02 for df >= 2
     lut = {1: 12.706, 2: 4.303, 3: 3.182, 5: 2.571, 10: 2.228,
            20: 2.086, 30: 2.042, 60: 2.000, 120: 1.980}
     for threshold in sorted(lut):
         if df <= threshold:
             return lut[threshold]
-    return 1.960  # large df → z
+    return 1.960
 
 
 def _group_summaries(
@@ -120,32 +118,388 @@ def _group_summaries(
     conf_level: float = 0.95,
     include_ci: bool = True,
 ) -> pd.DataFrame:
-    """
-    Compute per-group mean positions and optional CI bounds.
-
-    Returns a DataFrame with columns:
-        {group_col}, {dim_cols[0]}, {dim_cols[1]},
-        and (if include_ci) {dim}.low, {dim}.high for each dim.
-    """
+    """Per-group means and optional rectangular 95 % CI bounds."""
     rows = []
     for g in points_df[group_col].unique():
-        sub = points_df[points_df[group_col] == g][dim_cols].apply(pd.to_numeric, errors="coerce")
-        n = len(sub)
+        sub = points_df[points_df[group_col] == g][dim_cols].apply(
+            pd.to_numeric, errors="coerce"
+        )
+        n     = len(sub)
         means = sub.mean()
-        row = {group_col: str(g)}
+        row: dict = {group_col: str(g)}
         for d in dim_cols:
             row[d] = float(means[d])
         if include_ci and n >= 2:
             t_val = _t_quantile((1 + conf_level) / 2, df=n - 1)
             for d in dim_cols:
-                se = float(sub[d].std(ddof=1)) / math.sqrt(n)
+                se              = float(sub[d].std(ddof=1)) / math.sqrt(n)
                 row[f"{d}.low"]  = row[d] - t_val * se
                 row[f"{d}.high"] = row[d] + t_val * se
         rows.append(row)
     return pd.DataFrame(rows)
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+def _bundle_script_tag() -> str:
+    """Return a ``<script>`` tag with the inlined UMD bundle."""
+    bundle_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "qeviz.umd.js"
+    )
+    if os.path.exists(bundle_path):
+        with open(bundle_path, "r", encoding="utf-8") as fh:
+            return f"<script>{fh.read()}</script>"
+    return '<script src="qeviz.umd.js"></script>'
+
+
+# ── QEPlot ─────────────────────────────────────────────────────────────────────
+
+class QEPlot:
+    """
+    A lazily-rendered qeviz plot.
+
+    Created by :func:`plot` or :func:`from_pyena`.  Chain :meth:`group`,
+    :meth:`edges`, :meth:`points`, and :meth:`labels` to customise the view.
+
+    Display options:
+
+    * Evaluate the object as the last expression in a Jupyter cell — the
+      ``_repr_html_`` hook triggers automatic inline display.
+    * Call :meth:`show` explicitly to display in IPython / Jupyter.
+    * Call :meth:`export_html` to write a self-contained ``.html`` file.
+
+    All chain methods return a *new* ``QEPlot`` so the original is not
+    mutated and multiple views can branch from a common base.
+    """
+
+    def __init__(
+        self,
+        model: dict,
+        title: str = "qeviz",
+        width: Union[int, str] = 700,
+        height: Union[int, str] = 500,
+    ) -> None:
+        self._model  = model
+        self._title  = title
+        # Normalise width/height to CSS strings for the <qe-graph> attribute.
+        self._width  = str(width)  if isinstance(width,  str) else f"{width}px"
+        self._height = str(height) if isinstance(height, str) else f"{height}px"
+        self._opts: dict = {}
+
+    # ── Model access ───────────────────────────────────────────────────────────
+
+    @property
+    def model(self) -> dict:
+        """The raw ModelData dict (nodes, edges, points, groups, …)."""
+        return self._model
+
+    # ── Copy helper ────────────────────────────────────────────────────────────
+
+    def _copy(self) -> "QEPlot":
+        """Return a shallow copy with an independent ``_opts`` dict."""
+        p          = QEPlot.__new__(QEPlot)
+        p._model   = self._model       # shared — model data is read-only
+        p._title   = self._title
+        p._width   = self._width
+        p._height  = self._height
+        p._opts    = dict(self._opts)  # independent copy
+        return p
+
+    # ── Introspection ──────────────────────────────────────────────────────────
+
+    def groups(self) -> list:
+        """Return the group names present in the model (from the groups frame)."""
+        frame = self._model.get("groups")
+        if not frame:
+            return []
+        group_col = self._model.get("group_col") or "group"
+        result = []
+        for row in frame.get("data", []):
+            val = row.get(group_col)
+            if val is None and row:
+                val = next(iter(row.values()))
+            if val is not None:
+                result.append(str(val))
+        return result
+
+    def units(self) -> list:
+        """Return the unit IDs present in the model's points frame."""
+        frame = self._model.get("points")
+        if not frame:
+            return []
+        id_col = self._model.get("id_col") or "QEUNIT"
+        return [
+            str(row[id_col])
+            for row in frame.get("data", [])
+            if id_col in row
+        ]
+
+    # ── Chain methods ──────────────────────────────────────────────────────────
+
+    def group(self, *names: str, intervals: bool = True) -> "QEPlot":
+        """
+        Select which group means (and optionally CI boxes) to display.
+
+        Pass one or more group names to restrict the view; omit all names to
+        show every group in the model (the default).  This is independent of
+        edge rendering — use :meth:`edges` to choose whose network to draw.
+
+        Parameters
+        ----------
+        *names      Group names to display.  Omit to show all groups.
+        intervals   Draw 95 % CI rectangles around each mean.  Default ``True``.
+        """
+        p = self._copy()
+        available = self.groups()
+        if names:
+            bad = [n for n in names if n not in available]
+            if bad:
+                raise ValueError(
+                    f"group(): name(s) not found in model: {bad!r}\n"
+                    f"Available: {available!r}"
+                )
+            p._opts["groups"] = ",".join(names)
+        else:
+            p._opts.pop("groups", None)
+        p._opts["confidence"] = intervals
+        return p
+
+    def edges(
+        self,
+        group: Optional[str] = None,
+        *,
+        unit: Optional[str] = None,
+        compare: Optional[str] = None,
+        also: Optional[str] = None,
+        show: bool = True,
+    ) -> "QEPlot":
+        """
+        Select which edge network to draw.
+
+        Supply either ``group`` (a group's mean network) or ``unit`` (an
+        individual unit's personal network) as the primary edge source.
+        Omit both to draw no network.  Pass ``show=False`` to explicitly
+        suppress any previously set edges.
+
+        Parameters
+        ----------
+        group   Group name whose mean edge network to draw.
+        unit    Unit ID for an individual network, e.g.
+                ``"FirstGame::alice"``.  Mutually exclusive with ``group``.
+        compare Second group to subtract (``group − compare``).
+        also    Second group to overlay alongside ``group``.
+        show    ``False`` suppresses all edges regardless of other args.
+        """
+        if group and unit:
+            raise ValueError("edges(): supply either 'group' or 'unit', not both.")
+
+        p = self._copy()
+        if not show:
+            p._opts["show_edges"] = False
+            for k in ("group", "unit", "compare", "also"):
+                p._opts.pop(k, None)
+            return p
+
+        available_groups = self.groups()
+        available_units  = self.units()
+
+        def _check_group(name: str, arg: str) -> None:
+            if name and name not in available_groups:
+                raise ValueError(
+                    f"edges(): {arg}={name!r} not found.\n"
+                    f"Available groups: {available_groups!r}"
+                )
+
+        _check_group(group,   "group")
+        _check_group(compare, "compare")
+        _check_group(also,    "also")
+
+        if unit and unit not in available_units:
+            raise ValueError(
+                f"edges(): unit={unit!r} not found.\n"
+                "Use .units() to see available unit IDs."
+            )
+        if compare and also:
+            raise ValueError("edges(): supply either 'compare' or 'also', not both.")
+        if unit and (compare or also):
+            raise ValueError(
+                "edges(): 'compare' and 'also' cannot be combined with 'unit'."
+            )
+
+        p._opts["show_edges"] = True
+        p._opts["group"]   = group
+        p._opts["unit"]    = unit
+        p._opts["compare"] = compare
+        p._opts["also"]    = also
+        return p
+
+    def points(self, show: bool = True) -> "QEPlot":
+        """Show or hide individual unit scatter dots."""
+        p = self._copy()
+        p._opts["show_points"] = show
+        return p
+
+    def labels(
+        self,
+        nodes:  str = "on",
+        means:  str = "on",
+        points: str = "auto",
+    ) -> "QEPlot":
+        """
+        Control label visibility.
+
+        Each argument accepts ``"on"``, ``"off"``, ``"click"``, or ``"auto"``.
+        """
+        p = self._copy()
+        p._opts["label_nodes"]  = nodes
+        p._opts["label_means"]  = means
+        p._opts["label_points"] = points
+        return p
+
+    # ── HTML rendering ─────────────────────────────────────────────────────────
+
+    def _build_graph_element(self) -> str:
+        """Build ``<qe-graph …>…</qe-graph>`` with declarative child layer elements."""
+        opts = self._opts
+        children: list[str] = []
+
+        # <qe-nodes> — always present; controls node label mode
+        node_label = opts.get("label_nodes", "on")
+        children.append(f'    <qe-nodes label="{node_label}"></qe-nodes>')
+
+        # <qe-means> — always present; groups/confidence control what is shown
+        means_parts: list[str] = []
+        if opts.get("groups"):
+            means_parts.append(f'groups="{opts["groups"]}"')
+        if opts.get("confidence", True):
+            means_parts.append("confidence")
+        means_label = opts.get("label_means", "on")
+        means_parts.append(f'label="{means_label}"')
+        children.append(f'    <qe-means {" ".join(means_parts)}></qe-means>')
+
+        # <qe-points> — only when show_points=True
+        if opts.get("show_points", False):
+            pt_label = opts.get("label_points", "auto")
+            children.append(f'    <qe-points label="{pt_label}"></qe-points>')
+
+        # <qe-edges> — only when not suppressed and a primary target is set
+        if opts.get("show_edges", True):
+            edge_parts: list[str] = []
+            if opts.get("group"):
+                edge_parts.append(f'group="{opts["group"]}"')
+            if opts.get("unit"):
+                edge_parts.append(f'unit="{opts["unit"]}"')
+            if opts.get("compare"):
+                edge_parts.append(f'compare="{opts["compare"]}"')
+            if opts.get("also"):
+                edge_parts.append(f'also="{opts["also"]}"')
+            if edge_parts:
+                children.append(
+                    f'    <qe-edges {" ".join(edge_parts)}></qe-edges>'
+                )
+
+        children_str = "\n".join(children)
+        return (
+            f'<qe-graph width="{self._width}" height="{self._height}">\n'
+            f'{children_str}\n'
+            f'  </qe-graph>'
+        )
+
+    def _build_fragment(self) -> str:
+        """HTML fragment for Jupyter inline display (no ``<html>``/``<head>``)."""
+        uid        = f"qeviz-{int(time.time() * 1000) % 100_000}"
+        model_json = json.dumps(self._model, default=str)
+        graph_elem = self._build_graph_element()
+        return (
+            f"{_bundle_script_tag()}\n"
+            f'<qe-visual id="{uid}">\n'
+            f"  {graph_elem}\n"
+            f"</qe-visual>\n"
+            f"<script>\n"
+            f"  (function(){{\n"
+            f"    document.getElementById('{uid}').setModelData({model_json});\n"
+            f"  }})();\n"
+            f"</script>"
+        )
+
+    def _build_html_doc(self) -> str:
+        """Complete self-contained HTML document."""
+        model_json = json.dumps(self._model, default=str)
+        graph_elem = self._build_graph_element()
+        bundle     = _bundle_script_tag()
+        return (
+            f"<!DOCTYPE html>\n"
+            f'<html lang="en">\n'
+            f"<head>\n"
+            f'  <meta charset="UTF-8">\n'
+            f'  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+            f"  <title>{self._title}</title>\n"
+            f"  <style>\n"
+            f"    * {{ box-sizing: border-box; margin: 0; padding: 0; }}\n"
+            f"    body {{ font-family: system-ui, sans-serif; background: #fff; }}\n"
+            f"  </style>\n"
+            f"  {bundle}\n"
+            f"</head>\n"
+            f"<body>\n"
+            f'  <qe-visual id="vis">\n'
+            f"    {graph_elem}\n"
+            f"  </qe-visual>\n"
+            f"  <script>\n"
+            f"    (function(){{\n"
+            f"      document.getElementById('vis').setModelData({model_json});\n"
+            f"    }})();\n"
+            f"  </script>\n"
+            f"</body>\n"
+            f"</html>"
+        )
+
+    # ── Display ────────────────────────────────────────────────────────────────
+
+    def show(self) -> None:
+        """
+        Display the plot inline in a Jupyter / IPython notebook.
+
+        In non-interactive environments (plain Python scripts) this falls back
+        to printing the HTML document to stdout.
+        """
+        try:
+            from IPython.display import HTML, display  # type: ignore
+            display(HTML(self._build_fragment()))
+        except ImportError:
+            print(self._build_html_doc())
+
+    def _repr_html_(self) -> str:
+        """Jupyter rich-display hook — called automatically when a cell returns a QEPlot."""
+        return self._build_fragment()
+
+    def export_html(self, path: str) -> str:
+        """
+        Write a self-contained HTML file.
+
+        The qeviz bundle is inlined — no server or external dependencies
+        required.
+
+        Parameters
+        ----------
+        path    Output file path, e.g. ``"model.html"``.
+
+        Returns
+        -------
+        str  Resolved absolute path of the written file.
+        """
+        abs_path = os.path.abspath(path)
+        with open(abs_path, "w", encoding="utf-8") as fh:
+            fh.write(self._build_html_doc())
+        return abs_path
+
+    def __repr__(self) -> str:
+        groups = self.groups()
+        n_units = len(self.units())
+        opts = {k: v for k, v in self._opts.items() if v is not None}
+        return (
+            f"<QEPlot groups={groups!r} units={n_units} opts={opts!r}>"
+        )
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
 
 def model_data(
     nodes:   pd.DataFrame,
@@ -164,29 +518,32 @@ def model_data(
     """
     Build a qeviz ModelData dict from pandas DataFrames.
 
+    This is the low-level constructor — most users will call :func:`plot`
+    directly.  Use ``model_data()`` when you need to inspect or transform the
+    serialised dict before rendering.
+
     Parameters
     ----------
-    nodes         DataFrame with one row per code node. Must contain
-                  ``node_id_col`` (default ``"code"``) plus ``x_col`` and
-                  ``y_col`` position columns.
-    edges         DataFrame with one row per unit. First column should be the
-                  unit identifier (``id_col``). Remaining columns are edge
-                  weights with dot-separated code-pair names (``"A.B"``).
-    points        Optional DataFrame of unit projection positions. Must contain
-                  ``id_col``, ``x_col``, ``y_col``, and optionally ``group_col``.
-    id_col        Unit-identifier column in ``edges`` and ``points``. Default ``"QEUNIT"``.
-    node_id_col   Node-identifier column in ``nodes``. Default ``"code"``.
-    x_col         X-position column name. Default ``"SVD1"``.
-    y_col         Y-position column name. Default ``"SVD2"``.
-    group_col     Grouping column in ``points``. When provided, pre-computed
-                  group means and CI bounds are added to the ``groups`` frame.
-    directed      ``True`` for ONA / directed networks (arrowheads). Default ``False``.
-    conf_level    Confidence level for CI boxes in the groups frame. Default 0.95.
-    include_ci    Include CI bounds in the groups frame. Default ``True``.
+    nodes         One row per code node.  Must contain ``node_id_col`` plus
+                  ``x_col`` and ``y_col`` position columns.
+    edges         One row per unit.  First column is the unit identifier
+                  (``id_col``); remaining columns are dot-separated edge
+                  weights (``"A.B"``).
+    points        Unit projection positions.  Must contain ``id_col``,
+                  ``x_col``, ``y_col``, and (optionally) ``group_col``.
+    id_col        Unit-identifier column in ``edges`` / ``points``.
+    node_id_col   Node-identifier column in ``nodes``.
+    x_col         X-position column name.
+    y_col         Y-position column name.
+    group_col     Grouping column in ``points``.  When provided, group means
+                  and CI bounds are added as the ``groups`` frame.
+    directed      ``True`` for ONA / directed networks (arrowheads).
+    conf_level    Confidence level for CI boxes.  Default 0.95.
+    include_ci    Include CI bounds in the groups frame.  Default ``True``.
 
     Returns
     -------
-    dict  A ModelData dict ready to pass to ``plot()`` or ``export_html()``.
+    dict  ModelData dict suitable for :func:`plot` or :func:`export_html`.
     """
     dim_cols = [x_col, y_col]
 
@@ -204,7 +561,6 @@ def model_data(
 
     if points is not None:
         result["points"] = _qe_frame(points)
-
         if group_col and group_col in points.columns:
             groups_df = _group_summaries(
                 points, group_col, dim_cols,
@@ -216,233 +572,113 @@ def model_data(
     return result
 
 
-def _build_attrs(opts: dict) -> str:
-    """Build the extra HTML attribute string for <qe-graph> from display options."""
-    def _attr(name: str, val) -> str:
-        return f' {name}="{val}"' if val is not None else ""
-
-    return (
-        _attr("group",        opts.get("group"))                              +
-        _attr("unit",         opts.get("unit"))                               +
-        _attr("compare",      opts.get("compare"))                            +
-        _attr("also",         opts.get("also"))                               +
-        _attr("label-nodes",  opts.get("label_nodes",  "on"))                 +
-        _attr("label-means",  opts.get("label_means",  "on"))                 +
-        _attr("label-points", opts.get("label_points", "off"))                +
-        ("" if opts.get("scale_points", True)  else ' scale-points="false"') +
-        ("" if opts.get("outlier",      True)  else ' outlier="false"')       +
-        (" points" if opts.get("show_points", False) else "")
-    )
-
-
-def _bundle_script_tag() -> str:
-    """Return a <script> tag with the inlined UMD bundle, or a src= fallback."""
-    bundle_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qeviz.umd.js")
-    if os.path.exists(bundle_path):
-        with open(bundle_path, "r", encoding="utf-8") as fh:
-            return f"<script>{fh.read()}</script>"
-    return '<script src="qeviz.umd.js"></script>'
-
-
-def _html_fragment(
-    model: dict,
-    options: Optional[dict] = None,
-    width: int = 700,
-    height: int = 600,
-) -> str:
-    """Return an HTML fragment (no <html>/<head>) suitable for Jupyter inline display."""
-    opts = options or {}
-    model_json = json.dumps(model, default=str)
-    extra_attrs = _build_attrs(opts)
-    uid = f"qeviz-{int(time.time() * 1000) % 100000}"
-    return f"""{_bundle_script_tag()}
-<style>
-  #{uid}-graph {{ display: block; width: {width}px; height: {height}px; }}
-</style>
-<qe-visual id="{uid}-vis" style="display:none"></qe-visual>
-<qe-graph id="{uid}-graph" for="{uid}-vis"
-  style="width:{width}px;height:{height}px"
-  nodes{extra_attrs}>
-</qe-graph>
-<script>
-  (function() {{
-    document.getElementById('{uid}-vis').setModelData({model_json});
-  }})();
-</script>"""
-
-
-def _html_document(
-    model: dict,
-    options: Optional[dict] = None,
-    width: int = 700,
-    height: int = 600,
-) -> str:
-    """Return a self-contained HTML document for writing to a file."""
-    opts = options or {}
-    model_json = json.dumps(model, default=str)
-    extra_attrs = _build_attrs(opts)
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ font-family: system-ui, sans-serif; background: #fff; }}
-    qe-visual {{ display: block; width: {width}px; height: {height}px; }}
-    qe-graph  {{ display: block; width: 100%; height: 100%; }}
-  </style>
-  {_bundle_script_tag()}
-</head>
-<body>
-  <qe-visual id="vis" style="display:none"></qe-visual>
-  <qe-graph id="graph" for="vis"
-    style="width:{width}px;height:{height}px"
-    nodes{extra_attrs}>
-  </qe-graph>
-  <script>
-    (function() {{
-      document.getElementById('vis').setModelData({model_json});
-    }})();
-  </script>
-</body>
-</html>"""
-
-
 def plot(
-    model: dict,
-    options: Optional[dict] = None,
-    width: int = 700,
-    height: int = 600,
-):
+    x: Union[pd.DataFrame, dict],
+    edges:  Optional[pd.DataFrame] = None,
+    points: Optional[pd.DataFrame] = None,
+    *,
+    title:     str = "qeviz",
+    width:     Union[int, str] = 700,
+    height:    Union[int, str] = 500,
+    group_col: Optional[str] = None,
+    **model_kwargs,
+) -> QEPlot:
     """
-    Display the qeviz plot inline in a Jupyter / IPython notebook.
+    Create a :class:`QEPlot`.
 
-    Falls back to returning the HTML fragment string if IPython is not available.
+    Accepts either a pre-built ModelData dict **or** raw DataFrames
+    (``nodes``, ``edges``, ``points``).
 
     Parameters
     ----------
-    model   ModelData dict from :func:`model_data`.
-    options Display options:
-              ``group``        — group name to display (default: first group)
-              ``unit``         — unit ID for a single-unit network
-              ``compare``      — second group/unit for subtraction view
-              ``also``         — second group for overlay view
-              ``label_nodes``  — ``"on"`` | ``"off"`` | ``"auto"`` | ``"click"``
-              ``label_means``  — same; default ``"on"``
-              ``label_points`` — same; default ``"off"``
-              ``show_points``  — ``True`` to render unit scatter points
-              ``scale_points`` — ``False`` to disable point coordinate scaling
-              ``outlier``      — ``False`` to hide outlier boxes
-    width, height  Plot dimensions in pixels.
-    """
-    fragment = _html_fragment(model, options, width, height)
-    try:
-        from IPython.display import HTML, display  # type: ignore
-        display(HTML(f'<div style="width:{width}px;height:{height}px">{fragment}</div>'))
-    except ImportError:
-        return fragment
-
-
-def export_html(
-    model: dict,
-    path: str,
-    options: Optional[dict] = None,
-    width: int = 700,
-    height: int = 600,
-) -> str:
-    """
-    Write a self-contained HTML file with the qeviz plot.
-
-    The qeviz bundle is inlined — no external dependencies required to open the
-    file.  Share it with collaborators, attach it to a paper submission, or open
-    it in any web browser without a server.
-
-    Parameters
-    ----------
-    model   ModelData dict from :func:`model_data`.
-    path    Output file path, e.g. ``"model.html"``.
-    options See :func:`plot` for available keys.
-    width, height  Plot dimensions in pixels.
+    x           A ModelData dict from :func:`model_data`, **or** a nodes
+                DataFrame (in which case ``edges`` must also be supplied).
+    edges       Edge-weights DataFrame (only when ``x`` is a nodes DataFrame).
+    points      Unit-positions DataFrame (optional, only with DataFrames).
+    title       Window / tab title for exported files.
+    width, height
+                Plot dimensions.  Integers are treated as pixels; strings
+                are passed through as CSS (e.g. ``"100%"``).
+    group_col   Grouping column (only when building from DataFrames).
+    **model_kwargs
+                Additional keyword arguments forwarded to :func:`model_data`
+                (e.g. ``id_col``, ``x_col``, ``directed``).
 
     Returns
     -------
-    str  The resolved absolute path of the written file.
+    QEPlot
     """
-    html = _html_document(model, options, width, height)
-    abs_path = os.path.abspath(path)
-    with open(abs_path, "w", encoding="utf-8") as fh:
-        fh.write(html)
-    return abs_path
+    if isinstance(x, dict):
+        m = x
+    else:
+        if edges is None:
+            raise TypeError("plot(): 'edges' is required when 'x' is a DataFrame.")
+        m = model_data(
+            x, edges, points,
+            group_col=group_col,
+            **model_kwargs,
+        )
+    return QEPlot(m, title=title, width=width, height=height)
 
-
-# ── pyENA integration ─────────────────────────────────────────────────────────
 
 def from_pyena(
     model,
     group_col: Optional[str] = None,
-    directed: bool = False,
-    id_col: str = "QEUNIT",
-) -> dict:
+    directed:  bool = False,
+    id_col:    str = "QEUNIT",
+    title:     str = "qeviz",
+    width:     Union[int, str] = 700,
+    height:    Union[int, str] = 500,
+) -> QEPlot:
     """
-    Convert a fitted pyENA model to a qeviz ModelData dict.
+    Convert a fitted pyENA model to a :class:`QEPlot`.
 
-    This is the Python equivalent of R's ``qe_extract()`` — it reads nodes,
-    unit positions, edge weights, and group metadata directly from a fitted
-    ``pyena.ENA`` instance so you do not need to build DataFrames by hand.
+    Python equivalent of R's ``qe_extract()`` — reads nodes, unit positions,
+    edge weights, and group metadata directly from a fitted ``pyena.ENA``
+    instance.
 
     Parameters
     ----------
-    model     A fitted ``pyena.ENA`` instance (after calling ``.fit()``).
-    group_col Column name in ``model.accum_.meta`` to use as the grouping
-              variable.  Must be a non-code column that was present in the
-              original DataFrame (e.g. ``"Condition"``).
-    directed  ``True`` for ONA / directed networks.  Default ``False``.
-    id_col    Name to give the unit-identifier column in the output frames.
-              Default ``"QEUNIT"``.
+    model     A fitted ``pyena.ENA`` instance (after ``.fit()``).
+    group_col Grouping column name in ``model.accum_.meta``
+              (e.g. ``"Condition"``).
+    directed  ``True`` for ONA / directed networks.
+    id_col    Name to give the unit-identifier column.
+    title, width, height
+              Passed to the returned :class:`QEPlot`.
 
     Returns
     -------
-    dict  A ModelData dict ready to pass to :func:`plot` or :func:`export_html`.
+    QEPlot
 
     Examples
     --------
-    Basic ENA with group comparison::
+    ::
 
-        model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES)
-        qe_model = qeviz.from_pyena(model, group_col="Condition")
-        qeviz.plot(qe_model, options={"group": "FirstGame", "also": "SecondGame"})
-
-    Mean-rotation ENA::
-
-        from pyena.rotations import mean_rotation
-        g1 = df_units["Condition"] == "FirstGame"
-        g2 = df_units["Condition"] == "SecondGame"
-        model = pyena.ENA().fit(df, "unit_key", "GroupName", CODES,
-                                rotation=mean_rotation(g1, g2))
-        qe_model = qeviz.from_pyena(model, group_col="Condition")
+        p = qeviz.from_pyena(model, group_col="Condition")
+        p.edges("FirstGame", also="SecondGame").points()  # auto-displays in Jupyter
+        p.export_html("output.html")
     """
-    # ── Nodes: one row per code with (x, y) position ─────────────────────────
+    # Nodes: code name + (x, y)
     nodes_df = pd.DataFrame({
         "code": model.codes_,
         "x":    model.positions_[:, 0],
         "y":    model.positions_[:, 1],
     })
 
-    # ── Edges: one row per unit, normalised connection weights ────────────────
-    # pyENA uses "&" separator ("Data&Design"); qeviz expects "." ("Data.Design")
+    # Edges: normalised connection weights, "&" → "." separator
     conn_cols = [c.replace("&", ".") for c in model.connection_names_]
-    edges_df = pd.DataFrame(model.normed_networks_, columns=conn_cols)
+    edges_df  = pd.DataFrame(model.normed_networks_, columns=conn_cols)
     edges_df.insert(0, id_col, model.units_)
 
-    # ── Points: one row per unit with projected (x, y) position ──────────────
+    # Points: projected (x, y) per unit
     points_df = pd.DataFrame({
         id_col: model.units_,
         "x":    model.points_[:, 0],
         "y":    model.points_[:, 1],
     })
 
-    # ── Attach group from unit-level metadata ─────────────────────────────────
+    # Attach group from unit-level metadata
     if group_col is not None:
         meta = model.accum_.meta
         if group_col not in meta.columns:
@@ -454,7 +690,7 @@ def from_pyena(
         points_df[group_col] = group_vals
         edges_df[group_col]  = group_vals
 
-    return model_data(
+    m = model_data(
         nodes       = nodes_df,
         edges       = edges_df,
         points      = points_df,
@@ -465,87 +701,47 @@ def from_pyena(
         group_col   = group_col,
         directed    = directed,
     )
+    return QEPlot(m, title=title, width=width, height=height)
 
 
-# ── ENA-namespaced convenience wrappers ───────────────────────────────────────
-# These mirror the rENA function names for a consistent cross-language API.
-
-def ena_plot_interactive(
-    nodes:   pd.DataFrame,
-    edges:   pd.DataFrame,
-    points:  Optional[pd.DataFrame] = None,
-    *,
-    group_col:   Optional[str] = None,
-    options:     Optional[dict] = None,
-    width:       int = 700,
-    height:      int = 600,
-    **model_kwargs,
-):
-    """
-    Build a ModelData dict and display an interactive qeviz plot.
-
-    Convenience wrapper that combines :func:`model_data` and :func:`plot`.
-    Mirrors ``ena.plot.interactive()`` in rENA.
-
-    Parameters
-    ----------
-    nodes, edges, points
-        See :func:`model_data`.
-    group_col
-        Grouping column in ``points``.
-    options
-        Display options dict — see :func:`plot`.
-    width, height
-        Plot dimensions in pixels.
-    **model_kwargs
-        Additional keyword arguments forwarded to :func:`model_data`
-        (e.g. ``id_col``, ``x_col``, ``conf_level``, ``directed``).
-
-    Returns
-    -------
-    dict  The ModelData dict (also displays inline when in Jupyter).
-    """
-    m = model_data(nodes, edges, points, group_col=group_col, **model_kwargs)
-    plot(m, options=options, width=width, height=height)
-    return m
-
-
-def ena_export_html(
-    nodes:   pd.DataFrame,
-    edges:   pd.DataFrame,
-    path:    str = "ena_plot.html",
-    points:  Optional[pd.DataFrame] = None,
-    *,
-    group_col:   Optional[str] = None,
-    options:     Optional[dict] = None,
-    width:       int = 700,
-    height:      int = 600,
-    **model_kwargs,
+def export_html(
+    model_or_plot: Union[dict, QEPlot],
+    path: str,
+    options: Optional[dict] = None,
+    width:  Union[int, str] = 700,
+    height: Union[int, str] = 500,
 ) -> str:
     """
-    Build a ModelData dict and write a self-contained HTML file.
+    Write a self-contained HTML file.
 
-    Convenience wrapper that combines :func:`model_data` and :func:`export_html`.
-    Mirrors ``ena.export.html()`` in rENA.
+    Accepts either a :class:`QEPlot` **or** a raw ModelData dict (legacy).
+    When a dict is supplied ``options`` / ``width`` / ``height`` are forwarded
+    to construct a temporary :class:`QEPlot`.
 
-    Parameters
-    ----------
-    nodes, edges, points
-        See :func:`model_data`.
-    path
-        Output file path. Default ``"ena_plot.html"``.
-    group_col
-        Grouping column in ``points``.
-    options
-        Display options dict — see :func:`plot`.
-    width, height
-        Plot dimensions in pixels.
-    **model_kwargs
-        Additional keyword arguments forwarded to :func:`model_data`.
-
-    Returns
-    -------
-    str  The resolved absolute path of the written file.
+    Returns the resolved absolute path of the written file.
     """
-    m = model_data(nodes, edges, points, group_col=group_col, **model_kwargs)
-    return export_html(m, path, options=options, width=width, height=height)
+    if isinstance(model_or_plot, QEPlot):
+        return model_or_plot.export_html(path)
+
+    # Legacy: raw dict path
+    p = QEPlot(model_or_plot, width=width, height=height)
+    if options:
+        # Map old flat options dict onto chain methods for backward compat.
+        group   = options.get("group")
+        unit    = options.get("unit")
+        compare = options.get("compare")
+        also    = options.get("also")
+        if group or unit or compare or also:
+            p = p.edges(group=group, unit=unit, compare=compare, also=also)
+        if options.get("show_points"):
+            p = p.points(True)
+    return p.export_html(path)
+
+
+__all__ = [
+    "QEPlot",
+    "model_data",
+    "plot",
+    "from_pyena",
+    "export_html",
+]
