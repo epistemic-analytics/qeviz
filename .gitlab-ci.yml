@@ -55,8 +55,8 @@ test-py:
 # ── cranqe deployment ──────────────────────────────────────────────────────────
 # The trigger-cranqe job is defined in the included template (curl to cranqe's
 # pipeline trigger API with FORCE_PACKAGES=${CI_PROJECT_NAME}).
-# We override only the rules to restrict it to R/ or py/ changes on main,
-# avoiding unnecessary cranqe rebuilds on JS-only commits.
+# We override only the rules to restrict it to R/, py/, or JS source changes
+# on main — JS changes rebuild the npm package via the wasm target.
 
 trigger-cranqe:
   rules:
@@ -64,3 +64,7 @@ trigger-cranqe:
       changes:
         - R/**/*
         - py/**/*
+        - src/**/*
+        - package.json
+        - vite.config.js
+        - tsconfig.json
