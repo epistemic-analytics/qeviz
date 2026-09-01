@@ -422,12 +422,9 @@ export namespace Tools {
         };
       }
       export function point_along(line: [[number, number], [number, number]], distance: number = 0): [number, number] {
-        let
-          len = Tools.Geometry.Line.length(line[0], line[1]),
-          ratio = distance / len,
-          Xt = ((1 - ratio) * line[0][0] + (ratio * line[1][0])),
-          Yt = ((1 - ratio) * line[0][1] + (ratio * line[1][1]))
-          ;
+        const ratio = distance;
+        const Xt = ((1 - ratio) * line[0][0] + (ratio * line[1][0]));
+        const Yt = ((1 - ratio) * line[0][1] + (ratio * line[1][1]));
         return [Xt, Yt];
       }
       export function midpoint(p1: [number, number], p2: [number, number], w = 0.5): [number, number] {

@@ -104,7 +104,12 @@
   <div class="card">
     <h2>Standard ENA (undirected) — <code>directed: false</code></h2>
     <qe-visual id="vis-undirected">
-      <qe-graph id="graph-undirected" width="100%" height="420" nodes labels="auto" points></qe-graph>
+      <qe-graph id="graph-undirected" width="100%" height="420">
+        <qe-nodes label="auto"></qe-nodes>
+        <qe-means confidence label="auto"></qe-means>
+        <qe-points label="auto"></qe-points>
+        <qe-edges group="FirstGame"></qe-edges>
+      </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-undirected"></div>
   </div>
@@ -112,7 +117,12 @@
   <div class="card">
     <h2>Ordered ENA (directed, with self-loops) — <code>directed: true</code></h2>
     <qe-visual id="vis-directed">
-      <qe-graph id="graph-directed" width="100%" height="420" nodes labels="auto" points></qe-graph>
+      <qe-graph id="graph-directed" width="100%" height="420">
+        <qe-nodes label="auto"></qe-nodes>
+        <qe-means confidence label="auto"></qe-means>
+        <qe-points label="auto"></qe-points>
+        <qe-edges group="FirstGame"></qe-edges>
+      </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-directed"></div>
   </div>
@@ -126,7 +136,14 @@
 
 <script type="module">
 // ── Load qeviz ────────────────────────────────────────────────────────────────
-import { QEVisualElement, QEGraphElement } from '../dist/qeviz.es.js';
+import {
+  QEVisualElement,
+  QEGraphElement,
+  QENodesElement,
+  QEMeansElement,
+  QEPointsElement,
+  QEEdgesElement
+} from '../dist/qeviz.es.js';
 
 // ── Synthetic ONA dataset ─────────────────────────────────────────────────────
 //
@@ -328,36 +345,40 @@ const groups  = ['FirstGame', 'SecondGame'];
 const graphU = document.getElementById('graph-undirected');
 const graphD = document.getElementById('graph-directed');
 
-document.getElementById('sel-mode').addEventListener('change', (e) => {
-  const val = e.target.value;
-  if (val === 'subtract') {
-    graphU.setAttribute('group',   'FirstGame');
-    graphU.setAttribute('compare', 'SecondGame');
-    graphD.setAttribute('group',   'FirstGame');
-    graphD.setAttribute('compare', 'SecondGame');
-    graphU.removeAttribute('also');
-    graphD.removeAttribute('also');
-  } else if (val === 'overlay') {
-    graphU.setAttribute('group', 'FirstGame');
-    graphU.setAttribute('also',  'SecondGame');
-    graphD.setAttribute('group', 'FirstGame');
-    graphD.setAttribute('also',  'SecondGame');
-    graphU.removeAttribute('compare');
-    graphD.removeAttribute('compare');
-  } else {
-    const g = val.replace('group-', '');
-    graphU.setAttribute('group', g);
-    graphD.setAttribute('group', g);
-    graphU.removeAttribute('compare');
-    graphD.removeAttribute('compare');
-    graphU.removeAttribute('also');
-    graphD.removeAttribute('also');
+function applyMode(graph, val) {
+  let edges = graph.querySelector('qe-edges');
+  if (!edges) {
+    edges = document.createElement('qe-edges');
+    graph.appendChild(edges);
   }
+
+  if (val === 'subtract') {
+    edges.setAttribute('group',   'FirstGame');
+    edges.setAttribute('compare', 'SecondGame');
+    edges.removeAttribute('also');
+  } else if (val === 'overlay') {
+    edges.setAttribute('group', 'FirstGame');
+    edges.setAttribute('also',  'SecondGame');
+    edges.removeAttribute('compare');
+  } else {
+    edges.setAttribute('group', val.replace('group-', ''));
+    edges.removeAttribute('compare');
+    edges.removeAttribute('also');
+  }
+}
+
+document.getElementById('sel-mode').addEventListener('change', (e) => {
+  applyMode(graphU, e.target.value);
+  applyMode(graphD, e.target.value);
 });
 
 document.getElementById('sel-labels').addEventListener('change', (e) => {
-  graphU.setAttribute('labels', e.target.value);
-  graphD.setAttribute('labels', e.target.value);
+  const mode = e.target.value;
+  [graphU, graphD].forEach(g => {
+    g.querySelectorAll('qe-nodes, qe-means, qe-points').forEach(el => {
+      el.setAttribute('label', mode);
+    });
+  });
 });
 </script>
 </body>

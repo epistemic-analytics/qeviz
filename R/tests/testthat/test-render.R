@@ -40,7 +40,7 @@ test_that("qe_html title appears in <title> tag", {
 
 test_that("qe_html graph_opts are reflected as element attributes", {
   html <- qe_html(model, graph_opts = list("label-nodes" = "off"))
-  expect_match(html, 'label-nodes="off"', fixed = TRUE)
+  expect_match(html, '<qe-nodes label="off">', fixed = TRUE)
 })
 
 # ── qe_fragment ────────────────────────────────────────────────────────────────

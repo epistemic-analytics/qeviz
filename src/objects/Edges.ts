@@ -149,11 +149,9 @@ export class EdgeArrow extends PlottedObject {
      */
     let _this = this.#edge;
     let
-      _mid = _this.from_point, //(_this.weighted_midpoint || _this.midpoint),
-      // head = __.geom.line.point_along([_mid, [_this.to.x, _this.to.y]], 0.5),
-      // nock = __.geom.line.point_along([_mid, [_this.to.x, _this.to.y]], 0.4),
-      head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.7),
-      nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.85),
+      _mid = _this.from_point,
+      head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.2),
+      nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.35),
       mid = Tools.Geometry.Line.midpoint(head, nock),
       rot_mid = Tools.Geometry.Line.rotate(_this.line, mid),
       rot_nock = Tools.Geometry.Line.rotate(_this.line, nock),
@@ -162,7 +160,7 @@ export class EdgeArrow extends PlottedObject {
       nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock),
       nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock)
       ;
-    let p = `M${head.join(' ')} ${mid_int0.join(' ')} ${nock_int0.join(' ')}  ${mid.join(' ')} ${nock_int1.join(' ')}  ${mid_int1.join(' ')}z`
+    let p = `M${head.join(' ')} ${mid_int0.join(' ')} ${nock_int0.join(' ')}  ${mid.join(' ')} ${nock_int1.join(' ')}  ${mid_int1.join(' ')}z`;
     return p;
   }
 }

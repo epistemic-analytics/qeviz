@@ -816,7 +816,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         __name(slopeIntercept, "slopeIntercept");
         Line2.slopeIntercept = slopeIntercept;
         function point_along(line, distance = 0) {
-          let len = Tools2.Geometry.Line.length(line[0], line[1]), ratio = distance / len, Xt = (1 - ratio) * line[0][0] + ratio * line[1][0], Yt = (1 - ratio) * line[0][1] + ratio * line[1][1];
+          const ratio = distance;
+          const Xt = (1 - ratio) * line[0][0] + ratio * line[1][0];
+          const Yt = (1 - ratio) * line[0][1] + ratio * line[1][1];
           return [Xt, Yt];
         }
         __name(point_along, "point_along");
@@ -1919,7 +1921,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
     get path() {
       let _this = __privateGet(this, _edge);
-      let _mid = _this.from_point, head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.7), nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.85), mid = Tools.Geometry.Line.midpoint(head, nock), rot_mid = Tools.Geometry.Line.rotate(_this.line, mid), rot_nock = Tools.Geometry.Line.rotate(_this.line, nock), mid_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_mid), mid_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_mid), nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock), nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock);
+      let _mid = _this.from_point, head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.2), nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.35), mid = Tools.Geometry.Line.midpoint(head, nock), rot_mid = Tools.Geometry.Line.rotate(_this.line, mid), rot_nock = Tools.Geometry.Line.rotate(_this.line, nock), mid_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_mid), mid_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_mid), nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock), nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock);
       let p = `M${head.join(" ")} ${mid_int0.join(" ")} ${nock_int0.join(" ")}  ${mid.join(" ")} ${nock_int1.join(" ")}  ${mid_int1.join(" ")}z`;
       return p;
     }
@@ -2624,7 +2626,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element = this.create();
       console.log("Created ena-graph svg element: ", this.svg_element);
       document.addEventListener("model-updated", (e) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
         if (this._vizena && e.target !== this._vizena) return;
         const model = e.detail;
         if (!model) return;
@@ -3090,7 +3092,6 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
               });
             }
-            ((_l = this.__data__.extremes) == null ? void 0 : _l.x_max) ?? 1;
             drawEdges.forEach(({ col, pair, weight, color }) => {
               const fromNode = nodeLayer.__data__.objects.get(pair[0]);
               const toNode = nodeLayer.__data__.objects.get(pair[1]);

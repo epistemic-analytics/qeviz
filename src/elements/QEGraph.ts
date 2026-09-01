@@ -808,7 +808,6 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             });
           }
 
-          const extentForRadius = (this.__data__ as any).extremes?.x_max ?? 1;
           drawEdges.forEach(({ col, pair, weight, color }) => {
             const fromNode = nodeLayer.__data__.objects.get(pair[0]);
             const toNode   = nodeLayer.__data__.objects.get(pair[1]);
