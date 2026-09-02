@@ -69,7 +69,28 @@ export class QEEdgesElement extends HTMLElement {
   static tagName = 'qe-edges' as const;
 }
 
+/**
+ * <qe-trajectories> — renders epistemic cognitive trajectory curves and steps.
+ * Presence = draw trajectories; absence = no trajectories.
+ *
+ * Attributes:
+ *   units        Comma-separated unit IDs to show. Omit for all.
+ *   smooth       "none" | "poly" (default "none")
+ *   degree       Polynomial degree (1..5) if smooth="poly" (default 3)
+ *   points       "true" | "false" — show discrete point markers along trajectory
+ *   tips         "true" | "false" — show leading tip marker
+ *   playhead     Number — current turn / time index for filtering/animation
+ *   line-style   "uniform" | "tapered" (default "uniform")
+ *   stroke-width Number (default 2)
+ *   stroke-width-range "min,max" for tapered lines (default "1,6")
+ *   opacity-range "min,max" for tapered lines (default "0.3,1")
+ */
+export class QETrajectoriesElement extends HTMLElement {
+  static tagName = 'qe-trajectories' as const;
+}
+
 customElements.define(QENodesElement.tagName, QENodesElement);
 customElements.define(QEMeansElement.tagName, QEMeansElement);
 customElements.define(QEPointsElement.tagName, QEPointsElement);
 customElements.define(QEEdgesElement.tagName, QEEdgesElement);
+customElements.define(QETrajectoriesElement.tagName, QETrajectoriesElement);

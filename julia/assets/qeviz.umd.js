@@ -164,7 +164,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         }
       });
       __privateSet(this, _names2, names);
-      if (rowNames && rowNames.length !== this[0].length) {
+      if (rowNames && this[0] && rowNames.length !== this[0].length) {
         throw new Error("Row names length must match the number of rows in the DataFrame.");
       }
       if (rowNames && rowNames.length > 0) {
@@ -228,6 +228,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     rows(...wh) {
       let selectors, selectedRows = [], selectedRowNames = [];
       if (wh.length === 0) {
+        if (!this[0] || this.length === 0) {
+          return [];
+        }
         const numRows = this[0].length;
         selectedRows = Array.from({ length: numRows }, (_, i) => this.getRowByIndex(i));
         selectedRowNames = __privateGet(this, _rowNames2);
@@ -286,7 +289,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       return __privateGet(this, _rowNames2);
     }
     get nrow() {
-      return this[0].length;
+      return this[0] ? this[0].length : 0;
     }
     get ncol() {
       return this.length;
@@ -352,6 +355,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
     set groups(v) {
       this._groups = v;
+    }
+    get trajectories() {
+      return this._trajectories;
+    }
+    set trajectories(v) {
+      this._trajectories = v;
     }
     get dimensions() {
       return this._dimensions;
@@ -465,7 +474,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      */
     setModelData(data) {
       var _a, _b, _c, _d;
-      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier"];
+      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier", "trajectories"];
       frameKeys.forEach((name) => {
         var _a2;
         const raw = data[name];
@@ -474,7 +483,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         let idCol;
         if (name === "nodes") {
           idCol = data.node_id_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
-        } else if (name === "edges" || name === "points") {
+        } else if (name === "edges" || name === "points" || name === "trajectories") {
           idCol = data.id_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
         } else {
           idCol = data.group_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
@@ -1665,6 +1674,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.points = /* @__PURE__ */ new Map();
       this.nodes = /* @__PURE__ */ new Map();
       this.edges = /* @__PURE__ */ new Map();
+      this.trajectories = /* @__PURE__ */ new Map();
       this.labels = /* @__PURE__ */ new Map();
       this.transform = new Transform();
       this.scale_x = 1;
@@ -1707,6 +1717,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               { name: "edgenodes", layers: [], tabindex: 0 }
             ]
           },
+          { name: "trajectories", layers: [], tabindex: 0 },
           { name: "points", layers: [], tabindex: 0 },
           { name: "labels", layers: [], tabindex: 0 }
         ] }
@@ -1874,6 +1885,166 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
   `;
   let DrawableElement = _DrawableElement;
+  function fitPolynomial(t, y, deg) {
+    const n = t.length;
+    const degree = Math.min(deg, Math.max(1, n - 1));
+    if (n <= 1) return [y[0] || 0];
+    const m = degree + 1;
+    const ATA = Array.from({ length: m }, () => new Array(m).fill(0));
+    const ATy = new Array(m).fill(0);
+    const powers = new Array(2 * degree + 1).fill(0);
+    for (let i = 0; i < n; i++) {
+      let p = 1;
+      for (let k = 0; k <= 2 * degree; k++) {
+        powers[k] += p;
+        p *= t[i];
+      }
+      let yp = y[i];
+      let tp = 1;
+      for (let k = 0; k <= degree; k++) {
+        ATy[k] += yp * tp;
+        tp *= t[i];
+      }
+    }
+    for (let r = 0; r < m; r++) {
+      for (let c = 0; c < m; c++) {
+        ATA[r][c] = powers[r + c];
+      }
+    }
+    for (let i = 0; i < m; i++) {
+      let maxRow = i;
+      for (let k = i + 1; k < m; k++) {
+        if (Math.abs(ATA[k][i]) > Math.abs(ATA[maxRow][i])) {
+          maxRow = k;
+        }
+      }
+      const tempRow = ATA[i];
+      ATA[i] = ATA[maxRow];
+      ATA[maxRow] = tempRow;
+      const tempY = ATy[i];
+      ATy[i] = ATy[maxRow];
+      ATy[maxRow] = tempY;
+      const pivot = ATA[i][i];
+      if (Math.abs(pivot) < 1e-12) continue;
+      for (let k = i + 1; k < m; k++) {
+        const factor = ATA[k][i] / pivot;
+        for (let j = i; j < m; j++) {
+          ATA[k][j] -= factor * ATA[i][j];
+        }
+        ATy[k] -= factor * ATy[i];
+      }
+    }
+    const coeffs = new Array(m).fill(0);
+    for (let i = m - 1; i >= 0; i--) {
+      let sum = ATy[i];
+      for (let j = i + 1; j < m; j++) {
+        sum -= ATA[i][j] * coeffs[j];
+      }
+      coeffs[i] = Math.abs(ATA[i][i]) > 1e-12 ? sum / ATA[i][i] : 0;
+    }
+    return coeffs;
+  }
+  __name(fitPolynomial, "fitPolynomial");
+  const _Trajectory = class _Trajectory extends PlottedObject {
+    constructor(options = {}) {
+      const defaultColor = options.color instanceof Color ? options.color : new Color(typeof options.color === "string" ? options.color : "#000000");
+      super([], {
+        ID: options.ID || `traj-${Math.random().toString(36).substring(2, 9)}`,
+        size: options.size || 1,
+        color: defaultColor,
+        highlight: null,
+        active: options.active || false,
+        meta: options.meta || {},
+        ...options
+      });
+      this._typeName = "Trajectory";
+      this.trajPoints = [];
+      this.smooth = "none";
+      this.degree = 3;
+      this.polyCoeffsX = [];
+      this.polyCoeffsY = [];
+      this.currentTime = Infinity;
+      this.showPoints = true;
+      this.showTips = true;
+      this.lineStyle = "uniform";
+      this.strokeWidth = 2;
+      this.strokeWidthRange = [1, 6];
+      this.opacityRange = [0.3, 1];
+      this.smooth = options.smooth || "none";
+      this.degree = options.degree !== void 0 ? options.degree : 3;
+      this.polyCoeffsX = options.polyCoeffsX || [];
+      this.polyCoeffsY = options.polyCoeffsY || [];
+      this.currentTime = options.currentTime !== void 0 ? options.currentTime : Infinity;
+      this.showPoints = options.showPoints !== void 0 ? options.showPoints : true;
+      this.showTips = options.showTips !== void 0 ? options.showTips : true;
+      this.lineStyle = options.lineStyle || "uniform";
+      this.strokeWidth = options.strokeWidth || 2;
+      this.strokeWidthRange = options.strokeWidthRange || [1, 6];
+      this.opacityRange = options.opacityRange || [0.3, 1];
+      if (options.points && Array.isArray(options.points)) {
+        this.trajPoints = options.points.map((p) => {
+          if (p instanceof Point) return p;
+          const pt = new Point({ dimensions: [p.x, p.y], meta: { time: p.time, label: p.label } });
+          pt.x = p.x;
+          pt.y = p.y;
+          return pt;
+        });
+      }
+    }
+    get activePoints() {
+      if (this.currentTime === Infinity) {
+        return this.trajPoints;
+      }
+      return this.trajPoints.filter((p) => {
+        const t = p.meta && typeof p.meta.time === "number" ? p.meta.time : 0;
+        return t <= this.currentTime;
+      });
+    }
+    get path() {
+      return this.pathPoints.reduce((acc, pt, idx) => {
+        return idx === 0 ? `M${pt.x},${pt.y}` : `${acc} L${pt.x},${pt.y}`;
+      }, "");
+    }
+    get pathPoints() {
+      const pts = this.activePoints;
+      if (pts.length < 2) return [];
+      if (this.smooth === "poly") {
+        let cx = this.polyCoeffsX;
+        let cy = this.polyCoeffsY;
+        if (cx.length === 0 || cy.length === 0) {
+          const tNorm = pts.map((_, i) => i / (pts.length - 1 || 1));
+          const xs = pts.map((p) => p.x);
+          const ys = pts.map((p) => p.y);
+          cx = fitPolynomial(tNorm, xs, this.degree);
+          cy = fitPolynomial(tNorm, ys, this.degree);
+        }
+        const nSteps = 100;
+        const degX = cx.length - 1;
+        const degY = cy.length - 1;
+        const pathPts = [];
+        for (let s = 0; s <= nSteps; s++) {
+          const t = s / nSteps;
+          let px = 0;
+          let py = 0;
+          let tPow = 1;
+          for (let k = 0; k <= degX; k++) {
+            px += cx[k] * tPow;
+            tPow *= t;
+          }
+          tPow = 1;
+          for (let k = 0; k <= degY; k++) {
+            py += cy[k] * tPow;
+            tPow *= t;
+          }
+          pathPts.push({ x: px, y: py });
+        }
+        return pathPts;
+      }
+      return pts.map((pt) => ({ x: pt.x, y: pt.y }));
+    }
+  };
+  __name(_Trajectory, "Trajectory");
+  let Trajectory = _Trajectory;
   const zoom_level = 1;
   const _Edge = class _Edge extends Line {
     constructor(data, from, to, weight = 0) {
@@ -2266,6 +2437,141 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   };
   __name(_QEPoint, "QEPoint");
   let QEPoint = _QEPoint;
+  const _QETrajectory = class _QETrajectory extends Drawable {
+    constructor(__data__, parent, graph, __children__ = new QEArray()) {
+      super(__data__, parent, graph, __children__);
+      this.__data__ = __data__;
+      this.parent = parent;
+      this.graph = graph;
+      this.__children__ = __children__;
+      this.__name__ = "trajectory";
+      this._path_el = null;
+      this._segments_group = null;
+      this._tip_el = null;
+      this._points_group = null;
+      this.svg_element = this.create();
+    }
+    // Trajectory styling is specified in display pixels, while SVG paths use
+    // graph coordinates. Convert at render time so marks stay legible at any scale.
+    graphUnitsForPixels(pixels) {
+      var _a;
+      const extent = this.graph.__data__.extremes.x_max || 1;
+      const width = ((_a = this.graph.svg_element) == null ? void 0 : _a.getBoundingClientRect().width) || 0;
+      return width > 0 ? pixels * (2 * extent / width) : pixels * extent * 6e-3;
+    }
+    create() {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      group.setAttribute("class", "qe-trajectory-group");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", this.__data__.color.toString());
+      path.setAttribute("stroke-width", this.graphUnitsForPixels(this.__data__.strokeWidth).toString());
+      group.appendChild(path);
+      this._path_el = path;
+      const segmentsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      segmentsGroup.setAttribute("class", "qe-trajectory-segments");
+      group.appendChild(segmentsGroup);
+      this._segments_group = segmentsGroup;
+      const pointsGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      pointsGroup.setAttribute("class", "qe-trajectory-points");
+      group.appendChild(pointsGroup);
+      this._points_group = pointsGroup;
+      if (this.__data__.showTips) {
+        const tip = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        tip.setAttribute("fill", this.__data__.color.toString());
+        tip.setAttribute("r", this.graphUnitsForPixels(4).toString());
+        tip.setAttribute("stroke", "#ffffff");
+        tip.setAttribute("stroke-width", this.graphUnitsForPixels(1.5).toString());
+        group.appendChild(tip);
+        this._tip_el = tip;
+      }
+      this.svg_element = group;
+      return group;
+    }
+    update() {
+      if (!this.svg_element) {
+        this.create();
+      }
+      if (!this.svg_element.parentElement) {
+        this.parent.appendChild(this.svg_element);
+      }
+      const dStr = this.__data__.path;
+      if (this._path_el) {
+        this._path_el.setAttribute("d", dStr);
+        this._path_el.setAttribute("stroke", this.__data__.color.toString());
+        this._path_el.setAttribute("stroke-width", this.graphUnitsForPixels(this.__data__.strokeWidth).toString());
+        this._path_el.style.display = this.__data__.lineStyle === "tapered" ? "none" : "block";
+      }
+      if (this._segments_group) {
+        this._segments_group.innerHTML = "";
+        if (this.__data__.lineStyle === "tapered") {
+          const pathPts = this.__data__.pathPoints;
+          const nSegments = pathPts.length - 1;
+          const [minWidth, maxWidth] = this.__data__.strokeWidthRange;
+          const [minOpacity, maxOpacity] = this.__data__.opacityRange;
+          for (let i = 0; i < nSegments; i++) {
+            const start = pathPts[i];
+            const end = pathPts[i + 1];
+            const progress = nSegments <= 1 ? 1 : i / (nSegments - 1);
+            const width = minWidth + (maxWidth - minWidth) * progress;
+            const opacity = minOpacity + (maxOpacity - minOpacity) * progress;
+            const segment = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            segment.setAttribute("d", `M${start.x},${start.y} L${end.x},${end.y}`);
+            segment.setAttribute("fill", "none");
+            segment.setAttribute("stroke", this.__data__.color.toString());
+            segment.setAttribute("stroke-linecap", "round");
+            segment.setAttribute("stroke-linejoin", "round");
+            segment.setAttribute("stroke-width", this.graphUnitsForPixels(width).toString());
+            segment.setAttribute("opacity", opacity.toString());
+            this._segments_group.appendChild(segment);
+          }
+          this._segments_group.style.display = "block";
+        } else {
+          this._segments_group.style.display = "none";
+        }
+      }
+      const pts = this.__data__.activePoints;
+      if (this._points_group) {
+        if (this.__data__.showPoints && pts.length > 0) {
+          this._points_group.innerHTML = "";
+          pts.forEach((pt) => {
+            var _a;
+            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            dot.setAttribute("cx", pt.x.toString());
+            dot.setAttribute("cy", pt.y.toString());
+            dot.setAttribute("r", this.graphUnitsForPixels(2.5).toString());
+            dot.setAttribute("fill", this.__data__.color.toString());
+            dot.setAttribute("opacity", "0.7");
+            (_a = this._points_group) == null ? void 0 : _a.appendChild(dot);
+          });
+          this._points_group.style.display = "block";
+        } else {
+          this._points_group.style.display = "none";
+        }
+      }
+      if (this._tip_el && this.__data__.showTips) {
+        if (pts.length > 0) {
+          const lastPt = pts[pts.length - 1];
+          this._tip_el.setAttribute("cx", lastPt.x.toString());
+          this._tip_el.setAttribute("cy", lastPt.y.toString());
+          this._tip_el.setAttribute("fill", this.__data__.color.toString());
+          this._tip_el.setAttribute("r", this.graphUnitsForPixels(4).toString());
+          this._tip_el.setAttribute("stroke-width", this.graphUnitsForPixels(1.5).toString());
+          this._tip_el.style.display = "block";
+        } else {
+          this._tip_el.style.display = "none";
+        }
+      }
+    }
+    draw() {
+      if (this.svg_element && !this.svg_element.parentElement) {
+        this.parent.appendChild(this.svg_element);
+      }
+      this.update();
+    }
+  };
+  __name(_QETrajectory, "QETrajectory");
+  let QETrajectory = _QETrajectory;
   const { ArrayTools } = Tools;
   const _QEArray = class _QEArray extends Array {
     constructor(...args) {
@@ -2325,7 +2631,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     "Edge": QELine,
     "TaperedEdge": QELine,
     "TaperedWeightedMidpointEdge": QELine,
-    "NodeEdge": QELine
+    "NodeEdge": QELine,
+    "Trajectory": QETrajectory
   };
   const _QELayer = class _QELayer {
     constructor(__data__, parent, graph, __children__ = new QEArray()) {
@@ -2349,8 +2656,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           (obj) => !this.__children__.some((child) => childId(child) === obj.ID)
         );
         adding.forEach((obj) => {
-          const obj_name = obj.constructor.name;
-          const ena_element = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph);
+          const obj_name = obj._typeName || obj.constructor.name;
+          let constructor = QEElementConstructors[obj_name];
+          if (!constructor) {
+            if (obj instanceof Trajectory) constructor = QETrajectory;
+            else if (obj instanceof Point) constructor = QEPoint;
+            else constructor = QELine;
+          }
+          const ena_element = new constructor(obj, this.svg_element, this.graph);
           this.__children__.push(ena_element);
         });
         updating.forEach((child) => {
@@ -2542,10 +2855,16 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   __name(_QEEdgesElement, "QEEdgesElement");
   _QEEdgesElement.tagName = "qe-edges";
   let QEEdgesElement = _QEEdgesElement;
+  const _QETrajectoriesElement = class _QETrajectoriesElement extends HTMLElement {
+  };
+  __name(_QETrajectoriesElement, "QETrajectoriesElement");
+  _QETrajectoriesElement.tagName = "qe-trajectories";
+  let QETrajectoriesElement = _QETrajectoriesElement;
   customElements.define(QENodesElement.tagName, QENodesElement);
   customElements.define(QEMeansElement.tagName, QEMeansElement);
   customElements.define(QEPointsElement.tagName, QEPointsElement);
   customElements.define(QEEdgesElement.tagName, QEEdgesElement);
+  customElements.define(QETrajectoriesElement.tagName, QETrajectoriesElement);
   const GROUP_PALETTE = [
     "#4477AA",
     "#EE6677",
@@ -2626,7 +2945,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element = this.create();
       console.log("Created ena-graph svg element: ", this.svg_element);
       document.addEventListener("model-updated", (e) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
         if (this._vizena && e.target !== this._vizena) return;
         const model = e.detail;
         if (!model) return;
@@ -2669,7 +2988,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         }, "getExtent");
         const maxNodeExtent = ((_c = model.nodes) == null ? void 0 : _c.rows) ? getExtent(model.nodes.rows()) : 0;
         const maxPointExtent = ((_d = model.points) == null ? void 0 : _d.rows) ? getExtent(model.points.rows()) : 0;
-        const pointScale = scalePointsEnabled && maxPointExtent > 0 && maxNodeExtent > 0 ? maxNodeExtent / maxPointExtent : 1;
+        const maxTrajExtent = ((_e = model.trajectories) == null ? void 0 : _e.rows) ? getExtent(model.trajectories.rows()) : 0;
+        const effectivePointExtent = maxPointExtent > 0 ? maxPointExtent : maxTrajExtent;
+        const pointScale = scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0 ? maxNodeExtent / effectivePointExtent : 1;
         const labelNodes = config.labelNodes;
         const labelMeans = config.labelMeans;
         const labelPoints = config.labelPoints;
@@ -2692,7 +3013,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         }, "rowToPoint");
         const groupSums = {};
         const showUnitPoints = config.showPoints;
-        if ((_e = model.points) == null ? void 0 : _e.rows) {
+        if ((_f = model.points) == null ? void 0 : _f.rows) {
           const pointsLayer = this.__children__.search("__children__", "points");
           if (pointsLayer) {
             model.points.rows().forEach((row) => {
@@ -2718,7 +3039,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 groupSums[group].n += 1;
               }
             });
-            const hasGroupsFrame = !!(((_f = model.groups) == null ? void 0 : _f.rows) && model.groups.rows().length > 0);
+            const hasGroupsFrame = !!(((_g = model.groups) == null ? void 0 : _g.rows) && model.groups.rows().length > 0);
             const activeGroupRows = config.showMeans && hasGroupsFrame ? model.groups.rows().filter((r) => {
               const g = r.rowName ?? String(r[0]);
               return activeMeanGroups.size === 0 || activeMeanGroups.has(g);
@@ -2804,7 +3125,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                       this._ciRects.delete(g);
                     }
                   });
-                  if ((_g = model.confidence) == null ? void 0 : _g.rows) {
+                  if ((_h = model.confidence) == null ? void 0 : _h.rows) {
                     model.confidence.rows().forEach((row) => {
                       const groupIdx = row.names.indexOf(groupColName ?? "group");
                       const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
@@ -2864,7 +3185,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                     });
                   }
                 }
-                if ((_h = model.outlier) == null ? void 0 : _h.rows) {
+                if ((_i = model.outlier) == null ? void 0 : _i.rows) {
                   this._outlierRects.forEach((el, g) => {
                     if (!groupColorMap[g]) {
                       el.remove();
@@ -2953,20 +3274,72 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             pointsLayer.__data__.__state__.setVariable("layer_updated", pointsLayer.__data__);
           }
         }
+        const trajectoriesLayer = this.__children__.search("__children__", "trajectories");
+        const trajectoriesEnabled = config.showTrajectories;
+        if (trajectoriesEnabled && trajectoriesLayer) {
+          trajectoriesLayer.__data__.objects.clear();
+          this.__data__.trajectories.clear();
+          const trajSource = ((_j = model.trajectories) == null ? void 0 : _j.rows) ? model.trajectories : model.points;
+          if (trajSource == null ? void 0 : trajSource.rows) {
+            const unitRows = {};
+            const selectedUnits = config.trajectoryUnits ? config.trajectoryUnits.split(",").map((s) => s.trim()) : null;
+            trajSource.rows().forEach((row) => {
+              const uIdx = row.names.indexOf(unitIdCol) >= 0 ? row.names.indexOf(unitIdCol) : row.names.indexOf("unit") >= 0 ? row.names.indexOf("unit") : row.names.indexOf("ENA_UNIT") >= 0 ? row.names.indexOf("ENA_UNIT") : -1;
+              const unit = uIdx >= 0 ? String(row[uIdx]) : row.rowName || "unit-1";
+              if (selectedUnits && !selectedUnits.includes(unit)) return;
+              const xIdx = row.names.indexOf(dims[0]);
+              const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
+              const tIdx = row.names.indexOf("time") >= 0 ? row.names.indexOf("time") : row.names.indexOf("ActivityNumber") >= 0 ? row.names.indexOf("ActivityNumber") : row.names.indexOf("RowID") >= 0 ? row.names.indexOf("RowID") : -1;
+              const time = tIdx >= 0 ? Number(row[tIdx]) : unitRows[unit] ? unitRows[unit].length + 1 : 1;
+              if (config.trajectoryPlayhead !== null && time > config.trajectoryPlayhead) return;
+              if (xIdx >= 0 && yIdx >= 0) {
+                if (!unitRows[unit]) unitRows[unit] = [];
+                unitRows[unit].push({
+                  x: Number(row[xIdx]) * pointScale,
+                  y: -Number(row[yIdx]) * pointScale,
+                  time
+                });
+              }
+            });
+            const unitKeys = Object.keys(unitRows);
+            unitKeys.forEach((unitKey, uIdx) => {
+              const rawPts = unitRows[unitKey];
+              if (rawPts.length === 0) return;
+              const colorStr = GROUP_PALETTE[uIdx % GROUP_PALETTE.length];
+              const trajObj = new Trajectory({
+                ID: `traj-${unitKey}`,
+                unitId: unitKey,
+                color: new Color(colorStr),
+                lineStyle: config.trajectoryLineStyle,
+                strokeWidth: config.trajectoryStrokeWidth,
+                strokeWidthRange: config.trajectoryStrokeWidthRange,
+                opacityRange: config.trajectoryOpacityRange,
+                smooth: config.trajectorySmooth,
+                degree: config.trajectoryDegree,
+                showPoints: config.trajectoryShowPoints,
+                showTips: config.trajectoryShowTips,
+                points: rawPts.map((p) => ({ x: p.x, y: p.y, time: p.time }))
+              });
+              this.__data__.trajectories.set(unitKey, trajObj);
+              trajectoriesLayer.__data__.objects.set(trajObj.ID, trajObj);
+            });
+          }
+          trajectoriesLayer.__data__.__state__.setVariable("layer_updated", trajectoriesLayer.__data__);
+        }
         const networkLayer = this.__children__.search("__children__", "network");
         const edgeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edges");
         const nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes");
         const edgenodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edgenodes");
         const edgesEnabled = config.showEdges;
-        if (((_i = model.nodes) == null ? void 0 : _i.rows) && nodeLayer) {
+        if (((_k = model.nodes) == null ? void 0 : _k.rows) && nodeLayer) {
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
             pt.size = 2;
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
-          if (edgesEnabled && edgeLayer && ((_j = model.edges) == null ? void 0 : _j.rows)) {
+          if (edgesEnabled && edgeLayer && ((_l = model.edges) == null ? void 0 : _l.rows)) {
             const unitGroupMap = {};
-            if (groupColName && ((_k = model.points) == null ? void 0 : _k.rows)) {
+            if (groupColName && ((_m = model.points) == null ? void 0 : _m.rows)) {
               model.points.rows().forEach((row) => {
                 const qIdx = row.names.indexOf(unitIdCol);
                 const gIdx = row.names.indexOf(groupColName);
@@ -3213,6 +3586,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const meansEl = this.querySelector("qe-means");
       const pointsEl = this.querySelector("qe-points");
       const edgesEl = this.querySelector("qe-edges");
+      const trajectoriesEl = this.querySelector("qe-trajectories");
       const labelsShorthand = this.getAttribute("labels");
       return {
         // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
@@ -3240,8 +3614,26 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         edgeGroup: (edgesEl == null ? void 0 : edgesEl.getAttribute("group")) ?? null,
         edgeUnit: (edgesEl == null ? void 0 : edgesEl.getAttribute("unit")) ?? null,
         edgeCompare: (edgesEl == null ? void 0 : edgesEl.getAttribute("compare")) ?? null,
-        edgeAlso: (edgesEl == null ? void 0 : edgesEl.getAttribute("also")) ?? null
+        edgeAlso: (edgesEl == null ? void 0 : edgesEl.getAttribute("also")) ?? null,
+        // Trajectories — presence of <qe-trajectories> = draw cognitive trajectories
+        showTrajectories: !!trajectoriesEl,
+        trajectoryUnits: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("units")) ?? null,
+        trajectorySmooth: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("smooth")) ?? "none",
+        trajectoryDegree: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("degree")) ? parseInt(trajectoriesEl.getAttribute("degree"), 10) : 3,
+        trajectoryShowPoints: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("points")) !== "false",
+        trajectoryShowTips: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("tips")) !== "false",
+        trajectoryPlayhead: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("playhead")) ? parseFloat(trajectoriesEl.getAttribute("playhead")) : null,
+        trajectoryLineStyle: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("line-style")) ?? "uniform",
+        trajectoryStrokeWidth: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("stroke-width")) ? parseFloat(trajectoriesEl.getAttribute("stroke-width")) : 2,
+        trajectoryStrokeWidthRange: this._parseNumberPair(trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("stroke-width-range"), [1, 6]),
+        trajectoryOpacityRange: this._parseNumberPair(trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("opacity-range"), [0.3, 1])
       };
+    }
+    _parseNumberPair(value, fallback) {
+      if (!value) return fallback;
+      const parts = value.split(",").map((part) => Number(part.trim()));
+      if (parts.length < 2 || !parts.every(Number.isFinite)) return fallback;
+      return [parts[0], parts[1]];
     }
     attributeChangedCallback(_name2, oldValue, newValue) {
       if (oldValue === newValue) return;
@@ -3271,7 +3663,17 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "labels",
           "label-nodes",
           "label-means",
-          "label-points"
+          "label-points",
+          "units",
+          "smooth",
+          "degree",
+          "points",
+          "tips",
+          "playhead",
+          "line-style",
+          "stroke-width",
+          "stroke-width-range",
+          "opacity-range"
         ]
       });
       const forId = this.getAttribute("for");
@@ -3504,7 +3906,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   exports2.QENodesElement = QENodesElement;
   exports2.QEPoint = QEPoint;
   exports2.QEPointsElement = QEPointsElement;
+  exports2.QETrajectoriesElement = QETrajectoriesElement;
+  exports2.QETrajectory = QETrajectory;
   exports2.QEVisualElement = QEVisualElement;
+  exports2.Trajectory = Trajectory;
   exports2.WeightedColor = WeightedColor;
   exports2.vizENA = vizENA;
   Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });

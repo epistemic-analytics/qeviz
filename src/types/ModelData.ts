@@ -30,6 +30,10 @@ export interface QEFrame {
  *             x/y position columns. An optional group column colours the
  *             points and drives group-mean computation.
  *
+ *   trajectories — ordered observations for one or more units. Must include
+ *             the unit id and x/y columns; `time`, `ActivityNumber`, or
+ *             `RowID` supplies the playhead order when present.
+ *
  *   groups  — pre-computed group summaries (means, CI bounds, outlier bounds).
  *             One row per group. Bounds use {x_col}.low / {x_col}.high
  *             (dot or underscore suffix both accepted).
@@ -53,6 +57,7 @@ export interface ModelData {
   nodes?:       QEFrame;
   edges?:       QEFrame;
   points?:      QEFrame;
+  trajectories?: QEFrame;
   groups?:      QEFrame;
   /** @deprecated use groups with bound columns instead */
   confidence?:  QEFrame;

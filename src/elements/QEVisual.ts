@@ -116,7 +116,7 @@ export class QEVisualElement extends HTMLElement {
    * rENA R package, Python package, or static JSON.
    */
   setModelData(data: ModelData): void {
-    const frameKeys: ModelKey[] = ['nodes', 'edges', 'points', 'groups', 'confidence', 'outlier'] as ModelKey[];
+    const frameKeys: ModelKey[] = ['nodes', 'edges', 'points', 'groups', 'confidence', 'outlier', 'trajectories'] as ModelKey[];
 
     // ── Step 1: ingest all frames into DataFrames ──────────────────────────
     frameKeys.forEach((name) => {
@@ -136,7 +136,7 @@ export class QEVisualElement extends HTMLElement {
       if (name === 'nodes') {
         idCol = data.node_id_col
           ?? colNames.find(c => (types[c] ?? 'character') === 'character');
-      } else if (name === 'edges' || name === 'points') {
+      } else if (name === 'edges' || name === 'points' || name === 'trajectories') {
         idCol = data.id_col
           ?? colNames.find(c => (types[c] ?? 'character') === 'character');
       } else {

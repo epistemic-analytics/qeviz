@@ -198,7 +198,7 @@ export class DataFrame extends Array<DataFrameColumn> implements DataFrameInterf
       }
     });
     this.#names = names;
-    if (rowNames && rowNames.length !== this[0].length) {
+    if (rowNames && this[0] && rowNames.length !== this[0].length) {
       throw new Error("Row names length must match the number of rows in the DataFrame.");
     }
     if (rowNames && rowNames.length > 0) {
@@ -276,6 +276,9 @@ export class DataFrame extends Array<DataFrameColumn> implements DataFrameInterf
 
     // No arguments: return all rows
     if (wh.length === 0) {
+      if (!this[0] || this.length === 0) {
+        return [];
+      }
       const numRows = this[0].length;
       selectedRows = Array.from({ length: numRows }, (_, i) => this.getRowByIndex(i));
       selectedRowNames = this.#rowNames;
@@ -376,7 +379,7 @@ export class DataFrame extends Array<DataFrameColumn> implements DataFrameInterf
   }
 
   get nrow(): number {
-    return this[0].length;
+    return this[0] ? this[0].length : 0;
   }
 
   get ncol(): number {

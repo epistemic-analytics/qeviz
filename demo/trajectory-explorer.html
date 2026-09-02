@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QEViz ETM Trajectory Explorer</title>
+  <style>
+    :root {
+      --ink: #152c34;
+      --muted: #62757b;
+      --paper: #fffdf7;
+      --wash: #e9f0eb;
+      --line: #ccd8d3;
+      --blue: #1f6f8b;
+      --coral: #df6b57;
+      --lime: #b8d65d;
+      --shadow: 0 18px 50px rgba(27, 58, 63, 0.11);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(184, 214, 93, 0.27), transparent 24rem),
+        radial-gradient(circle at 92% 18%, rgba(31, 111, 139, 0.16), transparent 28rem),
+        var(--wash);
+      font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      content: "";
+      opacity: 0.18;
+      background-image: linear-gradient(rgba(21, 44, 52, 0.13) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(21, 44, 52, 0.13) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, black, transparent 60%);
+    }
+
+    .shell {
+      width: min(1440px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 34px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.65fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--blue);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+      font-size: clamp(2.7rem, 6vw, 5.8rem);
+      font-weight: 500;
+      letter-spacing: -0.055em;
+      line-height: 0.88;
+    }
+
+    .hero-copy {
+      margin: 0;
+      padding-left: 18px;
+      border-left: 3px solid var(--lime);
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.55;
+    }
+
+    .controls {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 0.85fr auto;
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 18px;
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      border-radius: 18px;
+      background: rgba(255, 253, 247, 0.88);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .control { display: grid; gap: 7px; }
+
+    .control > span,
+    .check span {
+      color: var(--muted);
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    select,
+    input[type="range"] { width: 100%; }
+
+    select {
+      min-height: 42px;
+      padding: 0 36px 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--ink);
+      background: var(--paper);
+      font: inherit;
+    }
+
+    .check {
+      display: flex;
+      min-height: 42px;
+      align-items: center;
+      gap: 9px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--paper);
+    }
+
+    .check input { accent-color: var(--coral); }
+
+    button {
+      min-height: 42px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: 10px;
+      color: white;
+      background: var(--ink);
+      font: 750 0.82rem "Avenir Next", sans-serif;
+      cursor: pointer;
+      transition: transform 150ms ease, background 150ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); background: var(--blue); }
+
+    .time-control {
+      display: grid;
+      grid-template-columns: auto minmax(140px, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 13px 18px;
+      border-radius: 14px;
+      background: var(--ink);
+      color: white;
+    }
+
+    .time-control strong {
+      min-width: 72px;
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .time-control output {
+      min-width: 70px;
+      color: var(--lime);
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      text-align: right;
+    }
+
+    input[type="range"] { accent-color: var(--lime); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.85fr);
+      gap: 18px;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: 20px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      animation: rise 500ms ease both;
+    }
+
+    .card:nth-child(2) { animation-delay: 90ms; }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: baseline;
+      padding: 17px 20px 12px;
+      border-bottom: 1px solid #e4e9e5;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font: 500 1.35rem "Iowan Old Style", "Palatino Linotype", serif;
+    }
+
+    .card-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .plot { position: relative; padding: 10px; }
+
+    qe-visual,
+    qe-graph { display: block; width: 100%; }
+
+    #trajectory-vis,
+    #trajectory-graph { height: 590px; }
+
+    #state-vis,
+    #state-graph { height: 420px; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      padding: 12px 20px 17px;
+      border-top: 1px solid #e4e9e5;
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; }
+
+    .state-copy {
+      display: grid;
+      gap: 14px;
+      padding: 0 20px 20px;
+    }
+
+    .state-line {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 10px;
+      padding-top: 13px;
+      border-top: 1px solid #e4e9e5;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .state-line b {
+      color: var(--blue);
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .method-note {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      color: #43575d;
+      background: rgba(255, 253, 247, 0.65);
+      font-size: 0.78rem;
+      line-height: 1.55;
+    }
+
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.92em; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      .hero, .workspace { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .shell { width: min(100% - 18px, 1440px); padding-top: 22px; }
+      .controls { grid-template-columns: 1fr; }
+      .hero-copy { margin-top: 6px; }
+      .time-control { grid-template-columns: 1fr; }
+      .time-control output { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">QEViz Lab / ETM quick example</p>
+        <h1>Follow the shape of learning.</h1>
+      </div>
+      <p class="hero-copy">
+        A fixed, illustrative RescuShell-style model. Each point is a discourse state;
+        the path reveals how that state changes while the neighboring network shows
+        what is connected at the selected line.
+      </p>
+    </header>
+
+    <section class="controls" aria-label="Trajectory controls">
+      <label class="control">
+        <span>Whose trajectory</span>
+        <select id="unit-select">
+          <option value="all">Steven + Akash</option>
+          <option value="steven z::FirstGame">Steven z</option>
+          <option value="akash v::FirstGame">Akash v</option>
+        </select>
+      </label>
+      <label class="control">
+        <span>Path treatment</span>
+        <select id="smooth-select">
+          <option value="poly">Polynomial smoothing</option>
+          <option value="none">Observed steps</option>
+        </select>
+      </label>
+      <label class="control">
+        <span>Polynomial degree</span>
+        <select id="degree-select">
+          <option value="2">2 / quadratic</option>
+          <option value="3" selected>3 / cubic</option>
+          <option value="4">4 / quartic</option>
+          <option value="5">5 / quintic</option>
+        </select>
+      </label>
+      <label class="check">
+        <input id="points-toggle" type="checkbox" checked>
+        <span>Raw states</span>
+      </label>
+    </section>
+
+    <section class="time-control" aria-label="Shared timeline">
+      <button id="play-button" type="button">Play trajectory</button>
+      <input id="time-range" type="range" min="1" max="21" value="21" step="1">
+      <output id="time-output" for="time-range">Line 21</output>
+    </section>
+
+    <section class="workspace">
+      <article class="card">
+        <div class="card-head">
+          <h2>Trajectory space</h2>
+          <p id="trajectory-caption">Two units / through line 21</p>
+        </div>
+        <div class="plot">
+          <qe-visual id="trajectory-vis">
+            <qe-graph id="trajectory-graph" width="100%" height="590">
+              <qe-nodes label="on"></qe-nodes>
+              <qe-trajectories id="trajectory-layer" smooth="poly" degree="3"
+                points="true" tips="true" playhead="21" line-style="tapered"
+                stroke-width-range="1,8" opacity-range="0.3,1"></qe-trajectories>
+            </qe-graph>
+          </qe-visual>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch" style="background:#4477aa"></span>Steven z</span>
+          <span class="legend-item"><span class="swatch" style="background:#ee6677"></span>Akash v</span>
+          <span>Width and opacity increase along the revealed path.</span>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2>Network at line</h2>
+          <p id="network-caption">Steven z / line 21</p>
+        </div>
+        <div class="plot">
+          <qe-visual id="state-vis">
+            <qe-graph id="state-graph" width="100%" height="420">
+              <qe-nodes label="on"></qe-nodes>
+              <qe-points label="off"></qe-points>
+              <qe-edges id="state-edges" unit="steven z::FirstGame"></qe-edges>
+            </qe-graph>
+          </qe-visual>
+        </div>
+        <div class="state-copy">
+          <div class="state-line"><b>Speaker</b><span id="speaker-copy">Steven z</span></div>
+          <div class="state-line"><b>Moment</b><span id="moment-copy">Reviewing constraints while coordinating the final design.</span></div>
+          <div class="state-line"><b>Strongest</b><span id="edge-copy">Collaboration to Data</span></div>
+        </div>
+      </article>
+    </section>
+
+    <p class="method-note">
+      This browser-only example mirrors the visual workflow in the ETM quick-example kit.
+      Its model is fixed and illustrative: QEViz renders and explores supplied states, but
+      does not perform accumulation, door selection, LOOCV degree selection, or inference.
+    </p>
+  </main>
+
+  <script src="../R/inst/qeviz.umd.js"></script>
+  <script>
+    const nodeRows = [
+      { code: 'Data', x: 0.40, y: 0.32 },
+      { code: 'Technical Constraints', x: 0.96, y: -2.11 },
+      { code: 'Performance Parameters', x: -1.19, y: 1.32 },
+      { code: 'Client Requests', x: -0.27, y: 1.88 },
+      { code: 'Design Reasoning', x: -1.07, y: -0.36 },
+      { code: 'Collaboration', x: 2.66, y: 1.34 }
+    ];
+
+    const trajectoryRows = [
+      ['steven z::FirstGame', 'Steven z', 1, -0.15, 0.05],
+      ['steven z::FirstGame', 'Steven z', 3, -0.12, 0.18],
+      ['steven z::FirstGame', 'Steven z', 4, 0.02, 0.22],
+      ['steven z::FirstGame', 'Steven z', 5, 0.15, 0.08],
+      ['steven z::FirstGame', 'Steven z', 6, 0.28, -0.14],
+      ['steven z::FirstGame', 'Steven z', 7, 0.35, -0.28],
+      ['steven z::FirstGame', 'Steven z', 8, 0.42, -0.35],
+      ['steven z::FirstGame', 'Steven z', 9, 0.50, -0.40],
+      ['steven z::FirstGame', 'Steven z', 10, 0.48, -0.32],
+      ['steven z::FirstGame', 'Steven z', 12, 0.39, -0.18],
+      ['steven z::FirstGame', 'Steven z', 14, 0.25, 0.02],
+      ['steven z::FirstGame', 'Steven z', 16, 0.12, 0.15],
+      ['steven z::FirstGame', 'Steven z', 18, 0.05, 0.24],
+      ['steven z::FirstGame', 'Steven z', 21, -0.08, 0.30],
+      ['akash v::FirstGame', 'Akash v', 1, 0.22, -0.30],
+      ['akash v::FirstGame', 'Akash v', 3, 0.18, -0.15],
+      ['akash v::FirstGame', 'Akash v', 5, 0.05, -0.02],
+      ['akash v::FirstGame', 'Akash v', 8, -0.15, 0.12],
+      ['akash v::FirstGame', 'Akash v', 12, -0.30, 0.25],
+      ['akash v::FirstGame', 'Akash v', 15, -0.22, 0.18],
+      ['akash v::FirstGame', 'Akash v', 21, -0.10, 0.05]
+    ].map(([ENA_UNIT, UserName, ActivityNumber, x, y]) => ({
+      ENA_UNIT, UserName, Condition: 'FirstGame', ActivityNumber, x, y
+    }));
+
+    const nodeFrame = {
+      data: nodeRows,
+      types: { code: 'character', x: 'numeric', y: 'numeric' }
+    };
+
+    const trajectoryFrame = {
+      data: trajectoryRows,
+      types: {
+        ENA_UNIT: 'character', UserName: 'character', Condition: 'character',
+        ActivityNumber: 'numeric', x: 'numeric', y: 'numeric'
+      }
+    };
+
+    const edgeLabels = {
+      'Data.Collaboration': 'Data to Collaboration',
+      'Collaboration.Data': 'Collaboration to Data',
+      'Technical Constraints.Design Reasoning': 'Technical Constraints to Design Reasoning',
+      'Design Reasoning.Technical Constraints': 'Design Reasoning to Technical Constraints',
+      'Performance Parameters.Client Requests': 'Performance Parameters to Client Requests',
+      'Client Requests.Performance Parameters': 'Client Requests to Performance Parameters'
+    };
+
+    const moments = [
+      'Naming the problem and gathering evidence.',
+      'Testing requirements against technical constraints.',
+      'Coordinating evidence, requests, and design choices.',
+      'Reviewing constraints while coordinating the final design.'
+    ];
+
+    function stateRow(row, index, count) {
+      const p = count <= 1 ? 1 : index / (count - 1);
+      const steven = row.UserName === 'Steven z';
+      return {
+        ...row,
+        'Data.Collaboration': 0.12 + 0.66 * p,
+        'Collaboration.Data': 0.18 + (steven ? 0.62 : 0.42) * p,
+        'Technical Constraints.Design Reasoning': 0.72 - 0.38 * p,
+        'Design Reasoning.Technical Constraints': 0.20 + 0.48 * Math.sin(p * Math.PI),
+        'Performance Parameters.Client Requests': 0.15 + (steven ? 0.28 : 0.56) * p,
+        'Client Requests.Performance Parameters': 0.10 + 0.36 * (1 - p)
+      };
+    }
+
+    const stateRows = trajectoryRows.flatMap(row => {
+      const unitRows = trajectoryRows.filter(candidate => candidate.ENA_UNIT === row.ENA_UNIT);
+      return [stateRow(row, unitRows.indexOf(row), unitRows.length)];
+    });
+
+    const frameTypes = {
+      ENA_UNIT: 'character', UserName: 'character', Condition: 'character',
+      ActivityNumber: 'numeric', x: 'numeric', y: 'numeric'
+    };
+    Object.keys(edgeLabels).forEach(key => { frameTypes[key] = 'numeric'; });
+
+    const trajectoryModel = {
+      directed: true,
+      updated: Date.now(),
+      id_col: 'ENA_UNIT',
+      node_id_col: 'code',
+      x_col: 'x',
+      y_col: 'y',
+      group_col: 'Condition',
+      nodes: nodeFrame,
+      trajectories: trajectoryFrame
+    };
+
+    const trajectoryVis = document.getElementById('trajectory-vis');
+    const trajectoryLayer = document.getElementById('trajectory-layer');
+    const stateVis = document.getElementById('state-vis');
+    const stateEdges = document.getElementById('state-edges');
+    const unitSelect = document.getElementById('unit-select');
+    const smoothSelect = document.getElementById('smooth-select');
+    const degreeSelect = document.getElementById('degree-select');
+    const pointsToggle = document.getElementById('points-toggle');
+    const timeRange = document.getElementById('time-range');
+    const timeOutput = document.getElementById('time-output');
+    const playButton = document.getElementById('play-button');
+    let timer = null;
+
+    function selectedStateUnit() {
+      return unitSelect.value === 'all' ? 'steven z::FirstGame' : unitSelect.value;
+    }
+
+    function latestState(unit, time) {
+      const eligible = stateRows.filter(row => row.ENA_UNIT === unit && row.ActivityNumber <= time);
+      return eligible[eligible.length - 1] || stateRows.find(row => row.ENA_UNIT === unit);
+    }
+
+    function strongestEdge(row) {
+      return Object.keys(edgeLabels).reduce((best, key) => row[key] > row[best] ? key : best);
+    }
+
+    function stateModel(row) {
+      const edgeData = { ...row };
+      delete edgeData.x;
+      delete edgeData.y;
+      return {
+        directed: true,
+        updated: Date.now(),
+        id_col: 'ENA_UNIT',
+        node_id_col: 'code',
+        x_col: 'x',
+        y_col: 'y',
+        group_col: 'Condition',
+        nodes: nodeFrame,
+        points: { data: [row], types: frameTypes },
+        edges: { data: [edgeData], types: frameTypes }
+      };
+    }
+
+    function render() {
+      const time = Number(timeRange.value);
+      const unit = selectedStateUnit();
+      const row = latestState(unit, time);
+
+      trajectoryLayer.setAttribute('smooth', smoothSelect.value);
+      trajectoryLayer.setAttribute('degree', degreeSelect.value);
+      trajectoryLayer.setAttribute('points', String(pointsToggle.checked));
+      trajectoryLayer.setAttribute('playhead', String(time));
+      if (unitSelect.value === 'all') trajectoryLayer.removeAttribute('units');
+      else trajectoryLayer.setAttribute('units', unitSelect.value);
+
+      stateEdges.setAttribute('unit', unit);
+      stateVis.setModelData(stateModel(row));
+
+      degreeSelect.disabled = smoothSelect.value === 'none';
+      timeOutput.value = `Line ${time}`;
+      document.getElementById('trajectory-caption').textContent =
+        `${unitSelect.value === 'all' ? 'Two units' : row.UserName} / through line ${time}`;
+      document.getElementById('network-caption').textContent = `${row.UserName} / line ${row.ActivityNumber}`;
+      document.getElementById('speaker-copy').textContent = row.UserName;
+      document.getElementById('moment-copy').textContent = moments[Math.min(3, Math.floor(time / 6))];
+      document.getElementById('edge-copy').textContent = edgeLabels[strongestEdge(row)];
+    }
+
+    [unitSelect, smoothSelect, degreeSelect, pointsToggle].forEach(control => {
+      control.addEventListener('change', render);
+    });
+    timeRange.addEventListener('input', render);
+
+    playButton.addEventListener('click', () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        playButton.textContent = 'Play trajectory';
+        return;
+      }
+      if (Number(timeRange.value) >= 21) timeRange.value = '1';
+      playButton.textContent = 'Pause';
+      render();
+      timer = setInterval(() => {
+        const next = Number(timeRange.value) + 1;
+        if (next > 21) {
+          clearInterval(timer);
+          timer = null;
+          playButton.textContent = 'Replay';
+          return;
+        }
+        timeRange.value = String(next);
+        render();
+      }, 420);
+    });
+
+    trajectoryVis.setModelData(trajectoryModel);
+    render();
+  </script>
+</body>
+</html>

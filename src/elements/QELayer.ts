@@ -1,9 +1,11 @@
 import { Tools } from "../utils/Tools";
 import { Graph } from "../objects/Graph";
 import { Layer, LayerLike } from "../objects/Layers";
-import { PlottedObject } from "../objects/PlottedObject";
+import { PlottedObject, Point } from "../objects/PlottedObject";
+import { Trajectory } from "../objects/Trajectory";
 import { QELine } from "./QELine";
 import { QEPoint } from "./QEPoint";
+import { QETrajectory } from "./QETrajectory";
 import { QEGraphElement } from "./QEGraph";
 
 
@@ -82,6 +84,7 @@ const
       "TaperedEdge": QELine,
       "TaperedWeightedMidpointEdge": QELine,
       "NodeEdge": QELine,
+      "Trajectory": QETrajectory,
     }
 ;
 
@@ -113,8 +116,14 @@ export class QELayer implements QEElement {
       );
 
       adding.forEach((obj: PlottedObject) => {
-        const obj_name = obj.constructor.name;
-        const ena_element: QEElement = new QEElementConstructors[obj_name](obj, this.svg_element, this.graph);
+        const obj_name = (obj as any)._typeName || obj.constructor.name;
+        let constructor = QEElementConstructors[obj_name];
+        if (!constructor) {
+          if (obj instanceof Trajectory) constructor = QETrajectory;
+          else if (obj instanceof Point) constructor = QEPoint;
+          else constructor = QELine;
+        }
+        const ena_element: QEElement = new constructor(obj, this.svg_element, this.graph);
         this.__children__.push(ena_element);
       });
 

@@ -63,6 +63,7 @@ export class Graph {
   points: Map<string, Point | AxisPoint> = new Map();
   nodes: Map<string, Node> = new Map();
   edges: Map<string, Edge> = new Map();
+  trajectories: Map<string, any> = new Map();
   labels: Map<string, Label> = new Map();
   transform: Transform = new Transform();
 
@@ -108,6 +109,7 @@ export class Graph {
           { name: "edgenodes", layers: [], tabindex: 0 },
         ]
       },
+      { name: "trajectories", layers: [], tabindex: 0 },
       { name: "points", layers: [], tabindex: 0 },
 
       { name: "labels", layers: [], tabindex: 0 },

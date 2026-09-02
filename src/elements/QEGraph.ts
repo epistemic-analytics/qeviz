@@ -5,6 +5,7 @@ import QEVisualElement from "./QEVisual";
 import { DataFrameRow } from "../types/DataFrame";
 import { NodeEdge, TaperedWeightedMidpointEdge } from "../objects/Edges";
 import { Label, Line, Point } from "../objects/PlottedObject";
+import { Trajectory } from "../objects/Trajectory";
 import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
 import { QELabel } from "./QELabel";
@@ -262,8 +263,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       const maxNodeExtent  = model.nodes?.rows  ? getExtent(model.nodes.rows())  : 0;
       const maxPointExtent = model.points?.rows ? getExtent(model.points.rows()) : 0;
-      const pointScale = (scalePointsEnabled && maxPointExtent > 0 && maxNodeExtent > 0)
-        ? maxNodeExtent / maxPointExtent
+      const maxTrajExtent  = model.trajectories?.rows ? getExtent(model.trajectories.rows()) : 0;
+      const effectivePointExtent = maxPointExtent > 0 ? maxPointExtent : maxTrajExtent;
+      const pointScale = (scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0)
+        ? maxNodeExtent / effectivePointExtent
         : 1;
 
       // ── Label display modes — sourced from config (child elements or shorthand) ──
@@ -604,6 +607,70 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
           pointsLayer.__data__.__state__.setVariable('layer_updated', pointsLayer.__data__);
         }
+      }
+
+      // ── Cognitive Trajectories Layer ──────────────────────────────────────────
+      const trajectoriesLayer = this.__children__.search('__children__', 'trajectories') as QELayer;
+      const trajectoriesEnabled = config.showTrajectories;
+      if (trajectoriesEnabled && trajectoriesLayer) {
+        trajectoriesLayer.__data__.objects.clear();
+        this.__data__.trajectories.clear();
+
+        const trajSource = model.trajectories?.rows ? model.trajectories : model.points;
+        if (trajSource?.rows) {
+          const unitRows: Record<string, Array<{ x: number; y: number; time: number }>> = {};
+          const selectedUnits = config.trajectoryUnits ? config.trajectoryUnits.split(',').map(s => s.trim()) : null;
+
+          trajSource.rows().forEach((row: DataFrameRow) => {
+            const uIdx = row.names.indexOf(unitIdCol) >= 0 ? row.names.indexOf(unitIdCol) : (row.names.indexOf('unit') >= 0 ? row.names.indexOf('unit') : (row.names.indexOf('ENA_UNIT') >= 0 ? row.names.indexOf('ENA_UNIT') : -1));
+            const unit = uIdx >= 0 ? String(row[uIdx]) : (row.rowName || 'unit-1');
+
+            if (selectedUnits && !selectedUnits.includes(unit)) return;
+
+            const xIdx = row.names.indexOf(dims[0]);
+            const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
+            const tIdx = row.names.indexOf('time') >= 0 ? row.names.indexOf('time') : (row.names.indexOf('ActivityNumber') >= 0 ? row.names.indexOf('ActivityNumber') : (row.names.indexOf('RowID') >= 0 ? row.names.indexOf('RowID') : -1));
+
+            const time = tIdx >= 0 ? Number(row[tIdx]) : (unitRows[unit] ? unitRows[unit].length + 1 : 1);
+            if (config.trajectoryPlayhead !== null && time > config.trajectoryPlayhead) return;
+
+            if (xIdx >= 0 && yIdx >= 0) {
+              if (!unitRows[unit]) unitRows[unit] = [];
+              unitRows[unit].push({
+                x: Number(row[xIdx]) * pointScale,
+                y: -Number(row[yIdx]) * pointScale,
+                time
+              });
+            }
+          });
+
+          const unitKeys = Object.keys(unitRows);
+          unitKeys.forEach((unitKey, uIdx) => {
+            const rawPts = unitRows[unitKey];
+            if (rawPts.length === 0) return;
+
+            const colorStr = GROUP_PALETTE[uIdx % GROUP_PALETTE.length];
+
+            const trajObj = new Trajectory({
+              ID: `traj-${unitKey}`,
+              unitId: unitKey,
+              color: new Color(colorStr),
+              lineStyle: config.trajectoryLineStyle,
+              strokeWidth: config.trajectoryStrokeWidth,
+              strokeWidthRange: config.trajectoryStrokeWidthRange,
+              opacityRange: config.trajectoryOpacityRange,
+              smooth: config.trajectorySmooth,
+              degree: config.trajectoryDegree,
+              showPoints: config.trajectoryShowPoints,
+              showTips: config.trajectoryShowTips,
+              points: rawPts.map(p => ({ x: p.x, y: p.y, time: p.time }))
+            });
+
+            this.__data__.trajectories.set(unitKey, trajObj);
+            trajectoriesLayer.__data__.objects.set(trajObj.ID, trajObj);
+          });
+        }
+        trajectoriesLayer.__data__.__state__.setVariable('layer_updated', trajectoriesLayer.__data__);
       }
 
       // ── Mean network edges ───────────────────────────────────────────────────
@@ -951,11 +1018,24 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     edgeUnit: string | null;
     edgeCompare: string | null;
     edgeAlso: string | null;
+
+    showTrajectories: boolean;
+    trajectoryUnits: string | null;
+    trajectorySmooth: 'none' | 'poly';
+    trajectoryDegree: number;
+    trajectoryShowPoints: boolean;
+    trajectoryShowTips: boolean;
+    trajectoryPlayhead: number | null;
+    trajectoryLineStyle: 'uniform' | 'tapered';
+    trajectoryStrokeWidth: number;
+    trajectoryStrokeWidthRange: [number, number];
+    trajectoryOpacityRange: [number, number];
   } {
     const nodesEl  = this.querySelector('qe-nodes');
     const meansEl  = this.querySelector('qe-means');
     const pointsEl = this.querySelector('qe-points');
     const edgesEl  = this.querySelector('qe-edges');
+    const trajectoriesEl = this.querySelector('qe-trajectories');
     const labelsShorthand = this.getAttribute('labels');
 
     return {
@@ -988,7 +1068,27 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       edgeUnit:    edgesEl?.getAttribute('unit')     ?? null,
       edgeCompare: edgesEl?.getAttribute('compare')  ?? null,
       edgeAlso:    edgesEl?.getAttribute('also')     ?? null,
+
+      // Trajectories — presence of <qe-trajectories> = draw cognitive trajectories
+      showTrajectories:      !!trajectoriesEl,
+      trajectoryUnits:       trajectoriesEl?.getAttribute('units') ?? null,
+      trajectorySmooth:      (trajectoriesEl?.getAttribute('smooth') as 'none' | 'poly') ?? 'none',
+      trajectoryDegree:      trajectoriesEl?.getAttribute('degree') ? parseInt(trajectoriesEl.getAttribute('degree')!, 10) : 3,
+      trajectoryShowPoints:  trajectoriesEl?.getAttribute('points') !== 'false',
+      trajectoryShowTips:    trajectoriesEl?.getAttribute('tips') !== 'false',
+      trajectoryPlayhead:    trajectoriesEl?.getAttribute('playhead') ? parseFloat(trajectoriesEl.getAttribute('playhead')!) : null,
+      trajectoryLineStyle:   (trajectoriesEl?.getAttribute('line-style') as 'uniform' | 'tapered') ?? 'uniform',
+      trajectoryStrokeWidth: trajectoriesEl?.getAttribute('stroke-width') ? parseFloat(trajectoriesEl.getAttribute('stroke-width')!) : 2,
+      trajectoryStrokeWidthRange: this._parseNumberPair(trajectoriesEl?.getAttribute('stroke-width-range'), [1, 6]),
+      trajectoryOpacityRange: this._parseNumberPair(trajectoriesEl?.getAttribute('opacity-range'), [0.3, 1]),
     };
+  }
+
+  private _parseNumberPair(value: string | null | undefined, fallback: [number, number]): [number, number] {
+    if (!value) return fallback;
+    const parts = value.split(',').map(part => Number(part.trim()));
+    if (parts.length < 2 || !parts.every(Number.isFinite)) return fallback;
+    return [parts[0], parts[1]];
   }
 
   attributeChangedCallback(_name: string, oldValue: string | null, newValue: string | null): void {
@@ -1018,6 +1118,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'group', 'unit', 'compare', 'also',
         'groups', 'confidence', 'label',
         'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
+        'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
+        'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
       ],
     });
     // Find the associated ena-visual: check 'for' attribute first, then nearest
