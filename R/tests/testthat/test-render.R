@@ -1,5 +1,8 @@
 model <- qe_model_data(nodes_df, edges_df, points_df,
                        id_col = "ENA_UNIT", group_col = "Condition")
+trajectory_model <- qe_model_data(nodes_df, edges_df, points_df,
+                                  trajectories = trajectory_df,
+                                  id_col = "ENA_UNIT", group_col = "Condition")
 
 # ── qe_html ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,58 @@ test_that("qe_html title appears in <title> tag", {
 test_that("qe_html graph_opts are reflected as element attributes", {
   html <- qe_html(model, graph_opts = list("label-nodes" = "off"))
   expect_match(html, '<qe-nodes label="off">', fixed = TRUE)
+})
+
+test_that("qe_html emits trajectory element from graph opts", {
+  html <- qe_html(
+    trajectory_model,
+    graph_opts = list(
+      trajectories = TRUE,
+      "trajectory-units" = "OA.alice",
+      "trajectory-smooth" = "poly",
+      "trajectory-max-degree" = 3,
+      "trajectory-degree-selection" = "loocv_2d",
+      "trajectory-line-style" = "tapered",
+      "trajectory-stroke-width-range" = "1,8",
+      "trajectory-opacity-range" = "0.3,1"
+    )
+  )
+  expect_match(html, "<qe-trajectories", fixed = TRUE)
+  expect_match(html, 'units="OA.alice"', fixed = TRUE)
+  expect_match(html, 'smooth="poly"', fixed = TRUE)
+  expect_match(html, 'max-degree="3"', fixed = TRUE)
+  expect_match(html, 'degree-selection="loocv_2d"', fixed = TRUE)
+  expect_match(html, 'line-style="tapered"', fixed = TRUE)
+})
+
+test_that("qe_trajectories chain emits trajectory element", {
+  html <- qe_html(
+    qe_plot(trajectory_model) |>
+      qe_trajectories(units = "OA.alice", smooth = "poly",
+                      max_degree = 4, degree_selection = "fixed",
+                      line_style = "tapered",
+                      stroke_width_range = c(1, 8))
+  )
+  expect_match(html, "<qe-trajectories", fixed = TRUE)
+  expect_match(html, 'units="OA.alice"', fixed = TRUE)
+  expect_match(html, 'max-degree="4"', fixed = TRUE)
+  expect_match(html, 'degree-selection="fixed"', fixed = TRUE)
+  expect_match(html, 'stroke-width-range="1,8"', fixed = TRUE)
+})
+
+test_that("qe_trajectories rejects an invalid degree_selection", {
+  expect_error(
+    qe_plot(trajectory_model) |>
+      qe_trajectories(smooth = "poly", degree_selection = "bogus"),
+    "should be one of"
+  )
+})
+
+test_that("qe_trajectories validates requested units", {
+  expect_error(
+    qe_plot(trajectory_model) |> qe_trajectories(units = "missing"),
+    "unit\\(s\\) not found"
+  )
 })
 
 # ── qe_fragment ────────────────────────────────────────────────────────────────

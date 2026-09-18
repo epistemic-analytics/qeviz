@@ -14,6 +14,8 @@ export type { ModelData, QEFrame, ONAModelData, ENAModelData, ENADataFrame } fro
 export { Graph } from './objects/Graph.js';
 export { Edge } from './objects/Edges.js';
 export { Trajectory } from './objects/Trajectory.js';
+export { fitTrajectory, selectDegree, sampleCurve, nearOriginFilter, TRAJECTORY_ZERO_EPS } from './objects/polyfit.js';
+export type { XY, DegreeSelection, TrajectoryFit } from './objects/polyfit.js';
 export { Color, WeightedColor } from './objects/Color.js';
 
 export { DataFrame, DataFrameRow, DataFrameColumn, DataFrameColumnType } from './types/DataFrame.js'

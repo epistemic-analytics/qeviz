@@ -1,5 +1,6 @@
 import { PlottedObject, PlottedObjectOptions, Point } from './PlottedObject';
 import { Color } from './Color';
+import { DegreeSelection, fitTrajectory, sampleCurve } from './polyfit';
 
 export interface TrajectoryOptions {
   ID?: string;
@@ -7,6 +8,8 @@ export interface TrajectoryOptions {
   points?: Point[] | { x: number; y: number; time?: number; label?: string }[];
   color?: Color | string;
   smooth?: 'none' | 'poly' | 'spline';
+  maxDegree?: number;
+  degreeSelection?: DegreeSelection;
   polyCoeffsX?: number[];
   polyCoeffsY?: number[];
   currentTime?: number;
@@ -22,79 +25,16 @@ export interface TrajectoryOptions {
   [key: string]: any;
 }
 
-function fitPolynomial(t: number[], y: number[], deg: number): number[] {
-  const n = t.length;
-  const degree = Math.min(deg, Math.max(1, n - 1));
-  if (n <= 1) return [y[0] || 0];
-
-  const m = degree + 1;
-  const ATA: number[][] = Array.from({ length: m }, () => new Array(m).fill(0));
-  const ATy: number[] = new Array(m).fill(0);
-
-  const powers = new Array(2 * degree + 1).fill(0);
-  for (let i = 0; i < n; i++) {
-    let p = 1;
-    for (let k = 0; k <= 2 * degree; k++) {
-      powers[k] += p;
-      p *= t[i];
-    }
-    let yp = y[i];
-    let tp = 1;
-    for (let k = 0; k <= degree; k++) {
-      ATy[k] += yp * tp;
-      tp *= t[i];
-    }
-  }
-
-  for (let r = 0; r < m; r++) {
-    for (let c = 0; c < m; c++) {
-      ATA[r][c] = powers[r + c];
-    }
-  }
-
-  for (let i = 0; i < m; i++) {
-    let maxRow = i;
-    for (let k = i + 1; k < m; k++) {
-      if (Math.abs(ATA[k][i]) > Math.abs(ATA[maxRow][i])) {
-        maxRow = k;
-      }
-    }
-    const tempRow = ATA[i];
-    ATA[i] = ATA[maxRow];
-    ATA[maxRow] = tempRow;
-    const tempY = ATy[i];
-    ATy[i] = ATy[maxRow];
-    ATy[maxRow] = tempY;
-
-    const pivot = ATA[i][i];
-    if (Math.abs(pivot) < 1e-12) continue;
-
-    for (let k = i + 1; k < m; k++) {
-      const factor = ATA[k][i] / pivot;
-      for (let j = i; j < m; j++) {
-        ATA[k][j] -= factor * ATA[i][j];
-      }
-      ATy[k] -= factor * ATy[i];
-    }
-  }
-
-  const coeffs = new Array(m).fill(0);
-  for (let i = m - 1; i >= 0; i--) {
-    let sum = ATy[i];
-    for (let j = i + 1; j < m; j++) {
-      sum -= ATA[i][j] * coeffs[j];
-    }
-    coeffs[i] = Math.abs(ATA[i][i]) > 1e-12 ? sum / ATA[i][i] : 0;
-  }
-
-  return coeffs;
-}
+const TRAJECTORY_CURVE_STEPS = 100;
 
 export class Trajectory extends PlottedObject {
   readonly _typeName: string = 'Trajectory';
   trajPoints: Point[] = [];
   smooth: 'none' | 'poly' | 'spline' = 'none';
-  degree: number = 3;
+  maxDegree: number = 3;
+  degreeSelection: DegreeSelection = 'loocv_2d';
+  /** Degree chosen at the most recent fit; -1 until a poly curve is built. */
+  selectedDegree: number = -1;
   polyCoeffsX: number[] = [];
   polyCoeffsY: number[] = [];
   currentTime: number = Infinity;
@@ -118,7 +58,8 @@ export class Trajectory extends PlottedObject {
     } as PlottedObjectOptions);
 
     this.smooth = options.smooth || 'none';
-    this.degree = options.degree !== undefined ? options.degree : 3;
+    this.maxDegree = options.maxDegree !== undefined ? options.maxDegree : 3;
+    this.degreeSelection = options.degreeSelection || 'loocv_2d';
     this.polyCoeffsX = options.polyCoeffsX || [];
     this.polyCoeffsY = options.polyCoeffsY || [];
     this.currentTime = options.currentTime !== undefined ? options.currentTime : Infinity;
@@ -161,42 +102,29 @@ export class Trajectory extends PlottedObject {
     if (pts.length < 2) return [];
 
     if (this.smooth === 'poly') {
-      let cx = this.polyCoeffsX;
-      let cy = this.polyCoeffsY;
-
-      if (cx.length === 0 || cy.length === 0) {
-        const tNorm = pts.map((_, i) => i / (pts.length - 1 || 1));
-        const xs = pts.map(p => p.x);
-        const ys = pts.map(p => p.y);
-        cx = fitPolynomial(tNorm, xs, this.degree);
-        cy = fitPolynomial(tNorm, ys, this.degree);
+      // Precomputed coefficients override the fit (caller-supplied curve).
+      if (this.polyCoeffsX.length > 0 && this.polyCoeffsY.length > 0) {
+        return sampleCurve(
+          { degree: this.polyCoeffsX.length - 1, coeffsX: this.polyCoeffsX, coeffsY: this.polyCoeffsY },
+          TRAJECTORY_CURVE_STEPS
+        );
       }
 
-      const nSteps = 100;
-      const degX = cx.length - 1;
-      const degY = cy.length - 1;
-      const pathPts: Array<{ x: number; y: number }> = [];
-
-      for (let s = 0; s <= nSteps; s++) {
-        const t = s / nSteps;
-        let px = 0;
-        let py = 0;
-
-        let tPow = 1;
-        for (let k = 0; k <= degX; k++) {
-          px += cx[k] * tPow;
-          tPow *= t;
+      // Select the degree on the full trajectory so it stays constant while a
+      // playhead scrubs a growing prefix; fit coefficients on the visible frame.
+      const fit = fitTrajectory(
+        pts.map(p => ({ x: p.x, y: p.y })),
+        {
+          maxDegree: this.maxDegree,
+          degreeSelection: this.degreeSelection,
+          selectionSet: this.trajPoints.map(p => ({ x: p.x, y: p.y }))
         }
-
-        tPow = 1;
-        for (let k = 0; k <= degY; k++) {
-          py += cy[k] * tPow;
-          tPow *= t;
-        }
-
-        pathPts.push({ x: px, y: py });
+      );
+      if (fit) {
+        this.selectedDegree = fit.degree;
+        return sampleCurve(fit, TRAJECTORY_CURVE_STEPS);
       }
-      return pathPts;
+      // Too few non-origin points to fit — fall back to raw steps below.
     }
 
     return pts.map(pt => ({ x: pt.x, y: pt.y }));

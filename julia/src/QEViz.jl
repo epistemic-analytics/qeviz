@@ -32,6 +32,7 @@ and return the copy — safe to use with `|>` or sequential assignment.
 - `qe_group(p, names...; intervals=true)` — which group means to show
 - `qe_edges(p; group, unit, compare, also, show)` — which edge network to draw
 - `qe_points(p; show=true)` — show/hide unit scatter dots
+- `qe_trajectories(p; units, smooth, ...)` — show supplied trajectory paths
 - `qe_labels(p; nodes, means, points)` — label visibility modes
 """
 module QEViz
@@ -42,8 +43,8 @@ using DataFrames
 
 export QEPlot,
        qe_plot,
-       qe_group, qe_edges, qe_points, qe_labels,
-       qe_groups, qe_units,
+       qe_group, qe_edges, qe_points, qe_trajectories, qe_labels,
+       qe_groups, qe_units, qe_trajectory_units,
        qe_export_html, qe_html, qe_fragment,
        model_data
 
@@ -137,6 +138,26 @@ function qe_units(p::QEPlot)::Vector{String}
     isnothing(frame) && return String[]
     id_col = something(get(p.model, "id_col", nothing), "QEUNIT")
     String[string(row[id_col]) for row in get(frame, "data", []) if haskey(row, id_col)]
+end
+
+"""
+    qe_trajectory_units(p::QEPlot) -> Vector{String}
+
+Return unit IDs present in the model's trajectories frame. Falls back to
+the points frame because qeviz can use point rows as trajectory states.
+"""
+function qe_trajectory_units(p::QEPlot)::Vector{String}
+    frame = get(p.model, "trajectories", get(p.model, "points", nothing))
+    isnothing(frame) && return String[]
+    id_col = something(get(p.model, "id_col", nothing), "QEUNIT")
+    result = String[]
+    for row in get(frame, "data", [])
+        if haskey(row, id_col)
+            val = string(row[id_col])
+            val in result || push!(result, val)
+        end
+    end
+    result
 end
 
 
@@ -256,6 +277,81 @@ function qe_points(p::QEPlot; show::Bool = true)::QEPlot
 end
 
 """
+    qe_trajectories(p; units=nothing, smooth="none", max_degree=3, degree_selection="loocv_2d", ...)
+
+Show or hide supplied ordered unit trajectory paths.
+
+qeviz renders rows already present in the model; trajectory modeling,
+accumulation, dooring, and inference remain caller-side work.
+
+`max_degree` bounds the polynomial degree when `smooth="poly"`.
+`degree_selection="loocv_2d"` (default) picks the degree in `1..max_degree` by
+joint 2D leave-one-out cross-validation; `"fixed"` always uses `max_degree`.
+Near-origin points are excluded from the fit (still drawn), matching
+`ena.plot.trajectory()`.
+"""
+function qe_trajectories(p::QEPlot;
+                         units::Union{AbstractString,Vector{<:AbstractString},Nothing} = nothing,
+                         smooth::AbstractString = "none",
+                         max_degree::Int = 3,
+                         degree_selection::AbstractString = "loocv_2d",
+                         points::Bool = true,
+                         tips::Bool = true,
+                         playhead::Union{Real,Nothing} = nothing,
+                         line_style::AbstractString = "uniform",
+                         stroke_width::Real = 2,
+                         stroke_width_range::Tuple{<:Real,<:Real} = (1, 6),
+                         opacity_range::Tuple{<:Real,<:Real} = (0.3, 1),
+                         show::Bool = true)::QEPlot
+    p = _copy(p)
+    if !show
+        p.opts["show_trajectories"] = false
+        return p
+    end
+
+    smooth_s = String(smooth)
+    degree_selection_s = String(degree_selection)
+    line_style_s = String(line_style)
+    smooth_s in ("none", "poly") ||
+        error("qe_trajectories(): smooth must be \"none\" or \"poly\".")
+    degree_selection_s in ("loocv_2d", "fixed") ||
+        error("qe_trajectories(): degree_selection must be \"loocv_2d\" or \"fixed\".")
+    line_style_s in ("uniform", "tapered") ||
+        error("qe_trajectories(): line_style must be \"uniform\" or \"tapered\".")
+
+    selected_units = if isnothing(units)
+        nothing
+    elseif units isa AbstractString
+        [String(units)]
+    else
+        String[String(u) for u in units]
+    end
+
+    if !isnothing(selected_units)
+        available = qe_trajectory_units(p)
+        bad = [u for u in selected_units if u ∉ available]
+        if !isempty(bad)
+            error("qe_trajectories(): unit(s) not found in model: $(bad)\n" *
+                  "Available: $(available)")
+        end
+    end
+
+    p.opts["show_trajectories"] = true
+    p.opts["trajectory_units"] = isnothing(selected_units) ? nothing : join(selected_units, ",")
+    p.opts["trajectory_smooth"] = smooth_s
+    p.opts["trajectory_max_degree"] = max_degree
+    p.opts["trajectory_degree_selection"] = degree_selection_s
+    p.opts["trajectory_points"] = points
+    p.opts["trajectory_tips"] = tips
+    p.opts["trajectory_playhead"] = playhead
+    p.opts["trajectory_line_style"] = line_style_s
+    p.opts["trajectory_stroke_width"] = stroke_width
+    p.opts["trajectory_stroke_width_range"] = join(stroke_width_range, ",")
+    p.opts["trajectory_opacity_range"] = join(opacity_range, ",")
+    p
+end
+
+"""
     qe_labels(p; nodes="on", means="on", points="auto")
 
 Control label visibility.
@@ -324,6 +420,25 @@ function _build_graph_element(p::QEPlot)::String
         if !isempty(edge_parts)
             push!(children, "    <qe-edges " * join(edge_parts, " ") * "></qe-edges>")
         end
+    end
+
+    # <qe-trajectories> — only when explicitly shown
+    if get(opts, "show_trajectories", false) === true
+        traj_parts = String[]
+        tu = get(opts, "trajectory_units", nothing)
+        !isnothing(tu) && push!(traj_parts, "units=\"" * tu * "\"")
+        push!(traj_parts, "smooth=\"" * get(opts, "trajectory_smooth", "none") * "\"")
+        push!(traj_parts, "max-degree=\"" * string(get(opts, "trajectory_max_degree", 3)) * "\"")
+        push!(traj_parts, "degree-selection=\"" * get(opts, "trajectory_degree_selection", "loocv_2d") * "\"")
+        push!(traj_parts, "points=\"" * string(get(opts, "trajectory_points", true)) * "\"")
+        push!(traj_parts, "tips=\"" * string(get(opts, "trajectory_tips", true)) * "\"")
+        tp = get(opts, "trajectory_playhead", nothing)
+        !isnothing(tp) && push!(traj_parts, "playhead=\"" * string(tp) * "\"")
+        push!(traj_parts, "line-style=\"" * get(opts, "trajectory_line_style", "uniform") * "\"")
+        push!(traj_parts, "stroke-width=\"" * string(get(opts, "trajectory_stroke_width", 2)) * "\"")
+        push!(traj_parts, "stroke-width-range=\"" * get(opts, "trajectory_stroke_width_range", "1,6") * "\"")
+        push!(traj_parts, "opacity-range=\"" * get(opts, "trajectory_opacity_range", "0.3,1") * "\"")
+        push!(children, "    <qe-trajectories " * join(traj_parts, " ") * "></qe-trajectories>")
     end
 
     children_str = join(children, "\n")
@@ -530,6 +645,9 @@ Build a qeviz ModelData dict from DataFrames.
 - `edges`        : One row per unit. First column is the unit identifier (`id_col`);
                    remaining columns are dot-separated edge weights (`"A.B"`).
 - `points`       : Unit projection positions. Must contain `id_col`, `x_col`, `y_col`.
+- `trajectories` : Ordered observations for trajectory rendering. Must contain
+                   `id_col`, `x_col`, `y_col`, and ideally `time`, `RowID`, or
+                   `ActivityNumber`.
 - `id_col`       : Unit-identifier column. Default `"QEUNIT"`.
 - `node_id_col`  : Node-identifier column. Default `"code"`.
 - `x_col`        : X-position column. Default `"SVD1"`.
@@ -549,6 +667,7 @@ p = qe_plot(m)
 function model_data(nodes::DataFrame,
                     edges::DataFrame,
                     points::Union{DataFrame,Nothing} = nothing;
+                    trajectories::Union{DataFrame,Nothing} = nothing,
                     id_col::AbstractString       = "QEUNIT",
                     node_id_col::AbstractString  = "code",
                     x_col::AbstractString        = "SVD1",
@@ -577,6 +696,10 @@ function model_data(nodes::DataFrame,
             )
             result["groups"] = _qe_frame(groups_df)
         end
+    end
+
+    if !isnothing(trajectories)
+        result["trajectories"] = _qe_frame(trajectories)
     end
 
     result

@@ -1885,66 +1885,160 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
   `;
   let DrawableElement = _DrawableElement;
-  function fitPolynomial(t, y, deg) {
-    const n = t.length;
-    const degree = Math.min(deg, Math.max(1, n - 1));
-    if (n <= 1) return [y[0] || 0];
-    const m = degree + 1;
-    const ATA = Array.from({ length: m }, () => new Array(m).fill(0));
-    const ATy = new Array(m).fill(0);
-    const powers = new Array(2 * degree + 1).fill(0);
-    for (let i = 0; i < n; i++) {
-      let p = 1;
-      for (let k = 0; k <= 2 * degree; k++) {
-        powers[k] += p;
-        p *= t[i];
-      }
-      let yp = y[i];
-      let tp = 1;
-      for (let k = 0; k <= degree; k++) {
-        ATy[k] += yp * tp;
-        tp *= t[i];
-      }
-    }
-    for (let r = 0; r < m; r++) {
-      for (let c = 0; c < m; c++) {
-        ATA[r][c] = powers[r + c];
-      }
-    }
-    for (let i = 0; i < m; i++) {
-      let maxRow = i;
-      for (let k = i + 1; k < m; k++) {
-        if (Math.abs(ATA[k][i]) > Math.abs(ATA[maxRow][i])) {
-          maxRow = k;
-        }
-      }
-      const tempRow = ATA[i];
-      ATA[i] = ATA[maxRow];
-      ATA[maxRow] = tempRow;
-      const tempY = ATy[i];
-      ATy[i] = ATy[maxRow];
-      ATy[maxRow] = tempY;
-      const pivot = ATA[i][i];
-      if (Math.abs(pivot) < 1e-12) continue;
-      for (let k = i + 1; k < m; k++) {
-        const factor = ATA[k][i] / pivot;
-        for (let j = i; j < m; j++) {
-          ATA[k][j] -= factor * ATA[i][j];
-        }
-        ATy[k] -= factor * ATy[i];
-      }
-    }
-    const coeffs = new Array(m).fill(0);
-    for (let i = m - 1; i >= 0; i--) {
-      let sum = ATy[i];
-      for (let j = i + 1; j < m; j++) {
-        sum -= ATA[i][j] * coeffs[j];
-      }
-      coeffs[i] = Math.abs(ATA[i][i]) > 1e-12 ? sum / ATA[i][i] : 0;
-    }
-    return coeffs;
+  const TRAJECTORY_ZERO_EPS = 1e-8;
+  function nearOriginFilter(pts, eps = TRAJECTORY_ZERO_EPS) {
+    return pts.filter((p) => Math.abs(p.x) > eps || Math.abs(p.y) > eps);
   }
-  __name(fitPolynomial, "fitPolynomial");
+  __name(nearOriginFilter, "nearOriginFilter");
+  function normalizedT(n) {
+    if (n <= 0) return [];
+    if (n === 1) return [0];
+    const t = new Array(n);
+    for (let i = 0; i < n; i++) t[i] = i / (n - 1);
+    return t;
+  }
+  __name(normalizedT, "normalizedT");
+  function design(t, degree) {
+    return t.map((ti) => {
+      const row = new Array(degree + 1);
+      let p = 1;
+      for (let k = 0; k <= degree; k++) {
+        row[k] = p;
+        p *= ti;
+      }
+      return row;
+    });
+  }
+  __name(design, "design");
+  function qr(A) {
+    const n = A.length;
+    const m = A[0].length;
+    const Q = A.map((row) => row.slice());
+    const R = Array.from({ length: m }, () => new Array(m).fill(0));
+    for (let j = 0; j < m; j++) {
+      let norm = 0;
+      for (let i = 0; i < n; i++) norm += Q[i][j] * Q[i][j];
+      norm = Math.sqrt(norm);
+      R[j][j] = norm;
+      if (norm > 1e-300) {
+        for (let i = 0; i < n; i++) Q[i][j] /= norm;
+      }
+      for (let k = j + 1; k < m; k++) {
+        let dot = 0;
+        for (let i = 0; i < n; i++) dot += Q[i][j] * Q[i][k];
+        R[j][k] = dot;
+        for (let i = 0; i < n; i++) Q[i][k] -= dot * Q[i][j];
+      }
+    }
+    return { Q, R };
+  }
+  __name(qr, "qr");
+  function qtY(Q, y) {
+    const n = Q.length;
+    const m = Q[0].length;
+    const out = new Array(m).fill(0);
+    for (let j = 0; j < m; j++) {
+      let s = 0;
+      for (let i = 0; i < n; i++) s += Q[i][j] * y[i];
+      out[j] = s;
+    }
+    return out;
+  }
+  __name(qtY, "qtY");
+  function backSolve(R, b) {
+    const m = b.length;
+    const c = new Array(m).fill(0);
+    for (let i = m - 1; i >= 0; i--) {
+      let s = b[i];
+      for (let j = i + 1; j < m; j++) s -= R[i][j] * c[j];
+      c[i] = Math.abs(R[i][i]) > 1e-12 ? s / R[i][i] : 0;
+    }
+    return c;
+  }
+  __name(backSolve, "backSolve");
+  function leverages(Q) {
+    return Q.map((row) => {
+      let s = 0;
+      for (let j = 0; j < row.length; j++) s += row[j] * row[j];
+      return s;
+    });
+  }
+  __name(leverages, "leverages");
+  function fitCoeffs(t, y, degree) {
+    const X = design(t, degree);
+    const { Q, R } = qr(X);
+    return backSolve(R, qtY(Q, y));
+  }
+  __name(fitCoeffs, "fitCoeffs");
+  function evalPoly(coeffs, t) {
+    let v = 0;
+    let p = 1;
+    for (let k = 0; k < coeffs.length; k++) {
+      v += coeffs[k] * p;
+      p *= t;
+    }
+    return v;
+  }
+  __name(evalPoly, "evalPoly");
+  function loocv2d(t, x, y, degree) {
+    const X = design(t, degree);
+    const { Q, R } = qr(X);
+    const h = leverages(Q);
+    const cx = backSolve(R, qtY(Q, x));
+    const cy = backSolve(R, qtY(Q, y));
+    let press = 0;
+    for (let i = 0; i < t.length; i++) {
+      const denom = 1 - h[i];
+      if (denom <= 0) return Infinity;
+      const ex = x[i] - evalPoly(cx, t[i]);
+      const ey = y[i] - evalPoly(cy, t[i]);
+      press += (ex / denom) ** 2 + (ey / denom) ** 2;
+    }
+    return press;
+  }
+  __name(loocv2d, "loocv2d");
+  function selectDegree(fitPts, maxDegree, mode) {
+    const n = fitPts.length;
+    const cap = Math.min(Math.max(1, Math.floor(maxDegree)), Math.max(1, n - 1));
+    if (mode === "fixed" || n < 3) return cap;
+    const t = normalizedT(n);
+    const x = fitPts.map((p) => p.x);
+    const y = fitPts.map((p) => p.y);
+    let best = 1;
+    let bestVal = Infinity;
+    for (let deg = 1; deg <= cap; deg++) {
+      const v = loocv2d(t, x, y, deg);
+      if (v < bestVal) {
+        bestVal = v;
+        best = deg;
+      }
+    }
+    return best;
+  }
+  __name(selectDegree, "selectDegree");
+  function fitTrajectory(activePts, opts) {
+    const fitPts = nearOriginFilter(activePts);
+    if (fitPts.length < 3) return null;
+    const selBasis = opts.selectionSet ? nearOriginFilter(opts.selectionSet) : fitPts;
+    const basis = selBasis.length >= 3 ? selBasis : fitPts;
+    let degree = selectDegree(basis, opts.maxDegree, opts.degreeSelection);
+    degree = Math.min(degree, Math.max(1, fitPts.length - 1));
+    const t = normalizedT(fitPts.length);
+    const coeffsX = fitCoeffs(t, fitPts.map((p) => p.x), degree);
+    const coeffsY = fitCoeffs(t, fitPts.map((p) => p.y), degree);
+    return { degree, coeffsX, coeffsY };
+  }
+  __name(fitTrajectory, "fitTrajectory");
+  function sampleCurve(fit, steps = 100) {
+    const out = [];
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      out.push({ x: evalPoly(fit.coeffsX, t), y: evalPoly(fit.coeffsY, t) });
+    }
+    return out;
+  }
+  __name(sampleCurve, "sampleCurve");
+  const TRAJECTORY_CURVE_STEPS = 100;
   const _Trajectory = class _Trajectory extends PlottedObject {
     constructor(options = {}) {
       const defaultColor = options.color instanceof Color ? options.color : new Color(typeof options.color === "string" ? options.color : "#000000");
@@ -1960,7 +2054,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._typeName = "Trajectory";
       this.trajPoints = [];
       this.smooth = "none";
-      this.degree = 3;
+      this.maxDegree = 3;
+      this.degreeSelection = "loocv_2d";
+      this.selectedDegree = -1;
       this.polyCoeffsX = [];
       this.polyCoeffsY = [];
       this.currentTime = Infinity;
@@ -1971,7 +2067,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.strokeWidthRange = [1, 6];
       this.opacityRange = [0.3, 1];
       this.smooth = options.smooth || "none";
-      this.degree = options.degree !== void 0 ? options.degree : 3;
+      this.maxDegree = options.maxDegree !== void 0 ? options.maxDegree : 3;
+      this.degreeSelection = options.degreeSelection || "loocv_2d";
       this.polyCoeffsX = options.polyCoeffsX || [];
       this.polyCoeffsY = options.polyCoeffsY || [];
       this.currentTime = options.currentTime !== void 0 ? options.currentTime : Infinity;
@@ -2009,36 +2106,24 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const pts = this.activePoints;
       if (pts.length < 2) return [];
       if (this.smooth === "poly") {
-        let cx = this.polyCoeffsX;
-        let cy = this.polyCoeffsY;
-        if (cx.length === 0 || cy.length === 0) {
-          const tNorm = pts.map((_, i) => i / (pts.length - 1 || 1));
-          const xs = pts.map((p) => p.x);
-          const ys = pts.map((p) => p.y);
-          cx = fitPolynomial(tNorm, xs, this.degree);
-          cy = fitPolynomial(tNorm, ys, this.degree);
+        if (this.polyCoeffsX.length > 0 && this.polyCoeffsY.length > 0) {
+          return sampleCurve(
+            { degree: this.polyCoeffsX.length - 1, coeffsX: this.polyCoeffsX, coeffsY: this.polyCoeffsY },
+            TRAJECTORY_CURVE_STEPS
+          );
         }
-        const nSteps = 100;
-        const degX = cx.length - 1;
-        const degY = cy.length - 1;
-        const pathPts = [];
-        for (let s = 0; s <= nSteps; s++) {
-          const t = s / nSteps;
-          let px = 0;
-          let py = 0;
-          let tPow = 1;
-          for (let k = 0; k <= degX; k++) {
-            px += cx[k] * tPow;
-            tPow *= t;
+        const fit = fitTrajectory(
+          pts.map((p) => ({ x: p.x, y: p.y })),
+          {
+            maxDegree: this.maxDegree,
+            degreeSelection: this.degreeSelection,
+            selectionSet: this.trajPoints.map((p) => ({ x: p.x, y: p.y }))
           }
-          tPow = 1;
-          for (let k = 0; k <= degY; k++) {
-            py += cy[k] * tPow;
-            tPow *= t;
-          }
-          pathPts.push({ x: px, y: py });
+        );
+        if (fit) {
+          this.selectedDegree = fit.degree;
+          return sampleCurve(fit, TRAJECTORY_CURVE_STEPS);
         }
-        return pathPts;
       }
       return pts.map((pt) => ({ x: pt.x, y: pt.y }));
     }
@@ -3291,7 +3376,6 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const yIdx = dims.length > 1 ? row.names.indexOf(dims[1]) : -1;
               const tIdx = row.names.indexOf("time") >= 0 ? row.names.indexOf("time") : row.names.indexOf("ActivityNumber") >= 0 ? row.names.indexOf("ActivityNumber") : row.names.indexOf("RowID") >= 0 ? row.names.indexOf("RowID") : -1;
               const time = tIdx >= 0 ? Number(row[tIdx]) : unitRows[unit] ? unitRows[unit].length + 1 : 1;
-              if (config.trajectoryPlayhead !== null && time > config.trajectoryPlayhead) return;
               if (xIdx >= 0 && yIdx >= 0) {
                 if (!unitRows[unit]) unitRows[unit] = [];
                 unitRows[unit].push({
@@ -3315,7 +3399,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 strokeWidthRange: config.trajectoryStrokeWidthRange,
                 opacityRange: config.trajectoryOpacityRange,
                 smooth: config.trajectorySmooth,
-                degree: config.trajectoryDegree,
+                maxDegree: config.trajectoryMaxDegree,
+                degreeSelection: config.trajectoryDegreeSelection,
+                currentTime: config.trajectoryPlayhead ?? Infinity,
                 showPoints: config.trajectoryShowPoints,
                 showTips: config.trajectoryShowTips,
                 points: rawPts.map((p) => ({ x: p.x, y: p.y, time: p.time }))
@@ -3619,7 +3705,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         showTrajectories: !!trajectoriesEl,
         trajectoryUnits: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("units")) ?? null,
         trajectorySmooth: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("smooth")) ?? "none",
-        trajectoryDegree: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("degree")) ? parseInt(trajectoriesEl.getAttribute("degree"), 10) : 3,
+        trajectoryMaxDegree: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("max-degree")) ? parseInt(trajectoriesEl.getAttribute("max-degree"), 10) : 3,
+        trajectoryDegreeSelection: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("degree-selection")) ?? "loocv_2d",
         trajectoryShowPoints: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("points")) !== "false",
         trajectoryShowTips: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("tips")) !== "false",
         trajectoryPlayhead: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("playhead")) ? parseFloat(trajectoriesEl.getAttribute("playhead")) : null,
@@ -3909,8 +3996,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   exports2.QETrajectoriesElement = QETrajectoriesElement;
   exports2.QETrajectory = QETrajectory;
   exports2.QEVisualElement = QEVisualElement;
+  exports2.TRAJECTORY_ZERO_EPS = TRAJECTORY_ZERO_EPS;
   exports2.Trajectory = Trajectory;
   exports2.WeightedColor = WeightedColor;
+  exports2.fitTrajectory = fitTrajectory;
+  exports2.nearOriginFilter = nearOriginFilter;
+  exports2.sampleCurve = sampleCurve;
+  exports2.selectDegree = selectDegree;
   exports2.vizENA = vizENA;
   Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });
 }));

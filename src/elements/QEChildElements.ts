@@ -76,7 +76,11 @@ export class QEEdgesElement extends HTMLElement {
  * Attributes:
  *   units        Comma-separated unit IDs to show. Omit for all.
  *   smooth       "none" | "poly" (default "none")
- *   degree       Polynomial degree (1..5) if smooth="poly" (default 3)
+ *   max-degree   Upper bound on polynomial degree if smooth="poly" (default 3)
+ *   degree-selection "loocv_2d" | "fixed" (default "loocv_2d"). "loocv_2d"
+ *                picks the degree in 1..max-degree by joint 2D leave-one-out CV;
+ *                "fixed" always uses max-degree. Near-origin points are excluded
+ *                from the fit (still drawn).
  *   points       "true" | "false" — show discrete point markers along trajectory
  *   tips         "true" | "false" — show leading tip marker
  *   playhead     Number — current turn / time index for filtering/animation

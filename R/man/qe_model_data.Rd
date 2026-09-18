@@ -8,6 +8,7 @@ qe_model_data(
   nodes,
   edges,
   points = NULL,
+  trajectories = NULL,
   groups = NULL,
   directed = FALSE,
   id_col = "ENA_UNIT",
@@ -26,6 +27,10 @@ one column per edge pair (e.g. \code{Data.Collaboration}).}
 
 \item{points}{\code{data.frame} of unit positions.  Must contain \code{id_col},
 \code{group_col}, \code{x_col}, \code{y_col}.}
+
+\item{trajectories}{Optional ordered observations for one or more units.
+Must contain \code{id_col}, \code{x_col}, \code{y_col}, and ideally \code{time}, \code{RowID}, or
+\code{ActivityNumber} for playhead ordering.}
 
 \item{groups}{\code{data.frame} of group summary statistics as returned by
 \code{\link[=group_summary]{group_summary()}}, or \code{NULL} to compute automatically from \code{points}.}

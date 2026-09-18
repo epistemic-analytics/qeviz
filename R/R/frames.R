@@ -63,11 +63,11 @@ group_summary <- function(pts, x_col, y_col, group_col) {
   do.call(rbind, lapply(groups, function(g) {
     sub  <- pts[pts[[group_col]] == g, ]
     n    <- nrow(sub)
-    t_v  <- qt(0.975, df = max(1L, n - 1L))
+    t_v  <- stats::qt(0.975, df = max(1L, n - 1L))
     x    <- sub[[x_col]];  y <- sub[[y_col]]
     mx   <- mean(x, na.rm = TRUE);  my <- mean(y, na.rm = TRUE)
-    se_x <- sd(x,  na.rm = TRUE) / sqrt(n)
-    se_y <- sd(y,  na.rm = TRUE) / sqrt(n)
+    se_x <- stats::sd(x,  na.rm = TRUE) / sqrt(n)
+    se_y <- stats::sd(y,  na.rm = TRUE) / sqrt(n)
     row <- data.frame(
       x      = mx,            y      = my,
       x.low  = mx - t_v * se_x, x.high = mx + t_v * se_x,

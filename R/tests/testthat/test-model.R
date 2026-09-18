@@ -22,6 +22,14 @@ test_that("qe_model_data with points includes groups when group_col is set", {
   expect_true("groups" %in% names(m))
 })
 
+test_that("qe_model_data includes trajectories when supplied", {
+  m <- qe_model_data(nodes_df, edges_df, points_df,
+                     trajectories = trajectory_df,
+                     id_col = "ENA_UNIT", group_col = "Condition")
+  expect_true("trajectories" %in% names(m))
+  expect_length(m$trajectories$data, nrow(trajectory_df))
+})
+
 test_that("qe_model_data directed flag is passed through", {
   expect_false(qe_model_data(nodes_df, edges_df, directed = FALSE)$directed)
   expect_true( qe_model_data(nodes_df, edges_df, directed = TRUE)$directed)
@@ -115,4 +123,17 @@ test_that("qe_extract with real rENA data", {
   expect_false(m$directed)
   expect_length(m$nodes$data, length(codes))
   expect_true(all(c("nodes", "edges", "points", "groups") %in% names(m)))
+})
+
+test_that("qe_trajectory_units reads trajectories frame", {
+  m <- qe_model_data(nodes_df, edges_df, points_df,
+                     trajectories = trajectory_df,
+                     id_col = "ENA_UNIT", group_col = "Condition")
+  expect_equal(sort(qe_trajectory_units(m)), sort(unique(trajectory_df$ENA_UNIT)))
+})
+
+test_that("qe_trajectory_units falls back to points frame", {
+  m <- qe_model_data(nodes_df, edges_df, points_df,
+                     id_col = "ENA_UNIT", group_col = "Condition")
+  expect_equal(sort(qe_trajectory_units(m)), sort(unique(points_df$ENA_UNIT)))
 })

@@ -12,6 +12,9 @@
 #'   one column per edge pair (e.g. `Data.Collaboration`).
 #' @param points    `data.frame` of unit positions.  Must contain `id_col`,
 #'   `group_col`, `x_col`, `y_col`.
+#' @param trajectories Optional ordered observations for one or more units.
+#'   Must contain `id_col`, `x_col`, `y_col`, and ideally `time`, `RowID`, or
+#'   `ActivityNumber` for playhead ordering.
 #' @param groups    `data.frame` of group summary statistics as returned by
 #'   [group_summary()], or `NULL` to compute automatically from `points`.
 #' @param directed  Logical.  `TRUE` for ONA (ordered/directed) models.
@@ -35,6 +38,7 @@ qe_model_data <- function(
     nodes,
     edges,
     points      = NULL,
+    trajectories = NULL,
     groups      = NULL,
     directed    = FALSE,
     id_col      = "ENA_UNIT",
@@ -58,6 +62,7 @@ qe_model_data <- function(
     edges       = qe_frame(edges)
   )
   if (!is.null(points)) result$points <- qe_frame(points)
+  if (!is.null(trajectories)) result$trajectories <- qe_frame(trajectories)
   if (!is.null(groups)) result$groups <- qe_frame(groups)
   result
 }
@@ -230,4 +235,29 @@ qe_units <- function(x) {
     v <- row[[id_col]]
     if (is.null(v)) NA_character_ else as.character(v)
   }, character(1L))
+}
+
+#' List the trajectory unit IDs in a model
+#'
+#' Returns the unit IDs present in the model's `trajectories` frame.  If no
+#' separate trajectories frame is present, falls back to [qe_units()] because
+#' qeviz can use point rows as trajectory states.
+#'
+#' @param x A `qe_plot` object or a `ModelData` list from [qe_model_data()] /
+#'   [qe_extract()].
+#'
+#' @return A character vector of trajectory unit IDs.
+#'
+#' @export
+qe_trajectory_units <- function(x) {
+  model  <- if (inherits(x, "qe_plot")) x$model
+             else if (inherits(x, "ena.set")) qe_extract(x)
+             else x
+  id_col <- model$id_col %||% "ENA_UNIT"
+  frame  <- model$trajectories %||% model$points
+  if (is.null(frame)) return(character(0L))
+  unique(vapply(frame$data, function(row) {
+    v <- row[[id_col]]
+    if (is.null(v)) NA_character_ else as.character(v)
+  }, character(1L)))
 }

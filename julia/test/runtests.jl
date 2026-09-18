@@ -40,6 +40,16 @@ function _make_model()::Dict{String,Any}
             "types" => Dict("QEUNIT" => "character", "Condition" => "character",
                             "SVD1" => "numeric", "SVD2" => "numeric"),
         ),
+        "trajectories" => Dict{String,Any}(
+            "data" => [
+                Dict("QEUNIT" => "FirstGame::alice", "Condition" => "FirstGame", "SVD1" => 0.1, "SVD2" => 0.0, "RowID" => 1),
+                Dict("QEUNIT" => "FirstGame::alice", "Condition" => "FirstGame", "SVD1" => 0.2, "SVD2" => 0.1, "RowID" => 2),
+                Dict("QEUNIT" => "SecondGame::bob", "Condition" => "SecondGame", "SVD1" => -0.2, "SVD2" => -0.1, "RowID" => 1),
+                Dict("QEUNIT" => "SecondGame::bob", "Condition" => "SecondGame", "SVD1" => -0.1, "SVD2" => -0.2, "RowID" => 2),
+            ],
+            "types" => Dict("QEUNIT" => "character", "Condition" => "character",
+                            "SVD1" => "numeric", "SVD2" => "numeric", "RowID" => "integer"),
+        ),
         "groups" => Dict{String,Any}(
             "data" => [
                 Dict("Condition" => "FirstGame",  "SVD1" =>  0.3, "SVD2" =>  0.0,
@@ -97,6 +107,19 @@ end
     @test length(u) == 4
     @test "FirstGame::alice"  ∈ u
     @test "SecondGame::bob"   ∈ u
+end
+
+@testset "qe_trajectory_units" begin
+    p = qe_plot(model)
+    u = qe_trajectory_units(p)
+    @test u == ["FirstGame::alice", "SecondGame::bob"]
+end
+
+@testset "qe_trajectory_units falls back to points" begin
+    m = copy(model)
+    delete!(m, "trajectories")
+    p = qe_plot(m)
+    @test qe_trajectory_units(p) == qe_units(p)
 end
 
 @testset "qe_groups empty model" begin
@@ -239,6 +262,51 @@ end
 end
 
 
+# ══ Chain — qe_trajectories ═════════════════════════════════════════════════════
+
+@testset "qe_trajectories show" begin
+    p  = qe_plot(model)
+    p2 = qe_trajectories(p; units="FirstGame::alice", smooth="poly",
+                         max_degree=4, degree_selection="fixed", line_style="tapered")
+    @test p2.opts["show_trajectories"] == true
+    @test p2.opts["trajectory_units"] == "FirstGame::alice"
+    @test p2.opts["trajectory_smooth"] == "poly"
+    @test p2.opts["trajectory_max_degree"] == 4
+    @test p2.opts["trajectory_degree_selection"] == "fixed"
+    @test p2.opts["trajectory_line_style"] == "tapered"
+end
+
+@testset "qe_trajectories defaults to loocv_2d" begin
+    p  = qe_plot(model)
+    p2 = qe_trajectories(p; smooth="poly")
+    @test p2.opts["trajectory_max_degree"] == 3
+    @test p2.opts["trajectory_degree_selection"] == "loocv_2d"
+end
+
+@testset "qe_trajectories hide" begin
+    p  = qe_plot(model)
+    p2 = qe_trajectories(p; show=false)
+    @test p2.opts["show_trajectories"] == false
+end
+
+@testset "qe_trajectories unknown unit" begin
+    p = qe_plot(model)
+    @test_throws ErrorException qe_trajectories(p; units="missing")
+end
+
+@testset "qe_trajectories bad degree_selection" begin
+    p = qe_plot(model)
+    @test_throws ErrorException qe_trajectories(p; smooth="poly", degree_selection="bogus")
+end
+
+@testset "qe_trajectories does not mutate original" begin
+    p  = qe_plot(model)
+    p2 = qe_trajectories(p)
+    @test !haskey(p.opts, "show_trajectories")
+    @test p2.opts["show_trajectories"] == true
+end
+
+
 # ══ Chain — qe_labels ════════════════════════════════════════════════════════════
 
 @testset "qe_labels defaults" begin
@@ -278,6 +346,28 @@ end
     p2 = qe_points(p)
     g  = QEViz._build_graph_element(p2)
     @test occursin("<qe-points", g)
+end
+
+@testset "graph element has qe-trajectories when shown" begin
+    p  = qe_plot(model)
+    p2 = qe_trajectories(
+        p;
+        units="FirstGame::alice",
+        smooth="poly",
+        max_degree=4,
+        degree_selection="fixed",
+        line_style="tapered",
+        stroke_width_range=(1, 8),
+        opacity_range=(0.3, 1),
+    )
+    g  = QEViz._build_graph_element(p2)
+    @test occursin("<qe-trajectories", g)
+    @test occursin("units=\"FirstGame::alice\"", g)
+    @test occursin("smooth=\"poly\"", g)
+    @test occursin("max-degree=\"4\"", g)
+    @test occursin("degree-selection=\"fixed\"", g)
+    @test occursin("line-style=\"tapered\"", g)
+    @test occursin("stroke-width-range=\"1,8\"", g)
 end
 
 @testset "graph element no qe-edges by default" begin
@@ -406,6 +496,21 @@ end
     grp_names = [row["Condition"] for row in groups_data]
     @test "FG" ∈ grp_names
     @test "SG" ∈ grp_names
+end
+
+@testset "model_data with trajectories" begin
+    nodes_df  = DataFrame(code=["A","B"], SVD1=[0.5,-0.5], SVD2=[0.3,-0.3])
+    edges_df  = DataFrame(QEUNIT=["G1::u1","G2::u1"], AB=[0.3, 0.7])
+    points_df = DataFrame(QEUNIT=["G1::u1","G2::u1"], SVD1=[0.4,-0.4], SVD2=[0.2,-0.2])
+    traj_df   = DataFrame(
+        QEUNIT = ["G1::u1","G1::u1","G2::u1","G2::u1"],
+        SVD1   = [0.1,0.2,-0.1,-0.2],
+        SVD2   = [0.0,0.1,0.0,-0.1],
+        RowID  = [1,2,1,2],
+    )
+    m = model_data(nodes_df, edges_df, points_df; trajectories=traj_df)
+    @test haskey(m, "trajectories")
+    @test length(m["trajectories"]["data"]) == 4
 end
 
 @testset "model_data group summaries have CI columns" begin

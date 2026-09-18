@@ -91,6 +91,14 @@ def _project(unit_row: dict) -> dict:
 
 
 points_df = pd.DataFrame([_project(u) for u in edges_data])
+trajectory_df = pd.concat([
+    points_df.assign(
+        RowID=t,
+        SVD1=points_df["SVD1"] + (t - 2) * 0.03,
+        SVD2=points_df["SVD2"] - (t - 2) * 0.02,
+    )
+    for t in range(1, 4)
+], ignore_index=True)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -140,6 +148,15 @@ def test_model_data_full():
     for row in m["groups"]["data"]:
         assert "SVD1.low"  in row
         assert "SVD1.high" in row
+
+
+def test_model_data_with_trajectories():
+    m = qeviz.model_data(
+        nodes=nodes_df, edges=edges_df, points=points_df,
+        trajectories=trajectory_df, group_col="group",
+    )
+    assert "trajectories" in m
+    assert len(m["trajectories"]["data"]) == len(trajectory_df)
 
 
 def test_model_data_directed():
@@ -204,6 +221,19 @@ def test_units():
     unit_ids = p.units()
     assert len(unit_ids) == 8
     assert "alice" in unit_ids
+
+
+def test_trajectory_units_from_trajectories_frame():
+    p = qeviz.plot(
+        nodes_df, edges_df, points_df,
+        trajectories=trajectory_df, group_col="group",
+    )
+    assert set(p.trajectory_units()) == set(points_df["QEUNIT"])
+
+
+def test_trajectory_units_falls_back_to_points():
+    p = _make_plot()
+    assert set(p.trajectory_units()) == set(points_df["QEUNIT"])
 
 
 def test_groups_empty_without_points():
@@ -310,6 +340,40 @@ def test_points_hide():
     assert p._opts["show_points"] is False
 
 
+def test_trajectories_show():
+    p = _make_plot().trajectories(
+        "alice", smooth="poly", max_degree=4, degree_selection="fixed",
+        line_style="tapered",
+    )
+    assert p._opts["show_trajectories"] is True
+    assert p._opts["trajectory_units"] == "alice"
+    assert p._opts["trajectory_smooth"] == "poly"
+    assert p._opts["trajectory_max_degree"] == 4
+    assert p._opts["trajectory_degree_selection"] == "fixed"
+    assert p._opts["trajectory_line_style"] == "tapered"
+
+
+def test_trajectories_defaults_loocv():
+    p = _make_plot().trajectories("alice", smooth="poly")
+    assert p._opts["trajectory_max_degree"] == 3
+    assert p._opts["trajectory_degree_selection"] == "loocv_2d"
+
+
+def test_trajectories_hide():
+    p = _make_plot().trajectories(show=False)
+    assert p._opts["show_trajectories"] is False
+
+
+def test_trajectories_invalid_unit_raises():
+    with pytest.raises(ValueError, match="unit\\(s\\) not found"):
+        _make_plot().trajectories("missing")
+
+
+def test_trajectories_invalid_degree_selection_raises():
+    with pytest.raises(ValueError, match="degree_selection"):
+        _make_plot().trajectories(smooth="poly", degree_selection="bogus")
+
+
 def test_labels():
     p = _make_plot().labels(nodes="off", means="click", points="on")
     assert p._opts["label_nodes"]  == "off"
@@ -344,6 +408,28 @@ def test_html_default_has_nodes_and_means():
 def test_html_with_points():
     html = _vis_block(_make_plot().points()._build_html_doc())
     assert "<qe-points" in html
+
+
+def test_html_with_trajectories():
+    html = _vis_block(
+        _make_plot()
+        .trajectories(
+            "alice",
+            smooth="poly",
+            max_degree=3,
+            line_style="tapered",
+            stroke_width_range=(1, 8),
+            opacity_range=(0.3, 1),
+        )
+        ._build_html_doc()
+    )
+    assert "<qe-trajectories" in html
+    assert 'units="alice"' in html
+    assert 'smooth="poly"' in html
+    assert 'max-degree="3"' in html
+    assert 'degree-selection="loocv_2d"' in html
+    assert 'line-style="tapered"' in html
+    assert 'stroke-width-range="1,8"' in html
 
 
 def test_html_group_edges():

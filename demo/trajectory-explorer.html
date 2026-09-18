@@ -326,12 +326,19 @@
         </select>
       </label>
       <label class="control">
-        <span>Polynomial degree</span>
+        <span>Max degree</span>
         <select id="degree-select">
           <option value="2">2 / quadratic</option>
           <option value="3" selected>3 / cubic</option>
           <option value="4">4 / quartic</option>
           <option value="5">5 / quintic</option>
+        </select>
+      </label>
+      <label class="control">
+        <span>Degree fit</span>
+        <select id="selection-select">
+          <option value="loocv_2d" selected>Auto (LOOCV 2D)</option>
+          <option value="fixed">Fixed at max</option>
         </select>
       </label>
       <label class="check">
@@ -356,7 +363,8 @@
           <qe-visual id="trajectory-vis">
             <qe-graph id="trajectory-graph" width="100%" height="590">
               <qe-nodes label="on"></qe-nodes>
-              <qe-trajectories id="trajectory-layer" smooth="poly" degree="3"
+              <qe-trajectories id="trajectory-layer" smooth="poly" max-degree="3"
+                degree-selection="loocv_2d"
                 points="true" tips="true" playhead="21" line-style="tapered"
                 stroke-width-range="1,8" opacity-range="0.3,1"></qe-trajectories>
             </qe-graph>
@@ -393,8 +401,10 @@
 
     <p class="method-note">
       This browser-only example mirrors the visual workflow in the ETM quick-example kit.
-      Its model is fixed and illustrative: QEViz renders and explores supplied states, but
-      does not perform accumulation, door selection, LOOCV degree selection, or inference.
+      Its model is fixed and illustrative: QEViz renders supplied states and fits the
+      trajectory curve — near-origin filtering plus LOOCV-2D degree selection, ported from
+      <code>ena.plot.trajectory()</code> — but does not perform accumulation, door
+      selection, or inference.
     </p>
   </main>
 
@@ -508,6 +518,7 @@
     const unitSelect = document.getElementById('unit-select');
     const smoothSelect = document.getElementById('smooth-select');
     const degreeSelect = document.getElementById('degree-select');
+    const selectionSelect = document.getElementById('selection-select');
     const pointsToggle = document.getElementById('points-toggle');
     const timeRange = document.getElementById('time-range');
     const timeOutput = document.getElementById('time-output');
@@ -551,7 +562,8 @@
       const row = latestState(unit, time);
 
       trajectoryLayer.setAttribute('smooth', smoothSelect.value);
-      trajectoryLayer.setAttribute('degree', degreeSelect.value);
+      trajectoryLayer.setAttribute('max-degree', degreeSelect.value);
+      trajectoryLayer.setAttribute('degree-selection', selectionSelect.value);
       trajectoryLayer.setAttribute('points', String(pointsToggle.checked));
       trajectoryLayer.setAttribute('playhead', String(time));
       if (unitSelect.value === 'all') trajectoryLayer.removeAttribute('units');
@@ -561,6 +573,10 @@
       stateVis.setModelData(stateModel(row));
 
       degreeSelect.disabled = smoothSelect.value === 'none';
+      selectionSelect.disabled = smoothSelect.value === 'none';
+      degreeSelect.title = selectionSelect.value === 'loocv_2d'
+        ? 'Upper bound; actual degree chosen by LOOCV'
+        : 'Exact degree used';
       timeOutput.value = `Line ${time}`;
       document.getElementById('trajectory-caption').textContent =
         `${unitSelect.value === 'all' ? 'Two units' : row.UserName} / through line ${time}`;
@@ -570,7 +586,7 @@
       document.getElementById('edge-copy').textContent = edgeLabels[strongestEdge(row)];
     }
 
-    [unitSelect, smoothSelect, degreeSelect, pointsToggle].forEach(control => {
+    [unitSelect, smoothSelect, degreeSelect, selectionSelect, pointsToggle].forEach(control => {
       control.addEventListener('change', render);
     });
     timeRange.addEventListener('input', render);

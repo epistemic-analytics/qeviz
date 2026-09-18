@@ -12,3 +12,7 @@ venv/
 demo/*.html
 demo/panels/
 demo/test_matched_mult_files/
+
+# Parity harness generated artifacts
+tools/parity/reference.json
+tools/parity/polyfit.mjs

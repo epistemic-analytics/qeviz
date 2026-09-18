@@ -85,6 +85,17 @@ points_df <- do.call(rbind, lapply(seq_len(nrow(edges_df)), function(i) {
   as.data.frame(.project(as.list(edges_df[i, ])), stringsAsFactors = FALSE)
 }))
 
+trajectory_df <- do.call(rbind, lapply(seq_len(nrow(points_df)), function(i) {
+  base <- points_df[i, , drop = FALSE]
+  do.call(rbind, lapply(seq_len(3), function(t) {
+    row <- base
+    row$RowID <- t
+    row$x <- row$x + (t - 2) * 0.03
+    row$y <- row$y - (t - 2) * 0.02
+    row
+  }))
+}))
+
 # ── Mock rENA set (no rENA install needed) ────────────────────────────────────
 # Mimics the structure read by qe_extract():
 #   set$rotation$nodes  — nodes with SVD1/SVD2 column names

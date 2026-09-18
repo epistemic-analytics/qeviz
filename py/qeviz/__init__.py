@@ -40,6 +40,9 @@ All chain methods return a *new* ``QEPlot`` — the original is unchanged.
 ``plot_obj.points(show=True)``
     Show or hide individual unit scatter dots.
 
+``plot_obj.trajectories(units=None, smooth="none", ...)``
+    Show supplied ordered unit trajectories.
+
 ``plot_obj.labels(nodes, means, points)``
     Label visibility: ``"on" | "off" | "click" | "auto"``.
 
@@ -232,6 +235,25 @@ class QEPlot:
             if id_col in row
         ]
 
+    def trajectory_units(self) -> list:
+        """
+        Return unit IDs present in the trajectories frame.
+
+        Falls back to point rows because qeviz can use points as ordered
+        trajectory states when no separate trajectories frame is supplied.
+        """
+        frame = self._model.get("trajectories") or self._model.get("points")
+        if not frame:
+            return []
+        id_col = self._model.get("id_col") or "QEUNIT"
+        seen: list[str] = []
+        for row in frame.get("data", []):
+            if id_col in row:
+                val = str(row[id_col])
+                if val not in seen:
+                    seen.append(val)
+        return seen
+
     # ── Chain methods ──────────────────────────────────────────────────────────
 
     def group(self, *names: str, intervals: bool = True) -> "QEPlot":
@@ -337,6 +359,87 @@ class QEPlot:
         p._opts["show_points"] = show
         return p
 
+    def trajectories(
+        self,
+        units: Optional[Union[str, list[str]]] = None,
+        *,
+        smooth: str = "none",
+        max_degree: int = 3,
+        degree_selection: str = "loocv_2d",
+        points: bool = True,
+        tips: bool = True,
+        playhead: Optional[Union[int, float]] = None,
+        line_style: str = "uniform",
+        stroke_width: Union[int, float] = 2,
+        stroke_width_range: tuple[Union[int, float], Union[int, float]] = (1, 6),
+        opacity_range: tuple[Union[int, float], Union[int, float]] = (0.3, 1),
+        show: bool = True,
+    ) -> "QEPlot":
+        """
+        Show or hide supplied ordered unit trajectory paths.
+
+        qeviz renders rows already present in the model; trajectory modeling,
+        accumulation, dooring, and inference remain caller-side work.
+
+        ``max_degree`` bounds the polynomial degree when ``smooth="poly"``.
+        ``degree_selection="loocv_2d"`` (default) picks the degree in
+        ``1..max_degree`` by joint 2D leave-one-out cross-validation;
+        ``"fixed"`` always uses ``max_degree``. Near-origin points are excluded
+        from the fit (still drawn), matching ``ena.plot.trajectory()``.
+        """
+        p = self._copy()
+        if not show:
+            p._opts["show_trajectories"] = False
+            return p
+
+        if smooth not in {"none", "poly"}:
+            raise ValueError("trajectories(): smooth must be 'none' or 'poly'.")
+        if degree_selection not in {"loocv_2d", "fixed"}:
+            raise ValueError(
+                "trajectories(): degree_selection must be 'loocv_2d' or 'fixed'."
+            )
+        if line_style not in {"uniform", "tapered"}:
+            raise ValueError(
+                "trajectories(): line_style must be 'uniform' or 'tapered'."
+            )
+
+        selected_units: Optional[list[str]]
+        if units is None:
+            selected_units = None
+        elif isinstance(units, str):
+            selected_units = [units]
+        else:
+            selected_units = [str(u) for u in units]
+
+        if selected_units:
+            available = self.trajectory_units()
+            bad = [u for u in selected_units if u not in available]
+            if bad:
+                raise ValueError(
+                    f"trajectories(): unit(s) not found in model: {bad!r}\n"
+                    f"Available: {available!r}"
+                )
+
+        p._opts["show_trajectories"] = True
+        p._opts["trajectory_units"] = (
+            None if selected_units is None else ",".join(selected_units)
+        )
+        p._opts["trajectory_smooth"] = smooth
+        p._opts["trajectory_max_degree"] = int(max_degree)
+        p._opts["trajectory_degree_selection"] = degree_selection
+        p._opts["trajectory_points"] = bool(points)
+        p._opts["trajectory_tips"] = bool(tips)
+        p._opts["trajectory_playhead"] = playhead
+        p._opts["trajectory_line_style"] = line_style
+        p._opts["trajectory_stroke_width"] = stroke_width
+        p._opts["trajectory_stroke_width_range"] = ",".join(
+            str(v) for v in stroke_width_range
+        )
+        p._opts["trajectory_opacity_range"] = ",".join(
+            str(v) for v in opacity_range
+        )
+        return p
+
     def labels(
         self,
         nodes:  str = "on",
@@ -395,6 +498,30 @@ class QEPlot:
                 children.append(
                     f'    <qe-edges {" ".join(edge_parts)}></qe-edges>'
                 )
+
+        # <qe-trajectories> — only when explicitly shown
+        if opts.get("show_trajectories", False):
+            traj_parts: list[str] = []
+            if opts.get("trajectory_units"):
+                traj_parts.append(f'units="{opts["trajectory_units"]}"')
+            traj_parts.extend([
+                f'smooth="{opts.get("trajectory_smooth", "none")}"',
+                f'max-degree="{opts.get("trajectory_max_degree", 3)}"',
+                f'degree-selection="{opts.get("trajectory_degree_selection", "loocv_2d")}"',
+                f'points="{str(opts.get("trajectory_points", True)).lower()}"',
+                f'tips="{str(opts.get("trajectory_tips", True)).lower()}"',
+            ])
+            if opts.get("trajectory_playhead") is not None:
+                traj_parts.append(f'playhead="{opts["trajectory_playhead"]}"')
+            traj_parts.extend([
+                f'line-style="{opts.get("trajectory_line_style", "uniform")}"',
+                f'stroke-width="{opts.get("trajectory_stroke_width", 2)}"',
+                f'stroke-width-range="{opts.get("trajectory_stroke_width_range", "1,6")}"',
+                f'opacity-range="{opts.get("trajectory_opacity_range", "0.3,1")}"',
+            ])
+            children.append(
+                f'    <qe-trajectories {" ".join(traj_parts)}></qe-trajectories>'
+            )
 
         children_str = "\n".join(children)
         return (
@@ -505,6 +632,7 @@ def model_data(
     nodes:   pd.DataFrame,
     edges:   pd.DataFrame,
     points:  Optional[pd.DataFrame] = None,
+    trajectories: Optional[pd.DataFrame] = None,
     *,
     id_col:       str = "QEUNIT",
     node_id_col:  str = "code",
@@ -531,6 +659,9 @@ def model_data(
                   weights (``"A.B"``).
     points        Unit projection positions.  Must contain ``id_col``,
                   ``x_col``, ``y_col``, and (optionally) ``group_col``.
+    trajectories  Ordered observations for trajectory rendering.  Must contain
+                  ``id_col``, ``x_col``, ``y_col``, and ideally ``time``,
+                  ``RowID``, or ``ActivityNumber``.
     id_col        Unit-identifier column in ``edges`` / ``points``.
     node_id_col   Node-identifier column in ``nodes``.
     x_col         X-position column name.
@@ -569,6 +700,9 @@ def model_data(
             )
             result["groups"] = _qe_frame(groups_df)
 
+    if trajectories is not None:
+        result["trajectories"] = _qe_frame(trajectories)
+
     return result
 
 
@@ -576,6 +710,7 @@ def plot(
     x: Union[pd.DataFrame, dict],
     edges:  Optional[pd.DataFrame] = None,
     points: Optional[pd.DataFrame] = None,
+    trajectories: Optional[pd.DataFrame] = None,
     *,
     title:     str = "qeviz",
     width:     Union[int, str] = 700,
@@ -595,6 +730,7 @@ def plot(
                 DataFrame (in which case ``edges`` must also be supplied).
     edges       Edge-weights DataFrame (only when ``x`` is a nodes DataFrame).
     points      Unit-positions DataFrame (optional, only with DataFrames).
+    trajectories Ordered trajectory-state DataFrame (optional, only with DataFrames).
     title       Window / tab title for exported files.
     width, height
                 Plot dimensions.  Integers are treated as pixels; strings
@@ -615,6 +751,7 @@ def plot(
             raise TypeError("plot(): 'edges' is required when 'x' is a DataFrame.")
         m = model_data(
             x, edges, points,
+            trajectories=trajectories,
             group_col=group_col,
             **model_kwargs,
         )

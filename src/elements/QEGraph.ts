@@ -632,7 +632,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const tIdx = row.names.indexOf('time') >= 0 ? row.names.indexOf('time') : (row.names.indexOf('ActivityNumber') >= 0 ? row.names.indexOf('ActivityNumber') : (row.names.indexOf('RowID') >= 0 ? row.names.indexOf('RowID') : -1));
 
             const time = tIdx >= 0 ? Number(row[tIdx]) : (unitRows[unit] ? unitRows[unit].length + 1 : 1);
-            if (config.trajectoryPlayhead !== null && time > config.trajectoryPlayhead) return;
+            // Keep every row: the playhead is applied inside Trajectory via
+            // currentTime so degree selection can run on the full trajectory
+            // while only the visible prefix is fit and drawn.
 
             if (xIdx >= 0 && yIdx >= 0) {
               if (!unitRows[unit]) unitRows[unit] = [];
@@ -660,7 +662,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               strokeWidthRange: config.trajectoryStrokeWidthRange,
               opacityRange: config.trajectoryOpacityRange,
               smooth: config.trajectorySmooth,
-              degree: config.trajectoryDegree,
+              maxDegree: config.trajectoryMaxDegree,
+              degreeSelection: config.trajectoryDegreeSelection,
+              currentTime: config.trajectoryPlayhead ?? Infinity,
               showPoints: config.trajectoryShowPoints,
               showTips: config.trajectoryShowTips,
               points: rawPts.map(p => ({ x: p.x, y: p.y, time: p.time }))
@@ -1022,7 +1026,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     showTrajectories: boolean;
     trajectoryUnits: string | null;
     trajectorySmooth: 'none' | 'poly';
-    trajectoryDegree: number;
+    trajectoryMaxDegree: number;
+    trajectoryDegreeSelection: 'loocv_2d' | 'fixed';
     trajectoryShowPoints: boolean;
     trajectoryShowTips: boolean;
     trajectoryPlayhead: number | null;
@@ -1073,7 +1078,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       showTrajectories:      !!trajectoriesEl,
       trajectoryUnits:       trajectoriesEl?.getAttribute('units') ?? null,
       trajectorySmooth:      (trajectoriesEl?.getAttribute('smooth') as 'none' | 'poly') ?? 'none',
-      trajectoryDegree:      trajectoriesEl?.getAttribute('degree') ? parseInt(trajectoriesEl.getAttribute('degree')!, 10) : 3,
+      trajectoryMaxDegree:   trajectoriesEl?.getAttribute('max-degree') ? parseInt(trajectoriesEl.getAttribute('max-degree')!, 10) : 3,
+      trajectoryDegreeSelection: (trajectoriesEl?.getAttribute('degree-selection') as 'loocv_2d' | 'fixed') ?? 'loocv_2d',
       trajectoryShowPoints:  trajectoriesEl?.getAttribute('points') !== 'false',
       trajectoryShowTips:    trajectoriesEl?.getAttribute('tips') !== 'false',
       trajectoryPlayhead:    trajectoriesEl?.getAttribute('playhead') ? parseFloat(trajectoriesEl.getAttribute('playhead')!) : null,

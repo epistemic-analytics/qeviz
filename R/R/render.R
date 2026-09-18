@@ -42,6 +42,7 @@
 #   <qe-means>  — group mean markers + CI boxes  (omit to hide)
 #   <qe-points> — unit scatter dots              (omit to hide)
 #   <qe-edges>  — edge network                   (omit to hide)
+#   <qe-trajectories> — ordered unit paths       (omit to hide)
 #
 # Presence of a child = the layer renders.
 # Absence            = the layer is hidden.
@@ -94,6 +95,30 @@
       children <- c(children,
         sprintf('    <qe-edges %s></qe-edges>', paste(edge_parts, collapse = " ")))
     }
+  }
+
+  # ── <qe-trajectories> — ordered unit trajectories ───────────────────────
+  if (isTRUE(opts[["trajectories"]])) {
+    traj_parts <- character(0)
+    if (!is.null(opts[["trajectory-units"]]))
+      traj_parts <- c(traj_parts, sprintf('units="%s"', opts[["trajectory-units"]]))
+    traj_parts <- c(traj_parts,
+      sprintf('smooth="%s"', opts[["trajectory-smooth"]] %||% "none"),
+      sprintf('max-degree="%s"', opts[["trajectory-max-degree"]] %||% "3"),
+      sprintf('degree-selection="%s"', opts[["trajectory-degree-selection"]] %||% "loocv_2d"),
+      sprintf('points="%s"', if (isFALSE(opts[["trajectory-points"]])) "false" else "true"),
+      sprintf('tips="%s"', if (isFALSE(opts[["trajectory-tips"]])) "false" else "true")
+    )
+    if (!is.null(opts[["trajectory-playhead"]]))
+      traj_parts <- c(traj_parts, sprintf('playhead="%s"', opts[["trajectory-playhead"]]))
+    traj_parts <- c(traj_parts,
+      sprintf('line-style="%s"', opts[["trajectory-line-style"]] %||% "uniform"),
+      sprintf('stroke-width="%s"', opts[["trajectory-stroke-width"]] %||% "2"),
+      sprintf('stroke-width-range="%s"', opts[["trajectory-stroke-width-range"]] %||% "1,6"),
+      sprintf('opacity-range="%s"', opts[["trajectory-opacity-range"]] %||% "0.3,1")
+    )
+    children <- c(children,
+      sprintf('    <qe-trajectories %s></qe-trajectories>', paste(traj_parts, collapse = " ")))
   }
 
   children_str <- paste(children, collapse = "\n")
@@ -375,6 +400,82 @@ qe_edges <- function(p, group = NULL, unit = NULL,
 #' @export
 qe_points <- function(p, show = TRUE) {
   p$graph_opts$points <- show
+  p
+}
+
+#' Show or hide trajectory paths
+#'
+#' Adds a `<qe-trajectories>` layer to the rendered graph.  QEviz only renders
+#' supplied trajectory rows; accumulation, dooring, model selection, and
+#' inference remain the caller's responsibility.
+#'
+#' @param p A `qe_plot` object.
+#' @param units Optional character vector of unit IDs to show.  Omit to show all
+#'   units present in the model's `trajectories` frame.
+#' @param smooth Path treatment: `"none"` for observed steps or `"poly"` for
+#'   polynomial smoothing.
+#' @param max_degree Upper bound on polynomial degree when `smooth = "poly"`.
+#'   With `degree_selection = "loocv_2d"` the actual degree is chosen in
+#'   `1..max_degree`; with `"fixed"` this degree is always used.
+#' @param degree_selection Degree selection when `smooth = "poly"`. `"loocv_2d"`
+#'   (default) picks the degree by joint 2D leave-one-out cross-validation;
+#'   `"fixed"` always uses `max_degree`. Near-origin points are excluded from the
+#'   fit (still drawn), matching `ena.plot.trajectory()`.
+#' @param points Logical. Show observed state dots.
+#' @param tips Logical. Show the leading current-state marker.
+#' @param playhead Optional numeric time value. Rows after this value are hidden.
+#' @param line_style `"uniform"` or `"tapered"`.
+#' @param stroke_width Uniform stroke width in display pixels.
+#' @param stroke_width_range Numeric length-2 vector for tapered paths.
+#' @param opacity_range Numeric length-2 vector for tapered paths.
+#' @param show Logical. `FALSE` suppresses trajectory rendering.
+#'
+#' @return The modified `qe_plot` object.
+#'
+#' @export
+qe_trajectories <- function(p, units = NULL, smooth = c("none", "poly"),
+                            max_degree = 3L,
+                            degree_selection = c("loocv_2d", "fixed"),
+                            points = TRUE, tips = TRUE,
+                            playhead = NULL,
+                            line_style = c("uniform", "tapered"),
+                            stroke_width = 2,
+                            stroke_width_range = c(1, 6),
+                            opacity_range = c(0.3, 1),
+                            show = TRUE) {
+  if (!show) {
+    p$graph_opts$trajectories <- FALSE
+    return(p)
+  }
+
+  smooth <- match.arg(smooth)
+  degree_selection <- match.arg(degree_selection)
+  line_style <- match.arg(line_style)
+
+  if (!is.null(units)) {
+    available <- qe_trajectory_units(p)
+    bad <- units[!units %in% available]
+    if (length(bad) > 0) {
+      stop(sprintf(
+        "qe_trajectories(): unit(s) not found in model: %s\nAvailable: %s",
+        paste(dQuote(bad), collapse = ", "),
+        paste(dQuote(available), collapse = ", ")
+      ), call. = FALSE)
+    }
+  }
+
+  p$graph_opts$trajectories <- TRUE
+  p$graph_opts[["trajectory-units"]] <- if (is.null(units)) NULL else paste(units, collapse = ",")
+  p$graph_opts[["trajectory-smooth"]] <- smooth
+  p$graph_opts[["trajectory-max-degree"]] <- as.integer(max_degree)
+  p$graph_opts[["trajectory-degree-selection"]] <- degree_selection
+  p$graph_opts[["trajectory-points"]] <- isTRUE(points)
+  p$graph_opts[["trajectory-tips"]] <- isTRUE(tips)
+  p$graph_opts[["trajectory-playhead"]] <- playhead
+  p$graph_opts[["trajectory-line-style"]] <- line_style
+  p$graph_opts[["trajectory-stroke-width"]] <- stroke_width
+  p$graph_opts[["trajectory-stroke-width-range"]] <- paste(stroke_width_range, collapse = ",")
+  p$graph_opts[["trajectory-opacity-range"]] <- paste(opacity_range, collapse = ",")
   p
 }
 
