@@ -3140,6 +3140,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const colorStr = group ? groupColorMap[group] ?? "#888888" : "#888888";
               if (showUnitPoints) {
                 const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+                pt.size = 2.5;
                 pt.meta = { ...pt.meta ?? {}, stroke: "#ffffff" };
                 this.__data__.points.set(pt.ID, pt);
                 pointsLayer.__data__.objects.set(pt.ID, pt);

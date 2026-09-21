@@ -335,6 +335,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             // Only add unit dots to the layer when 'points' attribute is present.
             if (showUnitPoints) {
               const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+              // Default unit-point size. Point() defaults to 1, which renders
+              // smaller than code nodes (2) — too faint. 2.5 reads clearly while
+              // staying below the mean markers (4).
+              pt.size = 2.5;
               // White halo separates overlapping dots in dense clusters.
               (pt as any).meta = { ...((pt as any).meta ?? {}), stroke: '#ffffff' };
               this.__data__.points.set(pt.ID, pt);
