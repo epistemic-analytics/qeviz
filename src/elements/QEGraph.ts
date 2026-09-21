@@ -1135,6 +1135,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // so the shadow-DOM wrapper's height:100% resolves to a real pixel value.
     const w = this.getAttribute('width');
     const h = this.getAttribute('height');
+    this.style.display = 'block';   // custom elements are inline by default
     if (w) this.style.width  = isNaN(Number(w)) ? w : `${w}px`;
     if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
 
@@ -1197,6 +1198,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     ;
     svg.classList.add("graph");
+    // Fill the host and keep the square ENA drawing centered (equal x/y scaling
+    // preserves distances). Without this the SVG collapses to an intrinsic size
+    // and pins to the left, leaving dead space in the container.
+    svg.style.display = 'block';
+    svg.style.width   = '100%';
+    svg.style.height  = '100%';
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.setAttribute("viewBox", (this.__data__ as Graph).extremes.as_viewBox());
     svg.setAttribute("transform", (this.__data__ as Graph).transform.toString());
     svg.setAttribute("role", "figure");

@@ -281,12 +281,18 @@ export class Graph {
       this.extremes = new Extremes(1, 1);
     }
     else {
-      const 
-        found_max = Math.max(...search_layers.map( l => Math.max(...[...l.objects.values()].map ( o => Math.max( Math.abs(o.x), Math.abs(o.y) ) ) ) ).filter( a => Math.abs(a) !== Infinity)) * 1.5
-      ;
-      console.log("Found max for extremes:", found_max);
-      this.extremes = new Extremes(Math.ceil(found_max), Math.ceil(found_max));
-      // console.log("Updated extremes to:", this.extremes);
+      // Bound = largest |x|/|y| across points and nodes, plus a modest margin
+      // for peripheral node labels. The previous Math.ceil() snapped this up to
+      // the next integer, which — for ENA's small coordinate ranges (≈1–2) —
+      // left the network floating in a lot of dead space. Keep the raw value so
+      // the drawing fills the canvas.
+      const content_max = Math.max(
+        ...search_layers.map(l => Math.max(
+          ...[...l.objects.values()].map(o => Math.max(Math.abs(o.x), Math.abs(o.y)))
+        )).filter(a => Math.abs(a) !== Infinity)
+      );
+      const found_max = (Number.isFinite(content_max) && content_max > 0 ? content_max : 1) * 1.3;
+      this.extremes = new Extremes(found_max, found_max);
     }
   }
 

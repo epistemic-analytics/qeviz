@@ -553,8 +553,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   __name(_QEVisualElement, "QEVisualElement");
   _QEVisualElement.tagName = "qe-visual";
   _QEVisualElement.styles = `
-    :host { display: inline-block; }
+    :host { display: block; width: 100%; }
     :host(.hidden) { display: none !important; }
+    /* The output wrapper and the slotted graph fill the host so the plot
+       stretches to its container instead of collapsing to intrinsic size. */
+    div { display: block; width: 100%; height: 100%; }
+    ::slotted(qe-graph) { display: block; width: 100%; height: 100%; }
   `;
   let QEVisualElement = _QEVisualElement;
   customElements.define(QEVisualElement.tagName, QEVisualElement);
@@ -1843,9 +1847,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (search_layers.length === 0) {
         this.extremes = new Extremes(1, 1);
       } else {
-        const found_max = Math.max(...search_layers.map((l) => Math.max(...[...l.objects.values()].map((o) => Math.max(Math.abs(o.x), Math.abs(o.y))))).filter((a) => Math.abs(a) !== Infinity)) * 1.5;
-        console.log("Found max for extremes:", found_max);
-        this.extremes = new Extremes(Math.ceil(found_max), Math.ceil(found_max));
+        const content_max = Math.max(
+          ...search_layers.map((l) => Math.max(
+            ...[...l.objects.values()].map((o) => Math.max(Math.abs(o.x), Math.abs(o.y)))
+          )).filter((a) => Math.abs(a) !== Infinity)
+        );
+        const found_max = (Number.isFinite(content_max) && content_max > 0 ? content_max : 1) * 1.3;
+        this.extremes = new Extremes(found_max, found_max);
       }
     }
     base_point_size(scale = 8) {
@@ -3751,6 +3759,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       var _a;
       const w = this.getAttribute("width");
       const h = this.getAttribute("height");
+      this.style.display = "block";
       if (w) this.style.width = isNaN(Number(w)) ? w : `${w}px`;
       if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
       this.appendChild(this.svg_element);
@@ -3810,6 +3819,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     create() {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.classList.add("graph");
+      svg.style.display = "block";
+      svg.style.width = "100%";
+      svg.style.height = "100%";
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
       svg.setAttribute("viewBox", this.__data__.extremes.as_viewBox());
       svg.setAttribute("transform", this.__data__.transform.toString());
       svg.setAttribute("role", "figure");

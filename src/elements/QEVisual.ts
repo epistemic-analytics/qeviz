@@ -23,8 +23,12 @@ export class QEVisualElement extends HTMLElement {
   }
 
   static styles = `
-    :host { display: inline-block; }
+    :host { display: block; width: 100%; }
     :host(.hidden) { display: none !important; }
+    /* The output wrapper and the slotted graph fill the host so the plot
+       stretches to its container instead of collapsing to intrinsic size. */
+    div { display: block; width: 100%; height: 100%; }
+    ::slotted(qe-graph) { display: block; width: 100%; height: 100%; }
   `;
 
   protected _outputElement!: HTMLElement;
