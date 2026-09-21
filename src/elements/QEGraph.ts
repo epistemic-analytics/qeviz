@@ -335,6 +335,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             // Only add unit dots to the layer when 'points' attribute is present.
             if (showUnitPoints) {
               const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+              // White halo separates overlapping dots in dense clusters.
+              (pt as any).meta = { ...((pt as any).meta ?? {}), stroke: '#ffffff' };
               this.__data__.points.set(pt.ID, pt);
               pointsLayer.__data__.objects.set(pt.ID, pt);
             }

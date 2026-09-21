@@ -2470,11 +2470,22 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const extent = this.graph.__data__.extremes.x_max;
       return (extent > 0 ? extent : 1) * 6e-3 * this.__data__.size;
     }
+    /** Optional halo stroke (e.g. white outline on unit points to separate
+     *  overlapping dots in dense clusters). Width scales with the dot so it holds
+     *  up at any zoom. No-op unless the object requests it via meta.stroke. */
+    applyStroke(el) {
+      var _a;
+      const stroke = (_a = this.__data__.meta) == null ? void 0 : _a.stroke;
+      if (!stroke) return;
+      el.setAttribute("stroke", stroke);
+      el.setAttribute("stroke-width", (this.computeRadius() * 0.22).toString());
+    }
     create() {
       const tag = this.isSquare ? "rect" : "circle";
       const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
       el.setAttribute("data-point-id", this.__data__.ID);
       el.setAttribute("fill", this.__data__.color.toString());
+      this.applyStroke(el);
       const r = this.computeRadius();
       if (this.isSquare) {
         el.setAttribute("x", (this.x - r).toString());
@@ -2512,6 +2523,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
       const r = this.computeRadius();
       this.svg_element.setAttribute("fill", this.__data__.color.toString());
+      this.applyStroke(this.svg_element);
       if (this.isSquare) {
         this.svg_element.setAttribute("x", (this.x - r).toString());
         this.svg_element.setAttribute("y", (this.y - r).toString());
@@ -3128,6 +3140,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const colorStr = group ? groupColorMap[group] ?? "#888888" : "#888888";
               if (showUnitPoints) {
                 const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
+                pt.meta = { ...pt.meta ?? {}, stroke: "#ffffff" };
                 this.__data__.points.set(pt.ID, pt);
                 pointsLayer.__data__.objects.set(pt.ID, pt);
               }
