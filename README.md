@@ -115,6 +115,7 @@ All three languages share the same chain operations:
 | Group means | `qe_group(p, ...)` | `p.group(...)` | `qe_group(p, ...)` |
 | Edge network | `qe_edges(p, group=, unit=, compare=, also=)` | `p.edges(group=, unit=, ...)` | `qe_edges(p; group=, unit=, ...)` |
 | Unit points | `qe_points(p)` | `p.points()` | `qe_points(p)` |
+| Axes | `qe_axes(p, x=, y=)` | `p.axes(x=, y=)` | `qe_axes(p; x=, y=)` |
 | Labels | `qe_labels(p, nodes=, means=, points=)` | `p.labels(...)` | `qe_labels(p; ...)` |
 | Export | `qe_export_html(p, path)` | `p.export_html(path)` | `qe_export_html(p, path)` |
 | Introspect | `qe_groups(p)` / `qe_units(p)` | `p.groups()` / `p.units()` | `qe_groups(p)` / `qe_units(p)` |
@@ -130,6 +131,21 @@ All three languages share the same chain operations:
 | `show` / `show=false` | Suppress all edges. |
 
 Label modes: `"on"`, `"off"`, `"click"`, `"auto"`.
+
+### `qe_axes` / `.axes()` parameters
+
+Axes are **opt-in**: a plot draws the x/y axis cross only when `qe_axes()` is in the
+chain (or a `<qe-axes>` element is present). Each axis label is controlled independently:
+
+| Parameter | Description |
+|---|---|
+| `x` | `TRUE` labels the x-axis with its dimension name, a string sets custom text, `FALSE` omits the x-axis label. |
+| `y` | Same as `x`, for the y-axis. |
+| `show` / `show=false` | Suppress the axes entirely. |
+
+```r
+qe_plot(set) |> qe_edges("FirstGame") |> qe_axes(x = "Task focus", y = TRUE)
+```
 
 ## TypeScript / web component
 

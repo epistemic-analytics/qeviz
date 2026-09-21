@@ -40,6 +40,7 @@ All chain functions return the modified `qe_plot` — the original is unchanged,
 | `qe_group(p, ...)` | Which group means (and CI boxes) to display |
 | `qe_edges(p, group, ...)` | Which edge network to draw |
 | `qe_points(p)` | Show individual unit scatter dots |
+| `qe_axes(p, x, y)` | Draw the axes (opt-in); `x`/`y` add per-axis labels |
 | `qe_labels(p, nodes, means, points)` | Label visibility: `"on"`, `"off"`, `"click"`, `"auto"` |
 | `qe_export_html(p, path)` | Write a self-contained HTML file |
 | `qe_fragment(p)` | Return an embeddable HTML fragment |
