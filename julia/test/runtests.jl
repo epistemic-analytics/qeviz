@@ -348,6 +348,26 @@ end
     @test occursin("<qe-points", g)
 end
 
+@testset "qe_axes default dimension-name labels" begin
+    g = QEViz._build_graph_element(qe_axes(qe_plot(model)))
+    @test occursin("<qe-axes x y>", g)
+end
+
+@testset "qe_axes custom x label, default y" begin
+    g = QEViz._build_graph_element(qe_axes(qe_plot(model); x="Task focus"))
+    @test occursin("<qe-axes x=\"Task focus\" y>", g)
+end
+
+@testset "qe_axes lines-only" begin
+    g = QEViz._build_graph_element(qe_axes(qe_plot(model); x=false, y=false))
+    @test occursin("<qe-axes>", g)
+end
+
+@testset "qe_axes hidden and absent by default" begin
+    @test !occursin("<qe-axes", QEViz._build_graph_element(qe_axes(qe_plot(model); show=false)))
+    @test !occursin("<qe-axes", QEViz._build_graph_element(qe_plot(model)))
+end
+
 @testset "graph element has qe-trajectories when shown" begin
     p  = qe_plot(model)
     p2 = qe_trajectories(

@@ -121,6 +121,22 @@
       sprintf('    <qe-trajectories %s></qe-trajectories>', paste(traj_parts, collapse = " ")))
   }
 
+  # ── <qe-axes> — axis lines + optional per-axis labels ───────────────────
+  if (isTRUE(opts[["axes"]])) {
+    axis_parts <- character(0)
+    ax <- opts[["axis-x"]]
+    ay <- opts[["axis-y"]]
+    # TRUE → boolean attribute (label defaults to dimension name);
+    # a string → attribute with that value; FALSE/NULL → no attribute.
+    if (isTRUE(ax))                     axis_parts <- c(axis_parts, "x")
+    else if (is.character(ax))          axis_parts <- c(axis_parts, sprintf('x="%s"', ax))
+    if (isTRUE(ay))                     axis_parts <- c(axis_parts, "y")
+    else if (is.character(ay))          axis_parts <- c(axis_parts, sprintf('y="%s"', ay))
+    children <- c(children,
+      sprintf('    <qe-axes%s></qe-axes>',
+              if (length(axis_parts)) paste0(" ", paste(axis_parts, collapse = " ")) else ""))
+  }
+
   children_str <- paste(children, collapse = "\n")
   sprintf('<qe-graph width="%s" height="%s">\n%s\n  </qe-graph>', w, h, children_str)
 }
@@ -400,6 +416,30 @@ qe_edges <- function(p, group = NULL, unit = NULL,
 #' @export
 qe_points <- function(p, show = TRUE) {
   p$graph_opts$points <- show
+  p
+}
+
+#' Show or hide the axes
+#'
+#' Adds a `<qe-axes>` layer (the x/y axis cross) to the rendered graph.  Each of
+#' `x` and `y` adds a per-axis label: `TRUE` uses the dimension name, a string
+#' sets custom text, and `FALSE` omits that axis label (the lines still show).
+#'
+#' @param p    A `qe_plot` object.
+#' @param x    `TRUE` to label the x-axis with its dimension name, a string for
+#'   custom text, or `FALSE` for no x-axis label.  Default `TRUE`.
+#' @param y    Same as `x`, for the y-axis.  Default `TRUE`.
+#' @param show Logical. `FALSE` suppresses the axes entirely.  Default `TRUE`.
+#' @return The modified `qe_plot` object.
+#' @export
+qe_axes <- function(p, x = TRUE, y = TRUE, show = TRUE) {
+  if (!show) {
+    p$graph_opts$axes <- FALSE
+    return(p)
+  }
+  p$graph_opts$axes <- TRUE
+  p$graph_opts[["axis-x"]] <- x
+  p$graph_opts[["axis-y"]] <- y
   p
 }
 

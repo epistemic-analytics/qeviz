@@ -359,6 +359,29 @@ class QEPlot:
         p._opts["show_points"] = show
         return p
 
+    def axes(
+        self,
+        x: Union[bool, str] = True,
+        y: Union[bool, str] = True,
+        *,
+        show: bool = True,
+    ) -> "QEPlot":
+        """
+        Show or hide the axes (a ``<qe-axes>`` layer).
+
+        ``x`` / ``y`` add a per-axis label: ``True`` uses the dimension name, a
+        string sets custom text, ``False`` omits that axis label (lines still
+        show). ``show=False`` suppresses the axes entirely.
+        """
+        p = self._copy()
+        if not show:
+            p._opts["show_axes"] = False
+            return p
+        p._opts["show_axes"] = True
+        p._opts["axis_x"] = x
+        p._opts["axis_y"] = y
+        return p
+
     def trajectories(
         self,
         units: Optional[Union[str, list[str]]] = None,
@@ -521,6 +544,20 @@ class QEPlot:
             ])
             children.append(
                 f'    <qe-trajectories {" ".join(traj_parts)}></qe-trajectories>'
+            )
+
+        # <qe-axes> — axis lines + optional per-axis labels
+        if opts.get("show_axes", False):
+            axis_parts: list[str] = []
+            for attr, val in (("x", opts.get("axis_x", True)), ("y", opts.get("axis_y", True))):
+                if val is True:
+                    axis_parts.append(attr)
+                elif isinstance(val, str):
+                    axis_parts.append(f'{attr}="{val}"')
+            children.append(
+                "    <qe-axes"
+                + (" " + " ".join(axis_parts) if axis_parts else "")
+                + "></qe-axes>"
             )
 
         children_str = "\n".join(children)

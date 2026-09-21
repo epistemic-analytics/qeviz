@@ -170,6 +170,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _meanLabels:  Map<string, QELabel> = new Map();
   private _pointLabels: Map<string, QELabel> = new Map();
 
+  // Axes (<qe-axes>): whether to show axis lines, and resolved label text
+  // (null = no label for that axis). SVG <text> nodes are cached and positioned
+  // in update_axis_labels() using the freshly-computed extremes.
+  private _showAxes  = false;
+  private _axisXText: string | null = null;
+  private _axisYText: string | null = null;
+  private _axisLabelEls: Map<'x' | 'y', SVGTextElement> = new Map();
+
   constructor() {
     super();
 
@@ -205,6 +213,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       // ── Layer config (read once from child elements) ─────────────────────────
       const config = this._readLayerConfig();
+
+      // ── Axes (<qe-axes>) ─────────────────────────────────────────────────────
+      // Resolve label text now that dims are known: empty x/y attribute falls
+      // back to the dimension name; a value is used verbatim; null = no label.
+      this._showAxes  = config.showAxes;
+      this._axisXText = config.axisXLabel === null ? null : (config.axisXLabel || String(dims?.[0] ?? 'x'));
+      this._axisYText = config.axisYLabel === null ? null : (config.axisYLabel || String(dims?.[1] ?? 'y'));
 
       // ── Group color map ──────────────────────────────────────────────────────
       // Priority: (1) points groupCol, (2) groups frame row names, (3) empty.
@@ -1035,12 +1050,17 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     trajectoryStrokeWidth: number;
     trajectoryStrokeWidthRange: [number, number];
     trajectoryOpacityRange: [number, number];
+    // Axes
+    showAxes: boolean;
+    axisXLabel: string | null;
+    axisYLabel: string | null;
   } {
     const nodesEl  = this.querySelector('qe-nodes');
     const meansEl  = this.querySelector('qe-means');
     const pointsEl = this.querySelector('qe-points');
     const edgesEl  = this.querySelector('qe-edges');
     const trajectoriesEl = this.querySelector('qe-trajectories');
+    const axesEl   = this.querySelector('qe-axes');
     const labelsShorthand = this.getAttribute('labels');
 
     return {
@@ -1087,6 +1107,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       trajectoryStrokeWidth: trajectoriesEl?.getAttribute('stroke-width') ? parseFloat(trajectoriesEl.getAttribute('stroke-width')!) : 2,
       trajectoryStrokeWidthRange: this._parseNumberPair(trajectoriesEl?.getAttribute('stroke-width-range'), [1, 6]),
       trajectoryOpacityRange: this._parseNumberPair(trajectoriesEl?.getAttribute('opacity-range'), [0.3, 1]),
+
+      // Axes — presence of <qe-axes> = draw axis lines. The x / y attributes add
+      // a per-axis label: a value is used verbatim, an empty attribute falls back
+      // to the dimension name (resolved later, where dims are known). null = no
+      // label for that axis.
+      showAxes:   !!axesEl,
+      axisXLabel: axesEl?.hasAttribute('x') ? (axesEl.getAttribute('x') ?? '') : null,
+      axisYLabel: axesEl?.hasAttribute('y') ? (axesEl.getAttribute('y') ?? '') : null,
     };
   }
 
@@ -1126,6 +1154,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
+        'x', 'y',
       ],
     });
     // Find the associated ena-visual: check 'for' attribute first, then nearest
@@ -1342,6 +1371,61 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     this.update_layers();
     this.update_labels();   // positions labels using the freshly-computed extent
     this.update_extremes(); // re-apply viewBox after label/layer repositioning
+    this.update_axes();     // axis line visibility + labels (uses final extent)
+  }
+
+  /**
+   * Axes (<qe-axes>): toggle the axis-line cross by presence, and draw/position
+   * per-axis labels at the positive ends using the current extent. Labels are
+   * cached SVG <text> nodes in the labels group; null text removes them.
+   */
+  update_axes(): void {
+    // Show or hide the whole axis sub-tree (lines + origin) by <qe-axes> presence.
+    const axesLayer = this.__children__.search('__children__', 'axes') as QELayer | undefined;
+    if (axesLayer?.svg_element) {
+      (axesLayer.svg_element as SVGElement).style.display = this._showAxes ? '' : 'none';
+    }
+
+    const parent = this._labelsGroup;
+    const extent = this.__data__.extremes.x_max;
+    if (!parent || extent <= 0) return;
+
+    const fontSize = extent * 0.06;
+    const gap      = fontSize * 0.6;
+
+    const place = (axis: 'x' | 'y', text: string | null) => {
+      let el = this._axisLabelEls.get(axis);
+      if (!this._showAxes || text == null) {          // remove when hidden / no label
+        if (el) { el.remove(); this._axisLabelEls.delete(axis); }
+        return;
+      }
+      if (!el) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'text') as SVGTextElement;
+        el.setAttribute('data-axis-label', axis);
+        el.setAttribute('pointer-events', 'none');
+        parent.appendChild(el);
+        this._axisLabelEls.set(axis, el);
+      }
+      el.textContent = text;
+      el.setAttribute('font-size',   fontSize.toString());
+      el.setAttribute('font-family', 'system-ui, sans-serif');
+      el.setAttribute('font-weight', '600');
+      el.setAttribute('fill',        '#556');
+      if (axis === 'x') {
+        // Just past the right (+x) end of the x-axis.
+        el.setAttribute('x', (extent + gap).toString());
+        el.setAttribute('y', (fontSize * 0.35).toString());
+        el.setAttribute('text-anchor', 'start');
+      } else {
+        // Centered just above the top (−y in SVG space) end of the y-axis.
+        el.setAttribute('x', '0');
+        el.setAttribute('y', (-extent - gap).toString());
+        el.setAttribute('text-anchor', 'middle');
+      }
+    };
+
+    place('x', this._axisXText);
+    place('y', this._axisYText);
   }
 
   update_labels(): void {

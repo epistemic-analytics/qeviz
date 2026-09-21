@@ -3,7 +3,7 @@
 
 export { QEVisualElement, vizENA } from './elements/QEVisual.js';
 export { QEGraphElement } from './elements/QEGraph.js';
-export { QENodesElement, QEMeansElement, QEPointsElement, QEEdgesElement, QETrajectoriesElement } from './elements/QEChildElements.js';
+export { QENodesElement, QEMeansElement, QEPointsElement, QEEdgesElement, QETrajectoriesElement, QEAxesElement } from './elements/QEChildElements.js';
 export { QELayer } from './elements/QELayer.js';
 export { QEPoint } from './elements/QEPoint.js';
 export { QELine } from './elements/QELine.js';

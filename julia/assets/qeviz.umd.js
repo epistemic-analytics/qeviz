@@ -2945,11 +2945,17 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   __name(_QETrajectoriesElement, "QETrajectoriesElement");
   _QETrajectoriesElement.tagName = "qe-trajectories";
   let QETrajectoriesElement = _QETrajectoriesElement;
+  const _QEAxesElement = class _QEAxesElement extends HTMLElement {
+  };
+  __name(_QEAxesElement, "QEAxesElement");
+  _QEAxesElement.tagName = "qe-axes";
+  let QEAxesElement = _QEAxesElement;
   customElements.define(QENodesElement.tagName, QENodesElement);
   customElements.define(QEMeansElement.tagName, QEMeansElement);
   customElements.define(QEPointsElement.tagName, QEPointsElement);
   customElements.define(QEEdgesElement.tagName, QEEdgesElement);
   customElements.define(QETrajectoriesElement.tagName, QETrajectoriesElement);
+  customElements.define(QEAxesElement.tagName, QEAxesElement);
   const GROUP_PALETTE = [
     "#4477AA",
     "#EE6677",
@@ -3023,6 +3029,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._nodeLabels = /* @__PURE__ */ new Map();
       this._meanLabels = /* @__PURE__ */ new Map();
       this._pointLabels = /* @__PURE__ */ new Map();
+      this._showAxes = false;
+      this._axisXText = null;
+      this._axisYText = null;
+      this._axisLabelEls = /* @__PURE__ */ new Map();
       this.graph = this;
       this.parent = null;
       this.__data__ = new Graph(DefaultGraphOptions);
@@ -3040,6 +3050,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const nodeIdCol = model.node_id_col;
         const groupColName = model.group_col;
         const config = this._readLayerConfig();
+        this._showAxes = config.showAxes;
+        this._axisXText = config.axisXLabel === null ? null : config.axisXLabel || String((dims == null ? void 0 : dims[0]) ?? "x");
+        this._axisYText = config.axisYLabel === null ? null : config.axisYLabel || String((dims == null ? void 0 : dims[1]) ?? "y");
         const groupColorMap = {};
         if (groupColName && ((_a = model.points) == null ? void 0 : _a.names)) {
           const groupCol = model.points.col(groupColName);
@@ -3673,6 +3686,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const pointsEl = this.querySelector("qe-points");
       const edgesEl = this.querySelector("qe-edges");
       const trajectoriesEl = this.querySelector("qe-trajectories");
+      const axesEl = this.querySelector("qe-axes");
       const labelsShorthand = this.getAttribute("labels");
       return {
         // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
@@ -3713,7 +3727,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         trajectoryLineStyle: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("line-style")) ?? "uniform",
         trajectoryStrokeWidth: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("stroke-width")) ? parseFloat(trajectoriesEl.getAttribute("stroke-width")) : 2,
         trajectoryStrokeWidthRange: this._parseNumberPair(trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("stroke-width-range"), [1, 6]),
-        trajectoryOpacityRange: this._parseNumberPair(trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("opacity-range"), [0.3, 1])
+        trajectoryOpacityRange: this._parseNumberPair(trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("opacity-range"), [0.3, 1]),
+        // Axes — presence of <qe-axes> = draw axis lines. The x / y attributes add
+        // a per-axis label: a value is used verbatim, an empty attribute falls back
+        // to the dimension name (resolved later, where dims are known). null = no
+        // label for that axis.
+        showAxes: !!axesEl,
+        axisXLabel: (axesEl == null ? void 0 : axesEl.hasAttribute("x")) ? axesEl.getAttribute("x") ?? "" : null,
+        axisYLabel: (axesEl == null ? void 0 : axesEl.hasAttribute("y")) ? axesEl.getAttribute("y") ?? "" : null
       };
     }
     _parseNumberPair(value, fallback) {
@@ -3760,7 +3781,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "line-style",
           "stroke-width",
           "stroke-width-range",
-          "opacity-range"
+          "opacity-range",
+          "x",
+          "y"
         ]
       });
       const forId = this.getAttribute("for");
@@ -3913,6 +3936,56 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.update_layers();
       this.update_labels();
       this.update_extremes();
+      this.update_axes();
+    }
+    /**
+     * Axes (<qe-axes>): toggle the axis-line cross by presence, and draw/position
+     * per-axis labels at the positive ends using the current extent. Labels are
+     * cached SVG <text> nodes in the labels group; null text removes them.
+     */
+    update_axes() {
+      const axesLayer = this.__children__.search("__children__", "axes");
+      if (axesLayer == null ? void 0 : axesLayer.svg_element) {
+        axesLayer.svg_element.style.display = this._showAxes ? "" : "none";
+      }
+      const parent = this._labelsGroup;
+      const extent = this.__data__.extremes.x_max;
+      if (!parent || extent <= 0) return;
+      const fontSize = extent * 0.06;
+      const gap = fontSize * 0.6;
+      const place = /* @__PURE__ */ __name((axis, text) => {
+        let el = this._axisLabelEls.get(axis);
+        if (!this._showAxes || text == null) {
+          if (el) {
+            el.remove();
+            this._axisLabelEls.delete(axis);
+          }
+          return;
+        }
+        if (!el) {
+          el = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          el.setAttribute("data-axis-label", axis);
+          el.setAttribute("pointer-events", "none");
+          parent.appendChild(el);
+          this._axisLabelEls.set(axis, el);
+        }
+        el.textContent = text;
+        el.setAttribute("font-size", fontSize.toString());
+        el.setAttribute("font-family", "system-ui, sans-serif");
+        el.setAttribute("font-weight", "600");
+        el.setAttribute("fill", "#556");
+        if (axis === "x") {
+          el.setAttribute("x", (extent + gap).toString());
+          el.setAttribute("y", (fontSize * 0.35).toString());
+          el.setAttribute("text-anchor", "start");
+        } else {
+          el.setAttribute("x", "0");
+          el.setAttribute("y", (-extent - gap).toString());
+          el.setAttribute("text-anchor", "middle");
+        }
+      }, "place");
+      place("x", this._axisXText);
+      place("y", this._axisYText);
     }
     update_labels() {
       this._nodeLabels.forEach((lbl) => lbl.update());
@@ -3985,6 +4058,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   exports2.DataFrameRow = DataFrameRow;
   exports2.Edge = Edge;
   exports2.Graph = Graph;
+  exports2.QEAxesElement = QEAxesElement;
   exports2.QEEdgesElement = QEEdgesElement;
   exports2.QEGraphElement = QEGraphElement;
   exports2.QELayer = QELayer;

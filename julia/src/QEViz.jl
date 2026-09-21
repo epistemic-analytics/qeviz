@@ -43,7 +43,7 @@ using DataFrames
 
 export QEPlot,
        qe_plot,
-       qe_group, qe_edges, qe_points, qe_trajectories, qe_labels,
+       qe_group, qe_edges, qe_points, qe_trajectories, qe_axes, qe_labels,
        qe_groups, qe_units, qe_trajectory_units,
        qe_export_html, qe_html, qe_fragment,
        model_data
@@ -277,6 +277,26 @@ function qe_points(p::QEPlot; show::Bool = true)::QEPlot
 end
 
 """
+    qe_axes(p; x=true, y=true, show=true)
+
+Show or hide the axes (a `<qe-axes>` layer). `x` / `y` add a per-axis label:
+`true` uses the dimension name, a `String` sets custom text, `false` omits that
+axis label (the lines still show). `show=false` suppresses the axes entirely.
+"""
+function qe_axes(p::QEPlot; x::Union{Bool,AbstractString} = true,
+                 y::Union{Bool,AbstractString} = true, show::Bool = true)::QEPlot
+    p = _copy(p)
+    if !show
+        p.opts["show_axes"] = false
+        return p
+    end
+    p.opts["show_axes"] = true
+    p.opts["axis_x"] = x isa AbstractString ? String(x) : x
+    p.opts["axis_y"] = y isa AbstractString ? String(y) : y
+    p
+end
+
+"""
     qe_trajectories(p; units=nothing, smooth="none", max_degree=3, degree_selection="loocv_2d", ...)
 
 Show or hide supplied ordered unit trajectory paths.
@@ -439,6 +459,19 @@ function _build_graph_element(p::QEPlot)::String
         push!(traj_parts, "stroke-width-range=\"" * get(opts, "trajectory_stroke_width_range", "1,6") * "\"")
         push!(traj_parts, "opacity-range=\"" * get(opts, "trajectory_opacity_range", "0.3,1") * "\"")
         push!(children, "    <qe-trajectories " * join(traj_parts, " ") * "></qe-trajectories>")
+    end
+
+    # <qe-axes> — axis lines + optional per-axis labels
+    if get(opts, "show_axes", false) === true
+        axis_parts = String[]
+        for (attr, val) in (("x", get(opts, "axis_x", true)), ("y", get(opts, "axis_y", true)))
+            if val === true
+                push!(axis_parts, attr)
+            elseif val isa AbstractString
+                push!(axis_parts, attr * "=\"" * val * "\"")
+            end
+        end
+        push!(children, "    <qe-axes" * (isempty(axis_parts) ? "" : " " * join(axis_parts, " ")) * "></qe-axes>")
     end
 
     children_str = join(children, "\n")

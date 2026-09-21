@@ -4,6 +4,34 @@ trajectory_model <- qe_model_data(nodes_df, edges_df, points_df,
                                   trajectories = trajectory_df,
                                   id_col = "ENA_UNIT", group_col = "Condition")
 
+# ── qe_axes ──────────────────────────────────────────────────────────────────
+
+# Assert against the pure graph-element builder — qe_html inlines the JS bundle,
+# whose comments mention tag names and would confuse whole-document grepping.
+.graph_el <- function(p) qeviz:::.build_graph_element(p$graph_opts)
+
+test_that("qe_axes emits axis element with dimension-name labels", {
+  expect_match(.graph_el(qe_plot(model) |> qe_axes()), "<qe-axes x y>", fixed = TRUE)
+})
+
+test_that("qe_axes supports a custom x label with default y", {
+  expect_match(.graph_el(qe_plot(model) |> qe_axes(x = "Task focus")),
+               '<qe-axes x="Task focus" y>', fixed = TRUE)
+})
+
+test_that("qe_axes lines-only when x and y are FALSE", {
+  expect_match(.graph_el(qe_plot(model) |> qe_axes(x = FALSE, y = FALSE)),
+               "<qe-axes>", fixed = TRUE)
+})
+
+test_that("qe_axes show=FALSE omits the axes element", {
+  expect_false(grepl("<qe-axes", .graph_el(qe_plot(model) |> qe_axes(show = FALSE)), fixed = TRUE))
+})
+
+test_that("plots omit axes unless qe_axes is called", {
+  expect_false(grepl("<qe-axes", .graph_el(qe_plot(model)), fixed = TRUE))
+})
+
 # ── qe_html ────────────────────────────────────────────────────────────────────
 
 test_that("qe_html returns a single character string", {

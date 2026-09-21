@@ -410,6 +410,31 @@ def test_html_with_points():
     assert "<qe-points" in html
 
 
+def test_axes_default_labels():
+    html = _vis_block(_make_plot().axes()._build_html_doc())
+    assert "<qe-axes x y>" in html
+
+
+def test_axes_custom_x_default_y():
+    html = _vis_block(_make_plot().axes(x="Task focus")._build_html_doc())
+    assert '<qe-axes x="Task focus" y>' in html
+
+
+def test_axes_lines_only():
+    html = _vis_block(_make_plot().axes(x=False, y=False)._build_html_doc())
+    assert "<qe-axes>" in html
+
+
+def test_axes_hidden():
+    html = _vis_block(_make_plot().axes(show=False)._build_html_doc())
+    assert "<qe-axes" not in html
+
+
+def test_no_axes_by_default():
+    html = _vis_block(_make_plot()._build_html_doc())
+    assert "<qe-axes" not in html
+
+
 def test_html_with_trajectories():
     html = _vis_block(
         _make_plot()

@@ -93,8 +93,27 @@ export class QETrajectoriesElement extends HTMLElement {
   static tagName = 'qe-trajectories' as const;
 }
 
+/**
+ * <qe-axes> — renders the x/y axis lines and, per axis, an optional title.
+ * Presence = draw axes; absence = no axes.
+ *
+ * Attributes:
+ *   x   Show the x-axis label. A value sets custom text; an empty/boolean
+ *       attribute defaults to the x dimension name (e.g. "SVD1").
+ *   y   Show the y-axis label. Same rule with the y dimension name.
+ *
+ * Examples:
+ *   <qe-axes></qe-axes>              lines only, no labels
+ *   <qe-axes x y></qe-axes>          "SVD1" / "SVD2"
+ *   <qe-axes x="Task focus" y>       "Task focus" / "SVD2"
+ */
+export class QEAxesElement extends HTMLElement {
+  static tagName = 'qe-axes' as const;
+}
+
 customElements.define(QENodesElement.tagName, QENodesElement);
 customElements.define(QEMeansElement.tagName, QEMeansElement);
 customElements.define(QEPointsElement.tagName, QEPointsElement);
 customElements.define(QEEdgesElement.tagName, QEEdgesElement);
 customElements.define(QETrajectoriesElement.tagName, QETrajectoriesElement);
+customElements.define(QEAxesElement.tagName, QEAxesElement);
