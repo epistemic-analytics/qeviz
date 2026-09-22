@@ -1251,6 +1251,105 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       .filter(e => e.source != null && e.target != null);
   }
 
+  /** Unit points with their current graph-space coordinates. */
+  getPoints(): Array<{ id: string; group?: string; x: number; y: number }> {
+    const layer = this.__children__.search('__children__', 'points') as QELayer | undefined;
+    if (!layer) return [];
+    return [...layer.__data__.objects.values()]
+      .filter((o: any) => o.meta?.kind === 'point')
+      .map((o: any) => ({ id: o.ID, group: o.meta?.group, x: o.x, y: o.y }));
+  }
+
+  /** Ids of unit points inside a graph-space rectangle (for drag/lasso select). */
+  pointsInRect(rect: { x: number; y: number; w: number; h: number }): string[] {
+    return this.getPoints()
+      .filter(p => p.x >= rect.x && p.x <= rect.x + rect.w &&
+                   p.y >= rect.y && p.y <= rect.y + rect.h)
+      .map(p => p.id);
+  }
+
+  // ── Host-driven highlight / selection (webENA P1.1) ─────────────────────────
+  // Rendered as an overlay group so it never mutates the marks themselves, and
+  // is re-applied after every render so selection survives model updates.
+  private _highlight: { edges: Set<string>; nodes: Set<string> } = { edges: new Set(), nodes: new Set() };
+  private _highlightGroup: SVGGElement | null = null;
+
+  /** Order-independent key so an undirected pair matches either direction. */
+  private _edgeKey(a: string, b: string): string {
+    return a <= b ? `${a} ${b}` : `${b} ${a}`;
+  }
+
+  /** Mark edges/nodes as highlighted. Replaces the previous selection. */
+  setHighlight(sel: { edges?: Array<{ source: string; target: string }>; nodes?: Array<string> }): void {
+    this._highlight.edges = new Set((sel.edges ?? []).map(e => this._edgeKey(e.source, e.target)));
+    this._highlight.nodes = new Set((sel.nodes ?? []).map(String));
+    this._applyHighlights();
+  }
+
+  /** Clear all highlighting. */
+  clearHighlight(): void {
+    this._highlight.edges.clear();
+    this._highlight.nodes.clear();
+    this._applyHighlights();
+  }
+
+  private _applyHighlights(): void {
+    if (!this.svg_element) return;
+    if (!this._highlightGroup) {
+      this._highlightGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g') as SVGGElement;
+      this._highlightGroup.setAttribute('data-layer-name', 'highlight');
+      this._highlightGroup.setAttribute('pointer-events', 'none');
+    }
+    // Keep the overlay on top.
+    this.svg_element.appendChild(this._highlightGroup);
+    const g = this._highlightGroup;
+    g.textContent = '';
+
+    const extent = (this.__data__ as Graph).extremes.x_max || 1;
+    const HL = '#f5a623';
+    const mk = (tag: string, attrs: Record<string, string | number>) => {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const k in attrs) el.setAttribute(k, String(attrs[k]));
+      return el;
+    };
+
+    // Edges — a translucent glow line between the two code-node centres.
+    if (this._highlight.edges.size) {
+      const xy: Record<string, { x: number; y: number }> = {};
+      this.getNodes().forEach(n => { xy[n.id] = { x: n.x, y: n.y }; });
+      this._highlight.edges.forEach(key => {
+        const [a, b] = key.split(' ');
+        const A = xy[a], B = xy[b];
+        if (!A || !B) return;
+        g.appendChild(mk('line', {
+          x1: A.x, y1: A.y, x2: B.x, y2: B.y,
+          stroke: HL, 'stroke-width': extent * 0.02, 'stroke-opacity': 0.6, 'stroke-linecap': 'round',
+        }));
+      });
+    }
+
+    // Nodes / means / points — a ring around the mark.
+    this._highlight.nodes.forEach(id => {
+      const el = this.svg_element.querySelector(`[data-point-id="${(window as any).CSS?.escape ? CSS.escape(id) : id}"]`) as SVGElement | null;
+      if (!el) return;
+      const tag = el.tagName.toLowerCase();
+      let cx: number, cy: number, r: number;
+      if (tag === 'rect') {
+        const w = parseFloat(el.getAttribute('width') || '0');
+        cx = parseFloat(el.getAttribute('x') || '0') + w / 2;
+        cy = parseFloat(el.getAttribute('y') || '0') + parseFloat(el.getAttribute('height') || '0') / 2;
+        r  = w / 2;
+      } else {
+        cx = parseFloat(el.getAttribute('cx') || '0');
+        cy = parseFloat(el.getAttribute('cy') || '0');
+        r  = parseFloat(el.getAttribute('r') || '0');
+      }
+      g.appendChild(mk('circle', {
+        cx, cy, r: r * 1.7 + extent * 0.004, fill: 'none', stroke: HL, 'stroke-width': extent * 0.006,
+      }));
+    });
+  }
+
   create(): SVGElement {
     const
       svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
@@ -1540,6 +1639,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     this.update_labels();   // positions labels using the freshly-computed extent
     this.update_extremes(); // re-apply viewBox after label/layer repositioning
     this.update_axes();     // axis line visibility + labels (uses final extent)
+    this._applyHighlights(); // re-apply host highlight over the fresh render
   }
 
   /**

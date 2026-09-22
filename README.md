@@ -217,6 +217,18 @@ getGraphs();                       // all connected <qe-graph> instances
 const graph = getGraph("comparison");
 graph.getNodes();                  // [{ id, name, x, y }, …]
 graph.getEdges();                  // [{ source, target, weight, directed, self }, …]
+graph.getPoints();                 // [{ id, group, x, y }, …] (unit points)
+graph.pointsInRect({ x, y, w, h }); // ids of unit points in a graph-space rect
+```
+
+### Selection / highlight
+
+Drive selection styling from the host without touching qeviz's internal DOM. The
+highlight is an overlay that survives model updates:
+
+```js
+graph.setHighlight({ edges: [{ source: "Data", target: "Design" }], nodes: ["Data"] });
+graph.clearHighlight();
 ```
 
 ```html

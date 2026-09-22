@@ -3088,6 +3088,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._axisXText = null;
       this._axisYText = null;
       this._axisLabelEls = /* @__PURE__ */ new Map();
+      this._highlight = { edges: /* @__PURE__ */ new Set(), nodes: /* @__PURE__ */ new Set() };
+      this._highlightGroup = null;
       this.graph = this;
       this.parent = null;
       this.__data__ = new Graph(DefaultGraphOptions);
@@ -3924,6 +3926,102 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         };
       }).filter((e) => e.source != null && e.target != null);
     }
+    /** Unit points with their current graph-space coordinates. */
+    getPoints() {
+      const layer = this.__children__.search("__children__", "points");
+      if (!layer) return [];
+      return [...layer.__data__.objects.values()].filter((o) => {
+        var _a;
+        return ((_a = o.meta) == null ? void 0 : _a.kind) === "point";
+      }).map((o) => {
+        var _a;
+        return { id: o.ID, group: (_a = o.meta) == null ? void 0 : _a.group, x: o.x, y: o.y };
+      });
+    }
+    /** Ids of unit points inside a graph-space rectangle (for drag/lasso select). */
+    pointsInRect(rect) {
+      return this.getPoints().filter((p) => p.x >= rect.x && p.x <= rect.x + rect.w && p.y >= rect.y && p.y <= rect.y + rect.h).map((p) => p.id);
+    }
+    /** Order-independent key so an undirected pair matches either direction. */
+    _edgeKey(a, b) {
+      return a <= b ? `${a}\0${b}` : `${b}\0${a}`;
+    }
+    /** Mark edges/nodes as highlighted. Replaces the previous selection. */
+    setHighlight(sel) {
+      this._highlight.edges = new Set((sel.edges ?? []).map((e) => this._edgeKey(e.source, e.target)));
+      this._highlight.nodes = new Set((sel.nodes ?? []).map(String));
+      this._applyHighlights();
+    }
+    /** Clear all highlighting. */
+    clearHighlight() {
+      this._highlight.edges.clear();
+      this._highlight.nodes.clear();
+      this._applyHighlights();
+    }
+    _applyHighlights() {
+      if (!this.svg_element) return;
+      if (!this._highlightGroup) {
+        this._highlightGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        this._highlightGroup.setAttribute("data-layer-name", "highlight");
+        this._highlightGroup.setAttribute("pointer-events", "none");
+      }
+      this.svg_element.appendChild(this._highlightGroup);
+      const g = this._highlightGroup;
+      g.textContent = "";
+      const extent = this.__data__.extremes.x_max || 1;
+      const HL = "#f5a623";
+      const mk = /* @__PURE__ */ __name((tag, attrs) => {
+        const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+        for (const k in attrs) el.setAttribute(k, String(attrs[k]));
+        return el;
+      }, "mk");
+      if (this._highlight.edges.size) {
+        const xy = {};
+        this.getNodes().forEach((n) => {
+          xy[n.id] = { x: n.x, y: n.y };
+        });
+        this._highlight.edges.forEach((key) => {
+          const [a, b] = key.split("\0");
+          const A = xy[a], B = xy[b];
+          if (!A || !B) return;
+          g.appendChild(mk("line", {
+            x1: A.x,
+            y1: A.y,
+            x2: B.x,
+            y2: B.y,
+            stroke: HL,
+            "stroke-width": extent * 0.02,
+            "stroke-opacity": 0.6,
+            "stroke-linecap": "round"
+          }));
+        });
+      }
+      this._highlight.nodes.forEach((id) => {
+        var _a;
+        const el = this.svg_element.querySelector(`[data-point-id="${((_a = window.CSS) == null ? void 0 : _a.escape) ? CSS.escape(id) : id}"]`);
+        if (!el) return;
+        const tag = el.tagName.toLowerCase();
+        let cx, cy, r;
+        if (tag === "rect") {
+          const w = parseFloat(el.getAttribute("width") || "0");
+          cx = parseFloat(el.getAttribute("x") || "0") + w / 2;
+          cy = parseFloat(el.getAttribute("y") || "0") + parseFloat(el.getAttribute("height") || "0") / 2;
+          r = w / 2;
+        } else {
+          cx = parseFloat(el.getAttribute("cx") || "0");
+          cy = parseFloat(el.getAttribute("cy") || "0");
+          r = parseFloat(el.getAttribute("r") || "0");
+        }
+        g.appendChild(mk("circle", {
+          cx,
+          cy,
+          r: r * 1.7 + extent * 4e-3,
+          fill: "none",
+          stroke: HL,
+          "stroke-width": extent * 6e-3
+        }));
+      });
+    }
     create() {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.classList.add("graph");
@@ -4148,6 +4246,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.update_labels();
       this.update_extremes();
       this.update_axes();
+      this._applyHighlights();
     }
     /**
      * Axes (<qe-axes>): toggle the axis-line cross by presence, and draw/position
