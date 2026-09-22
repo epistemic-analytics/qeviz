@@ -2882,6 +2882,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.customX = customX;
       this.customY = customY;
       this._visible = false;
+      this._offsetX = 0;
+      this._offsetY = 0;
+      this.pinned = false;
       this.svg_element = this._create();
       if (displayMode === Label.DISPLAY_TYPES.ON) {
         this._visible = true;
@@ -2895,9 +2898,51 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
       el.textContent = this.text;
       el.setAttribute("data-label-for", this.point.ID);
-      el.setAttribute("pointer-events", "none");
+      el.setAttribute("pointer-events", "auto");
+      el.style.cursor = "grab";
+      this._attachDrag(el);
       this.parent.appendChild(el);
       return el;
+    }
+    /** Drag to reposition; pins the label open and emits qe-label-move on drop. */
+    _attachDrag(el) {
+      el.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const svg = el.ownerSVGElement;
+        if (!svg) return;
+        const toUser = /* @__PURE__ */ __name((cx, cy) => {
+          const p = svg.createSVGPoint();
+          p.x = cx;
+          p.y = cy;
+          const m = svg.getScreenCTM();
+          return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+        }, "toUser");
+        const start = toUser(ev.clientX, ev.clientY);
+        const baseX = this._offsetX, baseY = this._offsetY;
+        el.style.cursor = "grabbing";
+        const onMove = /* @__PURE__ */ __name((e) => {
+          const p = toUser(e.clientX, e.clientY);
+          this._offsetX = baseX + (p.x - start.x);
+          this._offsetY = baseY + (p.y - start.y);
+          this.pinned = true;
+          this._visible = true;
+          this.svg_element.setAttribute("display", "block");
+          this.update();
+        }, "onMove");
+        const onUp = /* @__PURE__ */ __name(() => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          el.style.cursor = "grab";
+          this.graph.dispatchEvent(new CustomEvent("qe-label-move", {
+            detail: { id: this.point.ID, transform: { x: this._offsetX, y: this._offsetY } },
+            bubbles: true,
+            composed: true
+          }));
+        }, "onUp");
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
     }
     /**
      * Recompute position and font-size from current graph extents.
@@ -2947,6 +2992,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
       this.svg_element.setAttribute("x", x.toString());
       this.svg_element.setAttribute("y", y.toString());
+      if (this._offsetX || this._offsetY) {
+        this.svg_element.setAttribute("transform", `translate(${this._offsetX}, ${this._offsetY})`);
+      }
       this.svg_element.setAttribute("font-size", fontSize.toString());
       this.svg_element.setAttribute("font-family", "system-ui, sans-serif");
       this.svg_element.setAttribute("font-weight", "500");
@@ -2960,6 +3008,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.update();
     }
     hide() {
+      if (this.pinned) return;
       this._visible = false;
       this.svg_element.setAttribute("display", "none");
     }

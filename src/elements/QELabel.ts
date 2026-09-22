@@ -20,6 +20,10 @@ import { QEGraphElement } from "./QEGraph";
 export class QELabel {
   svg_element: SVGTextElement;
   private _visible: boolean = false;
+  // Drag offset (graph-space units) and pin state for host-repositionable labels.
+  private _offsetX = 0;
+  private _offsetY = 0;
+  pinned = false;
 
   constructor(
     public readonly text:        string,
@@ -49,9 +53,51 @@ export class QELabel {
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'text') as SVGTextElement;
     el.textContent = this.text;
     el.setAttribute('data-label-for', this.point.ID);
-    el.setAttribute('pointer-events', 'none'); // labels never intercept mouse events
+    el.setAttribute('pointer-events', 'auto');   // draggable
+    el.style.cursor = 'grab';
+    this._attachDrag(el);
     this.parent.appendChild(el);
     return el;
+  }
+
+  /** Drag to reposition; pins the label open and emits qe-label-move on drop. */
+  private _attachDrag(el: SVGTextElement): void {
+    el.addEventListener('mousedown', (ev: MouseEvent) => {
+      ev.preventDefault();
+      ev.stopPropagation();                       // don't start a graph pan
+      const svg = el.ownerSVGElement;
+      if (!svg) return;
+      const toUser = (cx: number, cy: number) => {
+        const p = svg.createSVGPoint(); p.x = cx; p.y = cy;
+        const m = svg.getScreenCTM();
+        return m ? p.matrixTransform(m.inverse()) : ({ x: 0, y: 0 } as DOMPoint);
+      };
+      const start = toUser(ev.clientX, ev.clientY);
+      const baseX = this._offsetX, baseY = this._offsetY;
+      el.style.cursor = 'grabbing';
+
+      const onMove = (e: MouseEvent) => {
+        const p = toUser(e.clientX, e.clientY);
+        this._offsetX = baseX + (p.x - start.x);
+        this._offsetY = baseY + (p.y - start.y);
+        this.pinned = true;                       // keep it shown once moved
+        this._visible = true;
+        this.svg_element.setAttribute('display', 'block');
+        this.update();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        el.style.cursor = 'grab';
+        // Public event so the host can persist / mirror across coordinated plots.
+        this.graph.dispatchEvent(new CustomEvent('qe-label-move', {
+          detail: { id: this.point.ID, transform: { x: this._offsetX, y: this._offsetY } },
+          bubbles: true, composed: true,
+        }));
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
   }
 
   /**
@@ -117,6 +163,10 @@ export class QELabel {
 
     this.svg_element.setAttribute('x',           x.toString());
     this.svg_element.setAttribute('y',           y.toString());
+    // Host drag offset (graph-space units) composes on top of the computed spot.
+    if (this._offsetX || this._offsetY) {
+      this.svg_element.setAttribute('transform', `translate(${this._offsetX}, ${this._offsetY})`);
+    }
     this.svg_element.setAttribute('font-size',   fontSize.toString());
     this.svg_element.setAttribute('font-family', 'system-ui, sans-serif');
     this.svg_element.setAttribute('font-weight', '500');
@@ -132,6 +182,7 @@ export class QELabel {
   }
 
   hide(): void {
+    if (this.pinned) return;   // a dragged/pinned label stays visible
     this._visible = false;
     this.svg_element.setAttribute('display', 'none');
   }

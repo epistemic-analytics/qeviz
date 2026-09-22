@@ -188,6 +188,11 @@ DOM. Each event's `detail` also carries the `originalEvent`.
 |---|---|
 | `qe-edge-click` / `qe-edge-hover` / `qe-edge-unhover` | `{ source, target, weight, directed, self, group?, unit? }` |
 | `qe-node-click` / `qe-node-hover` / `qe-node-unhover` | `{ id, kind: "node" \| "mean" \| "point", name, x, y, group?, unit? }` |
+| `qe-label-move` | `{ id, transform: { x, y } }` — a label was dragged (offset in graph-space units) |
+
+Labels are **draggable** (drag to reposition; the label pins open and stays
+visible), emitting `qe-label-move` on drop so the host can persist the position
+or mirror it across coordinated plots.
 
 `source`/`target` are code-node names; `x`/`y` are graph-space coordinates. Unhover
 events carry `{ key }` identifying the mark/edge that was left. The host reacts and
