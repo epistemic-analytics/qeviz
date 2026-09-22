@@ -316,13 +316,13 @@ ona_grps <- qe_groups(ona_plot)
 
 message("Rendering qeviz ONA panels...")
 .save_qe(ona_plot |> qe_group(ona_grps[1]) |> qe_edges(ona_grps[1]) |>
-           qe_labels(nodes = "on"), "qe_ona_fg")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_ona_fg")
 .save_qe(ona_plot |> qe_group(ona_grps[2]) |> qe_edges(ona_grps[2]) |>
-           qe_labels(nodes = "on"), "qe_ona_sg")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_ona_sg")
 .save_qe(ona_plot |> qe_group() |> qe_edges(ona_grps[1], compare = ona_grps[2]) |>
-           qe_labels(nodes = "on"), "qe_ona_sub")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_ona_sub")
 .save_qe(ona_plot |> qe_group() |>
-           qe_labels(nodes = "on"), "qe_ona_both")   # no qe_edges() → means only
+           qe_axes() |> qe_labels(nodes = "on"), "qe_ona_both")   # no qe_edges() → means only
 
 message("qeviz ONA panels done.")
 

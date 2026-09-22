@@ -168,13 +168,13 @@ message("rENA plots done.")
 groups <- qe_groups(ena_plot)
 
 .save_qe(ena_plot |> qe_group(groups[1]) |> qe_edges(groups[1]) |>
-           qe_labels(nodes = "on"), "qe_fg")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_fg")
 .save_qe(ena_plot |> qe_group(groups[2]) |> qe_edges(groups[2]) |>
-           qe_labels(nodes = "on"), "qe_sg")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_sg")
 .save_qe(ena_plot |> qe_group() |> qe_edges(groups[1], compare = groups[2]) |>
-           qe_labels(nodes = "on"), "qe_sub")
+           qe_axes() |> qe_labels(nodes = "on"), "qe_sub")
 .save_qe(ena_plot |> qe_group() |>
-           qe_labels(nodes = "on"), "qe_both")   # no qe_edges() → no network
+           qe_axes() |> qe_labels(nodes = "on"), "qe_both")   # no qe_edges() → no network
 
 message("qeviz views done.")
 

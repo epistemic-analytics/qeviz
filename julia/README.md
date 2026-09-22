@@ -62,7 +62,8 @@ All chain functions accept a `QEPlot` as their first argument, copy it internall
 |---|---|
 | `qe_group(p, names...; intervals=true)` | Which group means (and CI boxes) to display. Omit `names` to show all groups. |
 | `qe_edges(p; group, unit, compare, also, show)` | Which edge network to draw. `group` and `unit` are mutually exclusive. `show=false` suppresses all edges. |
-| `qe_points(p; show=true)` | Show or hide individual unit scatter dots. |
+| `qe_points(p; show=true, size=nothing)` | Show or hide individual unit scatter dots; `size` overrides the default dot size. |
+| `qe_axes(p; x=true, y=true, show=true)` | Draw the axes (opt-in); `x`/`y` add per-axis labels (dimension name, custom string, or `false`). |
 | `qe_labels(p; nodes, means, points)` | Label visibility — `"on"`, `"off"`, `"click"`, or `"auto"`. |
 
 ## Introspection

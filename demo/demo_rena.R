@@ -176,6 +176,7 @@ html <- paste0(
         <qe-nodes label="on"></qe-nodes>
         <qe-means confidence label="on"></qe-means>
         <qe-points label="auto"></qe-points>
+        <qe-axes x y></qe-axes>
       </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ena"></div>
@@ -187,6 +188,7 @@ html <- paste0(
         <qe-nodes label="on"></qe-nodes>
         <qe-means confidence label="on"></qe-means>
         <qe-points label="auto"></qe-points>
+        <qe-axes x y></qe-axes>
       </qe-graph>
     </qe-visual>
     <div class="legend" id="legend-ona"></div>

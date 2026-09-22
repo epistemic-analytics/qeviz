@@ -160,6 +160,7 @@ The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML pag
     <qe-means confidence label="on"></qe-means>
     <qe-points label="auto"></qe-points>
     <qe-edges group="FirstGame" also="SecondGame"></qe-edges>
+    <qe-axes x y></qe-axes>
   </qe-graph>
 </qe-visual>
 
