@@ -9,6 +9,23 @@ export class QELine extends Drawable implements QEElement {
   __name__: string = "unnamed-line";
   // Optional second element for the direction-indicator chevron on directed edges.
   private _arrow_el: SVGPathElement | null = null;
+  // Invisible wide companion line giving thin undirected edges a clickable/
+  // hoverable hit target for the qe-edge-* interaction events.
+  private _hit_el: SVGLineElement | null = null;
+
+  /** Stamp edge identity onto an element so <qe-graph> delegation can resolve
+   *  qe-edge-* events. No-op for non-edges (e.g. axis lines). */
+  private _stampEdge(el: SVGElement): void {
+    const meta = (this.__data__ as any).meta ?? {};
+    if (!meta.isMeanEdge) return;
+    el.setAttribute('data-edge-source', String(meta.source ?? ''));
+    el.setAttribute('data-edge-target', String(meta.target ?? ''));
+    el.setAttribute('data-edge-weight', String(meta.weight ?? 0));
+    el.setAttribute('data-edge-directed', meta.isDirected ? 'true' : 'false');
+    if (meta.isSelf) el.setAttribute('data-edge-self', 'true');
+    if (meta.group != null) el.setAttribute('data-edge-group', String(meta.group));
+    if (meta.unit  != null) el.setAttribute('data-edge-unit',  String(meta.unit));
+  }
 
   constructor(
     public __data__: Line,
@@ -66,6 +83,7 @@ export class QELine extends Drawable implements QEElement {
     const meta   = (this.__data__ as any).meta ?? {};
 
     if (meta.isMeanEdge) {
+      this._stampEdge(this.svg_element);
       const weight  = typeof meta.weight    === 'number' ? meta.weight    : 0;
       const maxW    = typeof meta.maxWeight === 'number' ? meta.maxWeight : 1;
       const opacity = typeof meta.opacity   === 'number' ? meta.opacity   : Math.min(1, weight / (maxW || 1));
@@ -135,13 +153,32 @@ export class QELine extends Drawable implements QEElement {
         }
       } else {
         // Regular undirected edge
-        (this.svg_element as SVGLineElement).setAttribute('x1', this.__data__.from.x.toString());
-        (this.svg_element as SVGLineElement).setAttribute('y1', this.__data__.from.y.toString());
-        (this.svg_element as SVGLineElement).setAttribute('x2', this.__data__.to.x.toString());
-        (this.svg_element as SVGLineElement).setAttribute('y2', this.__data__.to.y.toString());
+        const x1 = this.__data__.from.x, y1 = this.__data__.from.y;
+        const x2 = this.__data__.to.x,   y2 = this.__data__.to.y;
+        (this.svg_element as SVGLineElement).setAttribute('x1', x1.toString());
+        (this.svg_element as SVGLineElement).setAttribute('y1', y1.toString());
+        (this.svg_element as SVGLineElement).setAttribute('x2', x2.toString());
+        (this.svg_element as SVGLineElement).setAttribute('y2', y2.toString());
         this.svg_element.setAttribute('stroke-width', sw.toString());
         this.svg_element.setAttribute('stroke',       edgeColor);
+        this.svg_element.setAttribute('pointer-events', 'stroke');
         this.svg_element.removeAttribute('marker-end');
+
+        // Transparent wide hit target so thin edges are clickable/hoverable.
+        // Sized to a comfortable minimum regardless of the visible stroke width.
+        if (!this._hit_el) {
+          this._hit_el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          this._hit_el.setAttribute('stroke', 'transparent');
+          this._hit_el.setAttribute('stroke-linecap', 'round');
+          this._hit_el.setAttribute('pointer-events', 'stroke');
+        }
+        if (!this._hit_el.parentElement) this.parent.appendChild(this._hit_el);
+        this._hit_el.setAttribute('x1', x1.toString());
+        this._hit_el.setAttribute('y1', y1.toString());
+        this._hit_el.setAttribute('x2', x2.toString());
+        this._hit_el.setAttribute('y2', y2.toString());
+        this._hit_el.setAttribute('stroke-width', Math.max(sw, extent * 0.03).toString());
+        this._stampEdge(this._hit_el);
       }
     } else {
       // Thin axis lines: ~0.4% of coordinate extent
@@ -157,6 +194,7 @@ export class QELine extends Drawable implements QEElement {
   }
 
   draw() {
+    if (this._hit_el) this.parent?.appendChild(this._hit_el);
     this.parent?.appendChild(this.svg_element);
     if (this._arrow_el) {
       this.parent?.appendChild(this._arrow_el);

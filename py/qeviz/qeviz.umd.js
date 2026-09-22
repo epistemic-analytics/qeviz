@@ -2338,7 +2338,21 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.__children__ = __children__;
       this.__name__ = "unnamed-line";
       this._arrow_el = null;
+      this._hit_el = null;
       this.svg_element = this.create();
+    }
+    /** Stamp edge identity onto an element so <qe-graph> delegation can resolve
+     *  qe-edge-* events. No-op for non-edges (e.g. axis lines). */
+    _stampEdge(el) {
+      const meta = this.__data__.meta ?? {};
+      if (!meta.isMeanEdge) return;
+      el.setAttribute("data-edge-source", String(meta.source ?? ""));
+      el.setAttribute("data-edge-target", String(meta.target ?? ""));
+      el.setAttribute("data-edge-weight", String(meta.weight ?? 0));
+      el.setAttribute("data-edge-directed", meta.isDirected ? "true" : "false");
+      if (meta.isSelf) el.setAttribute("data-edge-self", "true");
+      if (meta.group != null) el.setAttribute("data-edge-group", String(meta.group));
+      if (meta.unit != null) el.setAttribute("data-edge-unit", String(meta.unit));
     }
     create() {
       if (this.__data__ instanceof NodeEdge) {
@@ -2376,6 +2390,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const extent = ((_a = this.graph.__data__.extremes) == null ? void 0 : _a.x_max) ?? 1;
       const meta = this.__data__.meta ?? {};
       if (meta.isMeanEdge) {
+        this._stampEdge(this.svg_element);
         const weight = typeof meta.weight === "number" ? meta.weight : 0;
         const maxW = typeof meta.maxWeight === "number" ? meta.maxWeight : 1;
         const opacity = typeof meta.opacity === "number" ? meta.opacity : Math.min(1, weight / (maxW || 1));
@@ -2414,13 +2429,29 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             }
           }
         } else {
-          this.svg_element.setAttribute("x1", this.__data__.from.x.toString());
-          this.svg_element.setAttribute("y1", this.__data__.from.y.toString());
-          this.svg_element.setAttribute("x2", this.__data__.to.x.toString());
-          this.svg_element.setAttribute("y2", this.__data__.to.y.toString());
+          const x1 = this.__data__.from.x, y1 = this.__data__.from.y;
+          const x2 = this.__data__.to.x, y2 = this.__data__.to.y;
+          this.svg_element.setAttribute("x1", x1.toString());
+          this.svg_element.setAttribute("y1", y1.toString());
+          this.svg_element.setAttribute("x2", x2.toString());
+          this.svg_element.setAttribute("y2", y2.toString());
           this.svg_element.setAttribute("stroke-width", sw.toString());
           this.svg_element.setAttribute("stroke", edgeColor);
+          this.svg_element.setAttribute("pointer-events", "stroke");
           this.svg_element.removeAttribute("marker-end");
+          if (!this._hit_el) {
+            this._hit_el = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            this._hit_el.setAttribute("stroke", "transparent");
+            this._hit_el.setAttribute("stroke-linecap", "round");
+            this._hit_el.setAttribute("pointer-events", "stroke");
+          }
+          if (!this._hit_el.parentElement) this.parent.appendChild(this._hit_el);
+          this._hit_el.setAttribute("x1", x1.toString());
+          this._hit_el.setAttribute("y1", y1.toString());
+          this._hit_el.setAttribute("x2", x2.toString());
+          this._hit_el.setAttribute("y2", y2.toString());
+          this._hit_el.setAttribute("stroke-width", Math.max(sw, extent * 0.03).toString());
+          this._stampEdge(this._hit_el);
         }
       } else {
         this.svg_element.setAttribute("x1", this.__data__.from.x.toString());
@@ -2434,10 +2465,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
     }
     draw() {
-      var _a, _b;
-      (_a = this.parent) == null ? void 0 : _a.appendChild(this.svg_element);
+      var _a, _b, _c;
+      if (this._hit_el) (_a = this.parent) == null ? void 0 : _a.appendChild(this._hit_el);
+      (_b = this.parent) == null ? void 0 : _b.appendChild(this.svg_element);
       if (this._arrow_el) {
-        (_b = this.parent) == null ? void 0 : _b.appendChild(this._arrow_el);
+        (_c = this.parent) == null ? void 0 : _c.appendChild(this._arrow_el);
       }
     }
   };
@@ -2484,6 +2516,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const tag = this.isSquare ? "rect" : "circle";
       const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
       el.setAttribute("data-point-id", this.__data__.ID);
+      const meta = this.__data__.meta ?? {};
+      if (meta.kind) el.setAttribute("data-kind", meta.kind);
+      if (meta.name != null) el.setAttribute("data-name", String(meta.name));
+      if (meta.group != null) el.setAttribute("data-group", String(meta.group));
+      if (meta.unit != null) el.setAttribute("data-unit", String(meta.unit));
       el.setAttribute("fill", this.__data__.color.toString());
       this.applyStroke(el);
       const r = this.computeRadius();
@@ -2498,9 +2535,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         el.setAttribute("r", r.toString());
       }
       this.svg_element = el;
-      el.addEventListener("click", (event) => {
-        console.log("Point clicked: ", this.__data__);
-        event.stopPropagation();
+      el.addEventListener("click", () => {
         this.__data__.active = !this.__data__.active;
         this.update();
         const pointEvent = new CustomEvent("point-clicked", {
@@ -3141,7 +3176,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               if (showUnitPoints) {
                 const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
                 pt.size = config.pointSize ?? 2.5;
-                pt.meta = { ...pt.meta ?? {}, stroke: "#ffffff" };
+                pt.meta = {
+                  ...pt.meta ?? {},
+                  stroke: "#ffffff",
+                  kind: "point",
+                  name: pt.ID,
+                  group: group ?? void 0,
+                  unit: pt.ID
+                };
                 this.__data__.points.set(pt.ID, pt);
                 pointsLayer.__data__.objects.set(pt.ID, pt);
               }
@@ -3191,7 +3233,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   const meanPt = new Point({
                     ID: `mean-${group}`,
                     dimensions: [mx, my],
-                    meta: { group }
+                    meta: { kind: "mean", name: group, group }
                   });
                   meanPt.color = new Color(color);
                   meanPt.size = 4;
@@ -3229,7 +3271,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   const meanPt = new Point({
                     ID: `mean-${group}`,
                     dimensions: [x / n * pointScale, -(y / n) * pointScale],
-                    meta: { group }
+                    meta: { kind: "mean", name: group, group }
                   });
                   meanPt.color = new Color(color);
                   meanPt.size = 4;
@@ -3456,6 +3498,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
             pt.size = 2;
+            pt.meta = { ...pt.meta ?? {}, kind: "node", name: pt.ID };
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
           if (edgesEnabled && edgeLayer && ((_l = model.edges) == null ? void 0 : _l.rows)) {
@@ -3626,7 +3669,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 isSelf,
                 // nodeSize is needed by QELine.update() to compute the NodeEdge
                 // display radius at update time (when extremes.x_max is available).
-                nodeSize: isSelf ? nodeSizes[pair[0]] ?? 2 : void 0
+                nodeSize: isSelf ? nodeSizes[pair[0]] ?? 2 : void 0,
+                // Identity for the qe-edge-* interaction events.
+                source: pair[0],
+                target: pair[1],
+                group: groupAttr ?? void 0,
+                unit: unitAttr ?? void 0
               };
               const targetLayer = isSelf ? edgenodeLayer ?? edgeLayer : edgeLayer;
               targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
@@ -3778,6 +3826,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (w) this.style.width = isNaN(Number(w)) ? w : `${w}px`;
       if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
       this.appendChild(this.svg_element);
+      _QEGraphElement._instances.add(this);
       this._childObserver = new MutationObserver(() => this._scheduleRerender());
       this._childObserver.observe(this, {
         childList: true,
@@ -3831,6 +3880,49 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       var _a;
       (_a = this._childObserver) == null ? void 0 : _a.disconnect();
       this._childObserver = null;
+      _QEGraphElement._instances.delete(this);
+    }
+    /** All connected <qe-graph> instances (newest membership order). */
+    static instances() {
+      return [..._QEGraphElement._instances];
+    }
+    /** Look up a graph by its `id` or `plot-group` attribute. */
+    static getGraph(key) {
+      for (const g of _QEGraphElement._instances) {
+        if (g.id === key || g.getAttribute("plot-group") === key) return g;
+      }
+      return null;
+    }
+    /** Resolved code nodes with their current graph-space coordinates. */
+    getNodes() {
+      const layer = this.__children__.search("__children__", "nodes");
+      if (!layer) return [];
+      return [...layer.__data__.objects.values()].map((o) => {
+        var _a;
+        return {
+          id: o.ID,
+          name: ((_a = o.meta) == null ? void 0 : _a.name) ?? o.ID,
+          x: o.x,
+          y: o.y
+        };
+      });
+    }
+    /** Resolved edges of the current network with weights and direction. */
+    getEdges() {
+      const collect = /* @__PURE__ */ __name((name) => {
+        const l = this.__children__.search("__children__", name);
+        return l ? [...l.__data__.objects.values()] : [];
+      }, "collect");
+      return [...collect("edges"), ...collect("edgenodes")].map((o) => {
+        const m = o.meta ?? {};
+        return {
+          source: m.source,
+          target: m.target,
+          weight: m.weight ?? 0,
+          directed: !!m.isDirected,
+          self: !!m.isSelf
+        };
+      }).filter((e) => e.source != null && e.target != null);
     }
     create() {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -3947,6 +4039,96 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         if (relatedId === id) return;
         const lbl = getAutoLabel(id);
         if ((lbl == null ? void 0 : lbl.displayMode) === Label.DISPLAY_TYPES.AUTO) lbl.hide();
+      });
+      this._attachInteractionEvents();
+    }
+    /** Emit a namespaced CustomEvent on the public element (bubbles + composed). */
+    _emit(name, detail) {
+      this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+    }
+    /** Walk up from a hit element to the nearest ancestor carrying `attr`. */
+    _closestWith(el, attr) {
+      var _a, _b;
+      while (el && el !== this.svg_element) {
+        if (((_a = el.getAttribute) == null ? void 0 : _a.call(el, attr)) != null && ((_b = el.hasAttribute) == null ? void 0 : _b.call(el, attr))) return el;
+        el = el.parentElement;
+      }
+      return null;
+    }
+    /** Resolve an edge hit element to a qe-edge-* detail, or null. */
+    _edgeDetail(el) {
+      const e = this._closestWith(el, "data-edge-source");
+      if (!e) return null;
+      const d = {
+        source: e.getAttribute("data-edge-source"),
+        target: e.getAttribute("data-edge-target"),
+        weight: parseFloat(e.getAttribute("data-edge-weight") || "0"),
+        directed: e.getAttribute("data-edge-directed") === "true",
+        self: e.getAttribute("data-edge-self") === "true"
+      };
+      if (e.hasAttribute("data-edge-group")) d.group = e.getAttribute("data-edge-group");
+      if (e.hasAttribute("data-edge-unit")) d.unit = e.getAttribute("data-edge-unit");
+      return d;
+    }
+    /** Resolve a node/mean/point hit element to a qe-node-* detail, or null. */
+    _nodeDetail(el) {
+      const n = this._closestWith(el, "data-point-id");
+      if (!n) return null;
+      const tag = n.tagName.toLowerCase();
+      let x, y;
+      if (tag === "rect") {
+        x = parseFloat(n.getAttribute("x") || "0") + parseFloat(n.getAttribute("width") || "0") / 2;
+        y = parseFloat(n.getAttribute("y") || "0") + parseFloat(n.getAttribute("height") || "0") / 2;
+      } else {
+        x = parseFloat(n.getAttribute("cx") || "0");
+        y = parseFloat(n.getAttribute("cy") || "0");
+      }
+      const id = n.getAttribute("data-point-id");
+      const d = {
+        id,
+        kind: n.getAttribute("data-kind") || "point",
+        name: n.getAttribute("data-name") || id,
+        x,
+        y
+      };
+      if (n.hasAttribute("data-group")) d.group = n.getAttribute("data-group");
+      if (n.hasAttribute("data-unit")) d.unit = n.getAttribute("data-unit");
+      return d;
+    }
+    _attachInteractionEvents() {
+      const svg = this.svg_element;
+      svg.addEventListener("click", (ev) => {
+        const target = ev.target;
+        const edge = this._edgeDetail(target);
+        if (edge) {
+          this._emit("qe-edge-click", { ...edge, originalEvent: ev });
+          return;
+        }
+        const node = this._nodeDetail(target);
+        if (node) this._emit("qe-node-click", { ...node, originalEvent: ev });
+      });
+      let hovered = null;
+      const keyOf = /* @__PURE__ */ __name((t, d) => t === "edge" ? `${d.source}\0${d.target}` : String(d.id), "keyOf");
+      svg.addEventListener("mousemove", (ev) => {
+        const target = ev.target;
+        const edge = this._edgeDetail(target);
+        const node = edge ? null : this._nodeDetail(target);
+        const next = edge ? { type: "edge", detail: edge } : node ? { type: "node", detail: node } : null;
+        const nextKey = next ? keyOf(next.type, next.detail) : null;
+        if (hovered && (!next || hovered.key !== nextKey)) {
+          this._emit(hovered.type === "edge" ? "qe-edge-unhover" : "qe-node-unhover", { key: hovered.key });
+          hovered = null;
+        }
+        if (next && (!hovered || hovered.key !== nextKey)) {
+          this._emit(next.type === "edge" ? "qe-edge-hover" : "qe-node-hover", { ...next.detail, originalEvent: ev });
+          hovered = { type: next.type, key: nextKey };
+        }
+      });
+      svg.addEventListener("mouseleave", () => {
+        if (hovered) {
+          this._emit(hovered.type === "edge" ? "qe-edge-unhover" : "qe-node-unhover", { key: hovered.key });
+          hovered = null;
+        }
       });
     }
     draw() {
@@ -4078,8 +4260,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       background-color: #FFF;
     }
   `;
+  _QEGraphElement._instances = /* @__PURE__ */ new Set();
   let QEGraphElement = _QEGraphElement;
   customElements.define(QEGraphElement.tagName, QEGraphElement);
+  const getGraph = /* @__PURE__ */ __name((key) => QEGraphElement.getGraph(key), "getGraph");
+  const getGraphs = /* @__PURE__ */ __name(() => QEGraphElement.instances(), "getGraphs");
   exports2.Color = Color;
   exports2.DataFrame = DataFrame;
   exports2.DataFrameColumn = DataFrameColumn;
@@ -4103,6 +4288,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   exports2.Trajectory = Trajectory;
   exports2.WeightedColor = WeightedColor;
   exports2.fitTrajectory = fitTrajectory;
+  exports2.getGraph = getGraph;
+  exports2.getGraphs = getGraphs;
   exports2.nearOriginFilter = nearOriginFilter;
   exports2.sampleCurve = sampleCurve;
   exports2.selectDegree = selectDegree;

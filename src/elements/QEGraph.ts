@@ -339,7 +339,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // (Point() defaults to 1, which renders smaller than code nodes.)
               pt.size = config.pointSize ?? 2.5;
               // White halo separates overlapping dots in dense clusters.
-              (pt as any).meta = { ...((pt as any).meta ?? {}), stroke: '#ffffff' };
+              // meta.kind/name/group feed the qe-node-* interaction events.
+              (pt as any).meta = {
+                ...((pt as any).meta ?? {}),
+                stroke: '#ffffff', kind: 'point', name: pt.ID,
+                group: group ?? undefined, unit: pt.ID,
+              };
               this.__data__.points.set(pt.ID, pt);
               pointsLayer.__data__.objects.set(pt.ID, pt);
             }
@@ -408,7 +413,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               const meanPt = new Point({
                 ID: `mean-${group}`,
                 dimensions: [mx, my],
-                meta: { group },
+                meta: { kind: 'mean', name: group, group },
               });
               meanPt.color = new Color(color);
               meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
@@ -452,7 +457,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               const meanPt = new Point({
                 ID: `mean-${group}`,
                 dimensions: [x / n * pointScale, -(y / n) * pointScale],
-                meta: { group },
+                meta: { kind: 'mean', name: group, group },
               });
               meanPt.color = new Color(color);
               meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
@@ -716,6 +721,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         model.nodes.rows().forEach((row: DataFrameRow) => {
           const pt = rowToPoint(row, nodeIdCol, '#444444');
           pt.size = 2; // default when no edge weights available
+          (pt as any).meta = { ...((pt as any).meta ?? {}), kind: 'node', name: pt.ID };
           nodeLayer.__data__.objects.set(pt.ID, pt);
         });
 
@@ -955,6 +961,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // nodeSize is needed by QELine.update() to compute the NodeEdge
               // display radius at update time (when extremes.x_max is available).
               nodeSize:     isSelf ? (nodeSizes[pair[0]] ?? 2) : undefined,
+              // Identity for the qe-edge-* interaction events.
+              source:       pair[0],
+              target:       pair[1],
+              group:        groupAttr ?? undefined,
+              unit:         unitAttr ?? undefined,
             };
             // Self-connections go in the `edgenodes` layer (above `nodes` in
             // draw order) so the dot is visible on top of the code node.
@@ -1147,6 +1158,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     if (h) this.style.height = isNaN(Number(h)) ? h : `${h}px`;
 
     this.appendChild(this.svg_element);
+    QEGraphElement._instances.add(this);   // registry for getGraph()/instances()
 
     // Watch for child layer element additions/removals and attribute changes.
     // Any mutation schedules a re-render via the same microtask batch used by
@@ -1198,6 +1210,45 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   disconnectedCallback(): void {
     this._childObserver?.disconnect();
     this._childObserver = null;
+    QEGraphElement._instances.delete(this);
+  }
+
+  // ── Instance registry + read APIs (webENA integration) ──────────────────────
+  private static _instances: Set<QEGraphElement> = new Set();
+
+  /** All connected <qe-graph> instances (newest membership order). */
+  static instances(): QEGraphElement[] { return [...QEGraphElement._instances]; }
+
+  /** Look up a graph by its `id` or `plot-group` attribute. */
+  static getGraph(key: string): QEGraphElement | null {
+    for (const g of QEGraphElement._instances) {
+      if (g.id === key || g.getAttribute('plot-group') === key) return g;
+    }
+    return null;
+  }
+
+  /** Resolved code nodes with their current graph-space coordinates. */
+  getNodes(): Array<{ id: string; name: string; x: number; y: number }> {
+    const layer = this.__children__.search('__children__', 'nodes') as QELayer | undefined;
+    if (!layer) return [];
+    return [...layer.__data__.objects.values()].map((o: any) => ({
+      id: o.ID, name: o.meta?.name ?? o.ID, x: o.x, y: o.y,
+    }));
+  }
+
+  /** Resolved edges of the current network with weights and direction. */
+  getEdges(): Array<{ source: string; target: string; weight: number; directed: boolean; self: boolean }> {
+    const collect = (name: string) => {
+      const l = this.__children__.search('__children__', name) as QELayer | undefined;
+      return l ? [...l.__data__.objects.values()] : [];
+    };
+    return [...collect('edges'), ...collect('edgenodes')]
+      .map((o: any) => {
+        const m = o.meta ?? {};
+        return { source: m.source, target: m.target, weight: m.weight ?? 0,
+                 directed: !!m.isDirected, self: !!m.isSelf };
+      })
+      .filter(e => e.source != null && e.target != null);
   }
 
   create(): SVGElement {
@@ -1363,6 +1414,108 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       if (relatedId === id) return; // still inside the same point
       const lbl = getAutoLabel(id);
       if (lbl?.displayMode === Label.DISPLAY_TYPES.AUTO) lbl.hide();
+    });
+
+    // ── Public interaction events (webENA integration surface) ────────────────
+    // Dispatched on the public <qe-graph> element with bubbles+composed so a
+    // host app can subscribe regardless of shadow DOM. See README "Events".
+    this._attachInteractionEvents();
+  }
+
+  /** Emit a namespaced CustomEvent on the public element (bubbles + composed). */
+  private _emit(name: string, detail: Record<string, any>): void {
+    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+
+  /** Walk up from a hit element to the nearest ancestor carrying `attr`. */
+  private _closestWith(el: SVGElement | null, attr: string): SVGElement | null {
+    while (el && el !== this.svg_element) {
+      if (el.getAttribute?.(attr) != null && el.hasAttribute?.(attr)) return el;
+      el = el.parentElement as SVGElement | null;
+    }
+    return null;
+  }
+
+  /** Resolve an edge hit element to a qe-edge-* detail, or null. */
+  private _edgeDetail(el: SVGElement | null): Record<string, any> | null {
+    const e = this._closestWith(el, 'data-edge-source');
+    if (!e) return null;
+    const d: Record<string, any> = {
+      source:   e.getAttribute('data-edge-source'),
+      target:   e.getAttribute('data-edge-target'),
+      weight:   parseFloat(e.getAttribute('data-edge-weight') || '0'),
+      directed: e.getAttribute('data-edge-directed') === 'true',
+      self:     e.getAttribute('data-edge-self') === 'true',
+    };
+    if (e.hasAttribute('data-edge-group')) d.group = e.getAttribute('data-edge-group');
+    if (e.hasAttribute('data-edge-unit'))  d.unit  = e.getAttribute('data-edge-unit');
+    return d;
+  }
+
+  /** Resolve a node/mean/point hit element to a qe-node-* detail, or null. */
+  private _nodeDetail(el: SVGElement | null): Record<string, any> | null {
+    const n = this._closestWith(el, 'data-point-id');
+    if (!n) return null;
+    const tag = n.tagName.toLowerCase();
+    let x: number, y: number;
+    if (tag === 'rect') {
+      x = parseFloat(n.getAttribute('x') || '0') + parseFloat(n.getAttribute('width')  || '0') / 2;
+      y = parseFloat(n.getAttribute('y') || '0') + parseFloat(n.getAttribute('height') || '0') / 2;
+    } else {
+      x = parseFloat(n.getAttribute('cx') || '0');
+      y = parseFloat(n.getAttribute('cy') || '0');
+    }
+    const id = n.getAttribute('data-point-id')!;
+    const d: Record<string, any> = {
+      id,
+      kind: n.getAttribute('data-kind') || 'point',
+      name: n.getAttribute('data-name') || id,
+      x, y,
+    };
+    if (n.hasAttribute('data-group')) d.group = n.getAttribute('data-group');
+    if (n.hasAttribute('data-unit'))  d.unit  = n.getAttribute('data-unit');
+    return d;
+  }
+
+  private _attachInteractionEvents(): void {
+    const svg = this.svg_element;
+
+    svg.addEventListener('click', (ev: MouseEvent) => {
+      const target = ev.target as SVGElement;
+      const edge = this._edgeDetail(target);
+      if (edge) { this._emit('qe-edge-click', { ...edge, originalEvent: ev }); return; }
+      const node = this._nodeDetail(target);
+      if (node) this._emit('qe-node-click', { ...node, originalEvent: ev });
+    });
+
+    // Hover enter/leave, tracked so we emit one unhover→hover pair per change.
+    let hovered: { type: 'edge' | 'node'; key: string } | null = null;
+    const keyOf = (t: 'edge' | 'node', d: Record<string, any>) =>
+      t === 'edge' ? `${d.source} ${d.target}` : String(d.id);
+
+    svg.addEventListener('mousemove', (ev: MouseEvent) => {
+      const target = ev.target as SVGElement;
+      const edge = this._edgeDetail(target);
+      const node = edge ? null : this._nodeDetail(target);
+      const next = edge ? { type: 'edge' as const, detail: edge }
+                 : node ? { type: 'node' as const, detail: node }
+                 : null;
+      const nextKey = next ? keyOf(next.type, next.detail) : null;
+      if (hovered && (!next || hovered.key !== nextKey)) {
+        this._emit(hovered.type === 'edge' ? 'qe-edge-unhover' : 'qe-node-unhover', { key: hovered.key });
+        hovered = null;
+      }
+      if (next && (!hovered || hovered.key !== nextKey)) {
+        this._emit(next.type === 'edge' ? 'qe-edge-hover' : 'qe-node-hover', { ...next.detail, originalEvent: ev });
+        hovered = { type: next.type, key: nextKey! };
+      }
+    });
+
+    svg.addEventListener('mouseleave', () => {
+      if (hovered) {
+        this._emit(hovered.type === 'edge' ? 'qe-edge-unhover' : 'qe-node-unhover', { key: hovered.key });
+        hovered = null;
+      }
     });
   }
 

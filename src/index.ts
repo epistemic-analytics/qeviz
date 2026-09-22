@@ -3,6 +3,11 @@
 
 export { QEVisualElement, vizENA } from './elements/QEVisual.js';
 export { QEGraphElement } from './elements/QEGraph.js';
+import { QEGraphElement as _QEGraph } from './elements/QEGraph.js';
+/** Look up a connected <qe-graph> by its `id` or `plot-group` attribute. */
+export const getGraph = (key: string) => _QEGraph.getGraph(key);
+/** All connected <qe-graph> instances. */
+export const getGraphs = () => _QEGraph.instances();
 export { QENodesElement, QEMeansElement, QEPointsElement, QEEdgesElement, QETrajectoriesElement, QEAxesElement } from './elements/QEChildElements.js';
 export { QELayer } from './elements/QELayer.js';
 export { QEPoint } from './elements/QEPoint.js';

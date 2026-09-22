@@ -178,6 +178,51 @@ edges.setAttribute("compare", "SecondGame");
 edges.removeAttribute("also");
 ```
 
+### Events
+
+`<qe-graph>` dispatches interaction events on the public element with
+`bubbles: true, composed: true`, so a host app can subscribe regardless of shadow
+DOM. Each event's `detail` also carries the `originalEvent`.
+
+| Event | `detail` |
+|---|---|
+| `qe-edge-click` / `qe-edge-hover` / `qe-edge-unhover` | `{ source, target, weight, directed, self, group?, unit? }` |
+| `qe-node-click` / `qe-node-hover` / `qe-node-unhover` | `{ id, kind: "node" \| "mean" \| "point", name, x, y, group?, unit? }` |
+
+`source`/`target` are code-node names; `x`/`y` are graph-space coordinates. Unhover
+events carry `{ key }` identifying the mark/edge that was left. The host reacts and
+pushes state back declaratively (ModelData + layer attributes) — qeviz adds no
+framework coupling.
+
+```js
+graph.addEventListener("qe-edge-click", (e) => {
+  const { source, target, weight } = e.detail;   // e.g. open a conversation view
+});
+graph.addEventListener("qe-node-click", (e) => {
+  if (e.detail.kind === "point") plotUnit(e.detail.id);
+});
+```
+
+### Instance access & read APIs
+
+Give coordinated plots an identity and look them up, and read the resolved model
+for host-side hit-testing or export:
+
+```js
+import { getGraph, getGraphs } from "@qe-libs/qeviz";
+
+getGraph("comparison");            // by id or plot-group attribute
+getGraphs();                       // all connected <qe-graph> instances
+
+const graph = getGraph("comparison");
+graph.getNodes();                  // [{ id, name, x, y }, …]
+graph.getEdges();                  // [{ source, target, weight, directed, self }, …]
+```
+
+```html
+<qe-graph id="primary" plot-group="comparison" …></qe-graph>
+```
+
 ### Build
 
 ```sh

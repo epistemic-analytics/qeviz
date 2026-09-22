@@ -52,6 +52,12 @@ export class QEPoint extends Drawable implements QEElement {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag) as SVGElement;
 
     el.setAttribute('data-point-id', this.__data__.ID);
+    // Identity for <qe-graph> delegation → qe-node-* interaction events.
+    const meta = (this.__data__ as any).meta ?? {};
+    if (meta.kind)  el.setAttribute('data-kind', meta.kind);
+    if (meta.name != null)  el.setAttribute('data-name',  String(meta.name));
+    if (meta.group != null) el.setAttribute('data-group', String(meta.group));
+    if (meta.unit != null)  el.setAttribute('data-unit',  String(meta.unit));
     el.setAttribute('fill', this.__data__.color.toString());
     this.applyStroke(el);
 
@@ -69,9 +75,9 @@ export class QEPoint extends Drawable implements QEElement {
 
     this.svg_element = el;
 
-    el.addEventListener('click', (event) => {
-      console.log("Point clicked: ", this.__data__);
-      event.stopPropagation();
+    el.addEventListener('click', () => {
+      // Note: do NOT stopPropagation — the click must bubble to <qe-graph>'s
+      // delegation so it can emit the public qe-node-click event.
       this.__data__.active = !this.__data__.active;
       this.update();
 
