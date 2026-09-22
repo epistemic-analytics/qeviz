@@ -226,6 +226,23 @@ graph.getPoints();                 // [{ id, group, x, y }, …] (unit points)
 graph.pointsInRect({ x, y, w, h }); // ids of unit points in a graph-space rect
 ```
 
+### Transitions & export
+
+Opt into animated transitions with the `animate` attribute — on the next
+`setModelData`, marks glide from their old positions to the new ones instead of
+snapping (default 300 ms; `animate="500"` sets the duration):
+
+```html
+<qe-graph animate>…</qe-graph>
+```
+
+Snapshot the current plot for download or embedding:
+
+```js
+graph.toSVG();          // standalone SVG string
+await graph.toPNG(2);   // PNG data URL (2× resolution)
+```
+
 ### Selection / highlight
 
 Drive selection styling from the host without touching qeviz's internal DOM. The

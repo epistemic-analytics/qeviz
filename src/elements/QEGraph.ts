@@ -202,6 +202,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       const model = (e as CustomEvent).detail;
       if (!model) return;
+
+      // Tweening (opt-in via `animate`): snapshot current mark/edge positions
+      // BEFORE the rebuild so we can animate old→new after this.update().
+      this._animateMs = this.hasAttribute('animate')
+        ? (parseInt(this.getAttribute('animate') || '', 10) || 300)
+        : 0;
+      const tweenFrom = (this._animateMs > 0 && this._hasModel) ? this._captureTween() : null;
+
       this._hasModel = true;
 
       const dims = model.dimensions as string[];
@@ -1010,6 +1018,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       if (axisLinesLayer)  this.__data__.__state__.setVariable('graph_updated_axis_lines',  axisLinesLayer.__data__.objects);
 
       this.update();
+
+      // Animate marks/edges from their pre-rebuild positions to the new ones.
+      if (tweenFrom) this._runTween(tweenFrom);
     });
   }
 
@@ -1249,6 +1260,109 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                  directed: !!m.isDirected, self: !!m.isSelf };
       })
       .filter(e => e.source != null && e.target != null);
+  }
+
+  // ── Transition tweening (opt-in via the `animate` attribute; webENA P2.1) ───
+  private _animateMs = 0;
+  private _tweenRaf: number | null = null;
+
+  /** Marks (circles/rects) and undirected edge lines participate in tweening. */
+  private _tweenTargets(): SVGElement[] {
+    return [...this.svg_element.querySelectorAll(
+      'circle[data-point-id], rect[data-point-id], line[data-edge-source]'
+    )] as SVGElement[];
+  }
+
+  private _readCoords(el: SVGElement): any {
+    const tag = el.tagName.toLowerCase();
+    const n = (a: string) => parseFloat(el.getAttribute(a) || '0');
+    if (tag === 'circle') return { t: 'c', cx: n('cx'), cy: n('cy') };
+    if (tag === 'rect')   return { t: 'r', x: n('x'), y: n('y') };
+    if (tag === 'line')   return { t: 'l', x1: n('x1'), y1: n('y1'), x2: n('x2'), y2: n('y2') };
+    return null;
+  }
+
+  /** Snapshot current tween-target positions keyed by element. */
+  private _captureTween(): Map<SVGElement, any> {
+    const m = new Map<SVGElement, any>();
+    this._tweenTargets().forEach(el => { const c = this._readCoords(el); if (c) m.set(el, c); });
+    return m;
+  }
+
+  /** Animate each still-present element from its snapshot to its new position. */
+  private _runTween(from: Map<SVGElement, any>): void {
+    if (this._tweenRaf !== null) { cancelAnimationFrame(this._tweenRaf); this._tweenRaf = null; }
+    const to = new Map<SVGElement, any>();
+    this._tweenTargets().forEach(el => { if (from.has(el)) { const c = this._readCoords(el); if (c) to.set(el, c); } });
+    if (!to.size) return;
+
+    const dur = this._animateMs;
+    const t0 = performance.now();
+    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+    const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / dur);
+      const k = ease(t);
+      to.forEach((nc, el) => {
+        const oc = from.get(el);
+        if (!oc || oc.t !== nc.t) return;
+        if (nc.t === 'c') {
+          el.setAttribute('cx', String(lerp(oc.cx, nc.cx, k)));
+          el.setAttribute('cy', String(lerp(oc.cy, nc.cy, k)));
+        } else if (nc.t === 'r') {
+          el.setAttribute('x', String(lerp(oc.x, nc.x, k)));
+          el.setAttribute('y', String(lerp(oc.y, nc.y, k)));
+        } else {
+          el.setAttribute('x1', String(lerp(oc.x1, nc.x1, k)));
+          el.setAttribute('y1', String(lerp(oc.y1, nc.y1, k)));
+          el.setAttribute('x2', String(lerp(oc.x2, nc.x2, k)));
+          el.setAttribute('y2', String(lerp(oc.y2, nc.y2, k)));
+        }
+      });
+      this._tweenRaf = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    this._tweenRaf = requestAnimationFrame(step);
+  }
+
+  /** Serialize the current plot as a standalone SVG string (webENA P2.3). */
+  toSVG(): string {
+    const svg = this.svg_element.cloneNode(true) as SVGSVGElement;
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    const rect = this.svg_element.getBoundingClientRect();
+    if (rect.width)  svg.setAttribute('width',  String(Math.round(rect.width)));
+    if (rect.height) svg.setAttribute('height', String(Math.round(rect.height)));
+    return new XMLSerializer().serializeToString(svg);
+  }
+
+  /** Rasterize the current plot to a PNG data URL (webENA P2.3). `scale`
+   *  multiplies the pixel dimensions for a higher-resolution image. */
+  toPNG(scale = 2): Promise<string> {
+    const svgStr = this.toSVG();
+    const rect = this.svg_element.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    return new Promise((resolve, reject) => {
+      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = w * scale;
+          canvas.height = h * scale;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { URL.revokeObjectURL(url); reject(new Error('no 2d context')); return; }
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/png'));
+        } catch (err) { URL.revokeObjectURL(url); reject(err); }
+      };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
   }
 
   /** Unit points with their current graph-space coordinates. */
