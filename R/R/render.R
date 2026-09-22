@@ -74,8 +74,11 @@
   # ── <qe-points> — unit scatter dots (only when points = TRUE) ────────────
   if (isTRUE(opts[["points"]])) {
     pt_label <- opts[["label-points"]] %||% "auto"
+    pt_parts <- sprintf('label="%s"', pt_label)
+    if (!is.null(opts[["point-size"]]))
+      pt_parts <- c(pt_parts, sprintf('size="%s"', opts[["point-size"]]))
     children <- c(children,
-      sprintf('    <qe-points label="%s"></qe-points>', pt_label))
+      sprintf('    <qe-points %s></qe-points>', paste(pt_parts, collapse = " ")))
   }
 
   # ── <qe-edges> — edge network (omit when no primary target or suppressed) ─
@@ -412,10 +415,13 @@ qe_edges <- function(p, group = NULL, unit = NULL,
 #'
 #' @param p    A `qe_plot` object.
 #' @param show Logical. Default `TRUE`.
+#' @param size Optional numeric dot size. Omit for the default (2.5).  Larger
+#'   values draw bigger dots; the size is relative to the code-node size.
 #' @return The modified `qe_plot` object.
 #' @export
-qe_points <- function(p, show = TRUE) {
+qe_points <- function(p, show = TRUE, size = NULL) {
   p$graph_opts$points <- show
+  p$graph_opts[["point-size"]] <- size
   p
 }
 

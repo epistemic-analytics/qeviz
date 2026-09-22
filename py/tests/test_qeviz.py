@@ -410,6 +410,17 @@ def test_html_with_points():
     assert "<qe-points" in html
 
 
+def test_points_size():
+    html = _vis_block(_make_plot().points(size=5)._build_html_doc())
+    assert 'size="5"' in html
+
+
+def test_points_no_size_by_default():
+    html = _vis_block(_make_plot().points()._build_html_doc())
+    assert "<qe-points" in html
+    assert "size=" not in html
+
+
 def test_axes_default_labels():
     html = _vis_block(_make_plot().axes()._build_html_doc())
     assert "<qe-axes x y>" in html

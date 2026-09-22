@@ -348,6 +348,13 @@ end
     @test occursin("<qe-points", g)
 end
 
+@testset "qe_points size attribute" begin
+    g = QEViz._build_graph_element(qe_points(qe_plot(model); size=5))
+    @test occursin("size=\"5\"", g)
+    g2 = QEViz._build_graph_element(qe_points(qe_plot(model)))
+    @test !occursin("size=", g2)
+end
+
 @testset "qe_axes default dimension-name labels" begin
     g = QEViz._build_graph_element(qe_axes(qe_plot(model)))
     @test occursin("<qe-axes x y>", g)

@@ -353,10 +353,16 @@ class QEPlot:
         p._opts["also"]    = also
         return p
 
-    def points(self, show: bool = True) -> "QEPlot":
-        """Show or hide individual unit scatter dots."""
+    def points(self, show: bool = True, *, size: Optional[Union[int, float]] = None) -> "QEPlot":
+        """
+        Show or hide individual unit scatter dots.
+
+        ``size`` overrides the default dot size (2.5); larger values draw bigger
+        dots, relative to the code-node size.
+        """
         p = self._copy()
         p._opts["show_points"] = show
+        p._opts["point_size"] = size
         return p
 
     def axes(
@@ -504,7 +510,10 @@ class QEPlot:
         # <qe-points> — only when show_points=True
         if opts.get("show_points", False):
             pt_label = opts.get("label_points", "auto")
-            children.append(f'    <qe-points label="{pt_label}"></qe-points>')
+            pt_parts = [f'label="{pt_label}"']
+            if opts.get("point_size") is not None:
+                pt_parts.append(f'size="{opts["point_size"]}"')
+            children.append(f'    <qe-points {" ".join(pt_parts)}></qe-points>')
 
         # <qe-edges> — only when not suppressed and a primary target is set
         if opts.get("show_edges", True):

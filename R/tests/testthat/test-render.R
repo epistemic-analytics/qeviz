@@ -32,6 +32,17 @@ test_that("plots omit axes unless qe_axes is called", {
   expect_false(grepl("<qe-axes", .graph_el(qe_plot(model)), fixed = TRUE))
 })
 
+test_that("qe_points size emits a size attribute", {
+  expect_match(.graph_el(qe_plot(model) |> qe_points(size = 5)),
+               'size="5"', fixed = TRUE)
+})
+
+test_that("qe_points omits size by default", {
+  el <- .graph_el(qe_plot(model) |> qe_points())
+  expect_match(el, "<qe-points", fixed = TRUE)
+  expect_false(grepl("size=", el, fixed = TRUE))
+})
+
 # ── qe_html ────────────────────────────────────────────────────────────────────
 
 test_that("qe_html returns a single character string", {

@@ -335,10 +335,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             // Only add unit dots to the layer when 'points' attribute is present.
             if (showUnitPoints) {
               const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
-              // Default unit-point size. Point() defaults to 1, which renders
-              // smaller than code nodes (2) — too faint. 2.5 reads clearly while
-              // staying below the mean markers (4).
-              pt.size = 2.5;
+              // Unit-point size: <qe-points size=…> overrides the default 2.5.
+              // (Point() defaults to 1, which renders smaller than code nodes.)
+              pt.size = config.pointSize ?? 2.5;
               // White halo separates overlapping dots in dense clusters.
               (pt as any).meta = { ...((pt as any).meta ?? {}), stroke: '#ffffff' };
               this.__data__.points.set(pt.ID, pt);
@@ -1037,6 +1036,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // Points
     showPoints: boolean;
     labelPoints: number;
+    pointSize: number | null;
     // Edges
     showEdges: boolean;
     edgeGroup: string | null;
@@ -1092,6 +1092,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         pointsEl?.getAttribute('label') ?? this.getAttribute('label-points') ?? labelsShorthand,
         Label.DISPLAY_TYPES.OFF
       ),
+      pointSize: pointsEl?.getAttribute('size') ? parseFloat(pointsEl.getAttribute('size')!) : null,
 
       // Edges — presence of <qe-edges> = draw a network.
       showEdges:   !!edgesEl,
@@ -1161,7 +1162,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
-        'x', 'y',
+        'x', 'y', 'size',
       ],
     });
     // Find the associated ena-visual: check 'for' attribute first, then nearest
@@ -1426,15 +1427,16 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       el.setAttribute('font-weight', '600');
       el.setAttribute('fill',        '#556');
       if (axis === 'x') {
-        // Just past the right (+x) end of the x-axis.
-        el.setAttribute('x', (extent + gap).toString());
-        el.setAttribute('y', (fontSize * 0.35).toString());
-        el.setAttribute('text-anchor', 'start');
+        // At the right (+x) tip, anchored end so any-length text grows inward
+        // and never clips past the viewBox edge; nudged just above the axis.
+        el.setAttribute('x', (extent - gap).toString());
+        el.setAttribute('y', (-gap).toString());
+        el.setAttribute('text-anchor', 'end');
       } else {
-        // Centered just above the top (−y in SVG space) end of the y-axis.
-        el.setAttribute('x', '0');
-        el.setAttribute('y', (-extent - gap).toString());
-        el.setAttribute('text-anchor', 'middle');
+        // Just below the top (−y) tip, centered on the y-axis, inside the box.
+        el.setAttribute('x', (gap).toString());
+        el.setAttribute('y', (-extent + fontSize + gap).toString());
+        el.setAttribute('text-anchor', 'start');
       }
     };
 

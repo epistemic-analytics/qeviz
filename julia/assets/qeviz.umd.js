@@ -3140,7 +3140,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const colorStr = group ? groupColorMap[group] ?? "#888888" : "#888888";
               if (showUnitPoints) {
                 const pt = rowToPoint(row, unitIdCol, colorStr, pointScale);
-                pt.size = 2.5;
+                pt.size = config.pointSize ?? 2.5;
                 pt.meta = { ...pt.meta ?? {}, stroke: "#ffffff" };
                 this.__data__.points.set(pt.ID, pt);
                 pointsLayer.__data__.objects.set(pt.ID, pt);
@@ -3731,6 +3731,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           (pointsEl == null ? void 0 : pointsEl.getAttribute("label")) ?? this.getAttribute("label-points") ?? labelsShorthand,
           Label.DISPLAY_TYPES.OFF
         ),
+        pointSize: (pointsEl == null ? void 0 : pointsEl.getAttribute("size")) ? parseFloat(pointsEl.getAttribute("size")) : null,
         // Edges — presence of <qe-edges> = draw a network.
         showEdges: !!edgesEl,
         edgeGroup: (edgesEl == null ? void 0 : edgesEl.getAttribute("group")) ?? null,
@@ -3806,7 +3807,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "stroke-width-range",
           "opacity-range",
           "x",
-          "y"
+          "y",
+          "size"
         ]
       });
       const forId = this.getAttribute("for");
@@ -4002,13 +4004,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         el.setAttribute("font-weight", "600");
         el.setAttribute("fill", "#556");
         if (axis === "x") {
-          el.setAttribute("x", (extent + gap).toString());
-          el.setAttribute("y", (fontSize * 0.35).toString());
-          el.setAttribute("text-anchor", "start");
+          el.setAttribute("x", (extent - gap).toString());
+          el.setAttribute("y", (-gap).toString());
+          el.setAttribute("text-anchor", "end");
         } else {
-          el.setAttribute("x", "0");
-          el.setAttribute("y", (-extent - gap).toString());
-          el.setAttribute("text-anchor", "middle");
+          el.setAttribute("x", gap.toString());
+          el.setAttribute("y", (-extent + fontSize + gap).toString());
+          el.setAttribute("text-anchor", "start");
         }
       }, "place");
       place("x", this._axisXText);

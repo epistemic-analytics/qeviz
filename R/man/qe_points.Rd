@@ -4,12 +4,15 @@
 \alias{qe_points}
 \title{Show or hide unit points}
 \usage{
-qe_points(p, show = TRUE)
+qe_points(p, show = TRUE, size = NULL)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
 
 \item{show}{Logical. Default \code{TRUE}.}
+
+\item{size}{Optional numeric dot size. Omit for the default (2.5).  Larger
+values draw bigger dots; the size is relative to the code-node size.}
 }
 \value{
 The modified \code{qe_plot} object.

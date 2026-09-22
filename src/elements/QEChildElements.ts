@@ -49,6 +49,7 @@ export class QEMeansElement extends HTMLElement {
  *
  * Attributes:
  *   label  "on" | "off" | "click" | "auto"  (default "auto")
+ *   size   Numeric dot size (default 2.5), relative to the code-node size.
  */
 export class QEPointsElement extends HTMLElement {
   static tagName = 'qe-points' as const;

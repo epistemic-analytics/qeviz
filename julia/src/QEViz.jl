@@ -270,9 +270,10 @@ end
 
 Show or hide individual unit scatter dots.
 """
-function qe_points(p::QEPlot; show::Bool = true)::QEPlot
+function qe_points(p::QEPlot; show::Bool = true, size::Union{Real,Nothing} = nothing)::QEPlot
     p = _copy(p)
     p.opts["show_points"] = show
+    p.opts["point_size"] = size
     p
 end
 
@@ -423,7 +424,10 @@ function _build_graph_element(p::QEPlot)::String
     # <qe-points> — only when show_points=true
     if get(opts, "show_points", false) === true
         pt_label = get(opts, "label_points", "auto")
-        push!(children, "    <qe-points label=\"" * pt_label * "\"></qe-points>")
+        pt_parts = ["label=\"" * pt_label * "\""]
+        ps = get(opts, "point_size", nothing)
+        !isnothing(ps) && push!(pt_parts, "size=\"" * string(ps) * "\"")
+        push!(children, "    <qe-points " * join(pt_parts, " ") * "></qe-points>")
     end
 
     # <qe-edges> — only when not suppressed and a primary target is set
