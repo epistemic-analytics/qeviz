@@ -38,6 +38,9 @@ export class QENodesElement extends HTMLElement {
  *   groups      Comma-separated group names to show.  Omit for all groups.
  *   confidence  Boolean — show 95% CI rectangles.
  *   label       "on" | "off" | "click" | "auto"  (default "on")
+ *   fixed-size  Boolean — keep mean markers a constant on-screen pixel size
+ *               regardless of data extent, container size, or zoom (default:
+ *               markers scale with the coordinate space, like nodes and edges).
  */
 export class QEMeansElement extends HTMLElement {
   static tagName = 'qe-means' as const;
@@ -50,6 +53,9 @@ export class QEMeansElement extends HTMLElement {
  * Attributes:
  *   label  "on" | "off" | "click" | "auto"  (default "auto")
  *   size   Numeric dot size (default 2.5), relative to the code-node size.
+ *   fixed-size  Boolean — keep unit dots a constant on-screen pixel size
+ *               regardless of data extent, container size, or zoom (default:
+ *               dots scale with the coordinate space, like nodes and edges).
  */
 export class QEPointsElement extends HTMLElement {
   static tagName = 'qe-points' as const;

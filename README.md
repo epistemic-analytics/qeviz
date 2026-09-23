@@ -169,6 +169,21 @@ The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML pag
 </script>
 ```
 
+By default, all marks (nodes, mean markers, unit dots) size in graph-coordinate
+units and scale with the data extent and wheel-zoom. Add `fixed-size` to
+`<qe-points>` or `<qe-means>` to keep those markers a constant on-screen pixel
+size instead — useful when embedding coordinated plots at different scales (the
+webENA use case):
+
+```html
+<qe-points fixed-size></qe-points>
+<qe-means fixed-size></qe-means>
+```
+
+In the language adapters this is `fixed_size = TRUE` on `qe_points()` / `qe_group()`
+(R), `fixed_size=True` on `.points()` / `.group()` (Python), and
+`fixed_size=true` on `qe_points` / `qe_group` (Julia).
+
 Child element presence controls layer visibility — add `<qe-points>` to show unit dots, omit it to hide them.  A `MutationObserver` watches for child additions, removals, and attribute changes, so interactive controls can manipulate the DOM directly:
 
 ```js
@@ -193,6 +208,14 @@ DOM. Each event's `detail` also carries the `originalEvent`.
 Labels are **draggable** (drag to reposition; the label pins open and stays
 visible), emitting `qe-label-move` on drop so the host can persist the position
 or mirror it across coordinated plots.
+
+For a quick built-in tooltip on hover — `source – target (weight)` over edges,
+the mark name over nodes — add the `tooltip` attribute to `<qe-graph>`. It is
+opt-in; most hosts render their own from the hover events instead.
+
+```html
+<qe-graph tooltip>…</qe-graph>
+```
 
 `source`/`target` are code-node names; `x`/`y` are graph-space coordinates. Unhover
 events carry `{ key }` identifying the mark/edge that was left. The host reacts and

@@ -4,7 +4,7 @@
 \alias{qe_points}
 \title{Show or hide unit points}
 \usage{
-qe_points(p, show = TRUE, size = NULL)
+qe_points(p, show = TRUE, size = NULL, fixed_size = FALSE)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
@@ -13,6 +13,10 @@ qe_points(p, show = TRUE, size = NULL)
 
 \item{size}{Optional numeric dot size. Omit for the default (2.5).  Larger
 values draw bigger dots; the size is relative to the code-node size.}
+
+\item{fixed_size}{Logical. When \code{TRUE}, unit dots keep a constant on-screen
+pixel size regardless of data extent, container size, or zoom. Default
+\code{FALSE} (dots scale with the coordinate space, like nodes and edges).}
 }
 \value{
 The modified \code{qe_plot} object.

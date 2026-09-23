@@ -33,8 +33,20 @@ export class QEPoint extends Drawable implements QEElement {
    *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
    */
   computeRadius(): number {
-    const extent = this.graph.__data__.extremes.x_max;
-    return (extent > 0 ? extent : 1) * 0.006 * this.__data__.size;
+    const extent = (this.graph.__data__.extremes.x_max) || 1;
+    const sizeScale = (this.__data__ as any).meta?.sizeScale ?? 1;
+    // Fixed-on-screen mode (webENA size decoupling): keep a constant pixel size
+    // regardless of data extent / container size / wheel-zoom, by converting a
+    // target px into user units via the current px-per-unit and zoom. Otherwise
+    // size scales with the coordinate space (default — nodes/edges do the same).
+    if ((this.__data__ as any).meta?.fixedSize) {
+      const rect = (this.graph.svg_element as SVGSVGElement)?.getBoundingClientRect?.();
+      const zoom = (this.graph as any).zoom_level || 1;
+      const pxPerUnit = rect && rect.width > 0 ? rect.width / (2 * extent) : 1;
+      const targetPx = this.__data__.size * 2 * sizeScale;   // size 2.5 → 5px radius
+      return (targetPx / pxPerUnit) / zoom;
+    }
+    return extent * 0.006 * this.__data__.size * sizeScale;
   }
 
   /** Optional halo stroke (e.g. white outline on unit points to separate

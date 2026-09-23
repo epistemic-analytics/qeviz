@@ -352,6 +352,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 ...((pt as any).meta ?? {}),
                 stroke: '#ffffff', kind: 'point', name: pt.ID,
                 group: group ?? undefined, unit: pt.ID,
+                fixedSize: config.pointFixedSize,
               };
               this.__data__.points.set(pt.ID, pt);
               pointsLayer.__data__.objects.set(pt.ID, pt);
@@ -421,7 +422,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               const meanPt = new Point({
                 ID: `mean-${group}`,
                 dimensions: [mx, my],
-                meta: { kind: 'mean', name: group, group },
+                meta: { kind: 'mean', name: group, group, fixedSize: config.meanFixedSize },
               });
               meanPt.color = new Color(color);
               meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
@@ -465,7 +466,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               const meanPt = new Point({
                 ID: `mean-${group}`,
                 dimensions: [x / n * pointScale, -(y / n) * pointScale],
-                meta: { kind: 'mean', name: group, group },
+                meta: { kind: 'mean', name: group, group, fixedSize: config.meanFixedSize },
               });
               meanPt.color = new Color(color);
               meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
@@ -1055,10 +1056,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     activeMeanGroups: string | null;
     showCI: boolean;
     labelMeans: number;
+    meanFixedSize: boolean;
     // Points
     showPoints: boolean;
     labelPoints: number;
     pointSize: number | null;
+    pointFixedSize: boolean;
     // Edges
     showEdges: boolean;
     edgeGroup: string | null;
@@ -1107,6 +1110,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         meansEl?.getAttribute('label') ?? this.getAttribute('label-means') ?? labelsShorthand,
         Label.DISPLAY_TYPES.ON
       ),
+      // fixed-size keeps mean markers a constant on-screen px size (webENA parity).
+      meanFixedSize: !!meansEl && meansEl.hasAttribute('fixed-size'),
 
       // Points — presence of <qe-points> = show unit dots.
       showPoints: !!pointsEl,
@@ -1115,6 +1120,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         Label.DISPLAY_TYPES.OFF
       ),
       pointSize: pointsEl?.getAttribute('size') ? parseFloat(pointsEl.getAttribute('size')!) : null,
+      // fixed-size keeps unit dots a constant on-screen px size (webENA parity).
+      pointFixedSize: !!pointsEl && pointsEl.hasAttribute('fixed-size'),
 
       // Edges — presence of <qe-edges> = draw a network.
       showEdges:   !!edgesEl,
@@ -1185,7 +1192,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
-        'x', 'y', 'size',
+        'x', 'y', 'size', 'fixed-size',
       ],
     });
     // Find the associated ena-visual: check 'for' attribute first, then nearest
@@ -1222,6 +1229,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     this._childObserver?.disconnect();
     this._childObserver = null;
     QEGraphElement._instances.delete(this);
+    // Remove the body-level tooltip node so it doesn't outlive the graph.
+    this._tooltipEl?.remove();
+    this._tooltipEl = null;
   }
 
   // ── Instance registry + read APIs (webENA integration) ──────────────────────
@@ -1266,10 +1276,15 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _animateMs = 0;
   private _tweenRaf: number | null = null;
 
-  /** Marks (circles/rects) and undirected edge lines participate in tweening. */
+  /** Matches every numeric token in an SVG path `d` string (ints, decimals,
+   *  scientific notation, leading sign) while leaving command letters intact. */
+  private static _PATH_NUM_RE = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+
+  /** Marks (circles/rects), undirected edge lines, and directed / self-edge
+   *  triangle paths all participate in tweening. */
   private _tweenTargets(): SVGElement[] {
     return [...this.svg_element.querySelectorAll(
-      'circle[data-point-id], rect[data-point-id], line[data-edge-source]'
+      'circle[data-point-id], rect[data-point-id], line[data-edge-source], path[data-edge-source]'
     )] as SVGElement[];
   }
 
@@ -1279,6 +1294,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     if (tag === 'circle') return { t: 'c', cx: n('cx'), cy: n('cy') };
     if (tag === 'rect')   return { t: 'r', x: n('x'), y: n('y') };
     if (tag === 'line')   return { t: 'l', x1: n('x1'), y1: n('y1'), x2: n('x2'), y2: n('y2') };
+    if (tag === 'path') {
+      const d = el.getAttribute('d') || '';
+      return { t: 'p', d, nums: (d.match(QEGraphElement._PATH_NUM_RE) || []).map(Number) };
+    }
     return null;
   }
 
@@ -1313,11 +1332,20 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         } else if (nc.t === 'r') {
           el.setAttribute('x', String(lerp(oc.x, nc.x, k)));
           el.setAttribute('y', String(lerp(oc.y, nc.y, k)));
-        } else {
+        } else if (nc.t === 'l') {
           el.setAttribute('x1', String(lerp(oc.x1, nc.x1, k)));
           el.setAttribute('y1', String(lerp(oc.y1, nc.y1, k)));
           el.setAttribute('x2', String(lerp(oc.x2, nc.x2, k)));
           el.setAttribute('y2', String(lerp(oc.y2, nc.y2, k)));
+        } else {
+          // Directed / self-edge triangle path: interpolate the numeric tokens
+          // in `d` when the command structure is stable (equal token count).
+          // Otherwise leave the freshly-built `d` in place (graceful snap).
+          if (!oc.nums || oc.nums.length !== nc.nums.length) return;
+          let i = 0;
+          const d = nc.d.replace(QEGraphElement._PATH_NUM_RE,
+            () => String(lerp(oc.nums[i], nc.nums[i++], k)));
+          el.setAttribute('d', d);
         }
       });
       this._tweenRaf = t < 1 ? requestAnimationFrame(step) : null;
@@ -1722,6 +1750,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         this._emit(next.type === 'edge' ? 'qe-edge-hover' : 'qe-node-hover', { ...next.detail, originalEvent: ev });
         hovered = { type: next.type, key: nextKey! };
       }
+      // Opt-in built-in tooltip (P1.3 bonus): shown only when <qe-graph tooltip>.
+      // The host is free to build its own from the hover events instead.
+      if (this.hasAttribute('tooltip') && next) {
+        this._showTooltip(this._tooltipText(next.type, next.detail), ev.clientX, ev.clientY);
+      } else {
+        this._hideTooltip();
+      }
     });
 
     svg.addEventListener('mouseleave', () => {
@@ -1729,7 +1764,45 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         this._emit(hovered.type === 'edge' ? 'qe-edge-unhover' : 'qe-node-unhover', { key: hovered.key });
         hovered = null;
       }
+      this._hideTooltip();
     });
+  }
+
+  // ── Opt-in built-in tooltip ─────────────────────────────────────────────────
+  private _tooltipEl: HTMLDivElement | null = null;
+
+  /** "source – target (weight)" for edges; the mark name for nodes/means/points. */
+  private _tooltipText(type: 'edge' | 'node', d: Record<string, any>): string {
+    if (type === 'edge') {
+      const w = Number(d.weight);
+      const wStr = Number.isFinite(w) ? ` (${(+w.toFixed(3))})` : '';
+      return `${d.source} – ${d.target}${wStr}`;
+    }
+    return String(d.name ?? d.id);
+  }
+
+  private _showTooltip(text: string, clientX: number, clientY: number): void {
+    if (!this._tooltipEl) {
+      const el = document.createElement('div');
+      el.setAttribute('data-qe-tooltip', '');
+      Object.assign(el.style, {
+        position: 'fixed', zIndex: '2147483647', pointerEvents: 'none',
+        background: 'rgba(20,20,20,0.92)', color: '#fff',
+        font: '12px/1.4 system-ui, sans-serif', padding: '3px 7px',
+        borderRadius: '4px', whiteSpace: 'nowrap',
+        transform: 'translate(-50%, calc(-100% - 8px))',
+      } as CSSStyleDeclaration);
+      document.body.appendChild(el);
+      this._tooltipEl = el;
+    }
+    this._tooltipEl.textContent = text;
+    this._tooltipEl.style.left = `${clientX}px`;
+    this._tooltipEl.style.top  = `${clientY}px`;
+    this._tooltipEl.style.display = 'block';
+  }
+
+  private _hideTooltip(): void {
+    if (this._tooltipEl) this._tooltipEl.style.display = 'none';
   }
 
   draw() {

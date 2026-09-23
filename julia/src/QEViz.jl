@@ -181,7 +181,7 @@ qe_group(p, "FirstGame", "SecondGame"; intervals=false)
 ```
 """
 function qe_group(p::QEPlot, names::AbstractString...;
-                  intervals::Bool = true)::QEPlot
+                  intervals::Bool = true, fixed_size::Bool = false)::QEPlot
     p = _copy(p)
     available = qe_groups(p)
     if !isempty(names)
@@ -195,6 +195,7 @@ function qe_group(p::QEPlot, names::AbstractString...;
         delete!(p.opts, "groups")
     end
     p.opts["confidence"] = intervals
+    p.opts["mean_fixed_size"] = fixed_size
     p
 end
 
@@ -266,14 +267,18 @@ function qe_edges(p::QEPlot;
 end
 
 """
-    qe_points(p; show=true)
+    qe_points(p; show=true, size=nothing, fixed_size=false)
 
-Show or hide individual unit scatter dots.
+Show or hide individual unit scatter dots. `fixed_size` keeps the dots a
+constant on-screen pixel size regardless of data extent, container size, or zoom
+(default: dots scale with the coordinate space, like nodes and edges).
 """
-function qe_points(p::QEPlot; show::Bool = true, size::Union{Real,Nothing} = nothing)::QEPlot
+function qe_points(p::QEPlot; show::Bool = true, size::Union{Real,Nothing} = nothing,
+                   fixed_size::Bool = false)::QEPlot
     p = _copy(p)
     p.opts["show_points"] = show
     p.opts["point_size"] = size
+    p.opts["point_fixed_size"] = fixed_size
     p
 end
 
@@ -419,6 +424,7 @@ function _build_graph_element(p::QEPlot)::String
     end
     means_label = get(opts, "label_means", "on")
     push!(means_parts, "label=\"" * means_label * "\"")
+    get(opts, "mean_fixed_size", false) === true && push!(means_parts, "fixed-size")
     push!(children, "    <qe-means " * join(means_parts, " ") * "></qe-means>")
 
     # <qe-points> — only when show_points=true
@@ -427,6 +433,7 @@ function _build_graph_element(p::QEPlot)::String
         pt_parts = ["label=\"" * pt_label * "\""]
         ps = get(opts, "point_size", nothing)
         !isnothing(ps) && push!(pt_parts, "size=\"" * string(ps) * "\"")
+        get(opts, "point_fixed_size", false) === true && push!(pt_parts, "fixed-size")
         push!(children, "    <qe-points " * join(pt_parts, " ") * "></qe-points>")
     end
 

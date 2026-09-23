@@ -43,6 +43,29 @@ test_that("qe_points omits size by default", {
   expect_false(grepl("size=", el, fixed = TRUE))
 })
 
+test_that("qe_points fixed_size emits fixed-size on qe-points", {
+  el <- .graph_el(qe_plot(model) |> qe_points(fixed_size = TRUE))
+  expect_match(el, "<qe-points", fixed = TRUE)
+  expect_true(grepl("fixed-size", el, fixed = TRUE))
+})
+
+test_that("qe_points omits fixed-size by default", {
+  el <- .graph_el(qe_plot(model) |> qe_points())
+  expect_false(grepl("fixed-size", el, fixed = TRUE))
+})
+
+test_that("qe_group fixed_size emits fixed-size on qe-means", {
+  el <- .graph_el(qe_plot(model) |> qe_group(fixed_size = TRUE))
+  means_line <- grep("<qe-means", strsplit(el, "\n", fixed = TRUE)[[1]], value = TRUE)
+  expect_true(any(grepl("fixed-size", means_line, fixed = TRUE)))
+})
+
+test_that("qe_group omits fixed-size by default", {
+  el <- .graph_el(qe_plot(model) |> qe_group())
+  means_line <- grep("<qe-means", strsplit(el, "\n", fixed = TRUE)[[1]], value = TRUE)
+  expect_false(any(grepl("fixed-size", means_line, fixed = TRUE)))
+})
+
 # ── qe_html ────────────────────────────────────────────────────────────────────
 
 test_that("qe_html returns a single character string", {

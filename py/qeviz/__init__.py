@@ -256,7 +256,7 @@ class QEPlot:
 
     # ── Chain methods ──────────────────────────────────────────────────────────
 
-    def group(self, *names: str, intervals: bool = True) -> "QEPlot":
+    def group(self, *names: str, intervals: bool = True, fixed_size: bool = False) -> "QEPlot":
         """
         Select which group means (and optionally CI boxes) to display.
 
@@ -268,6 +268,9 @@ class QEPlot:
         ----------
         *names      Group names to display.  Omit to show all groups.
         intervals   Draw 95 % CI rectangles around each mean.  Default ``True``.
+        fixed_size  Keep mean markers a constant on-screen pixel size regardless
+                    of data extent, container size, or zoom.  Default ``False``
+                    (markers scale with the coordinate space).
         """
         p = self._copy()
         available = self.groups()
@@ -282,6 +285,7 @@ class QEPlot:
         else:
             p._opts.pop("groups", None)
         p._opts["confidence"] = intervals
+        p._opts["mean_fixed_size"] = bool(fixed_size)
         return p
 
     def edges(
@@ -353,16 +357,25 @@ class QEPlot:
         p._opts["also"]    = also
         return p
 
-    def points(self, show: bool = True, *, size: Optional[Union[int, float]] = None) -> "QEPlot":
+    def points(
+        self,
+        show: bool = True,
+        *,
+        size: Optional[Union[int, float]] = None,
+        fixed_size: bool = False,
+    ) -> "QEPlot":
         """
         Show or hide individual unit scatter dots.
 
         ``size`` overrides the default dot size (2.5); larger values draw bigger
-        dots, relative to the code-node size.
+        dots, relative to the code-node size.  ``fixed_size`` keeps the dots a
+        constant on-screen pixel size regardless of data extent, container size,
+        or zoom (default: dots scale with the coordinate space).
         """
         p = self._copy()
         p._opts["show_points"] = show
         p._opts["point_size"] = size
+        p._opts["point_fixed_size"] = bool(fixed_size)
         return p
 
     def axes(
@@ -505,6 +518,8 @@ class QEPlot:
             means_parts.append("confidence")
         means_label = opts.get("label_means", "on")
         means_parts.append(f'label="{means_label}"')
+        if opts.get("mean_fixed_size", False):
+            means_parts.append("fixed-size")
         children.append(f'    <qe-means {" ".join(means_parts)}></qe-means>')
 
         # <qe-points> — only when show_points=True
@@ -513,6 +528,8 @@ class QEPlot:
             pt_parts = [f'label="{pt_label}"']
             if opts.get("point_size") is not None:
                 pt_parts.append(f'size="{opts["point_size"]}"')
+            if opts.get("point_fixed_size", False):
+                pt_parts.append("fixed-size")
             children.append(f'    <qe-points {" ".join(pt_parts)}></qe-points>')
 
         # <qe-edges> — only when not suppressed and a primary target is set

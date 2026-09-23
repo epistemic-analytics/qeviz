@@ -2499,8 +2499,17 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
      */
     computeRadius() {
-      const extent = this.graph.__data__.extremes.x_max;
-      return (extent > 0 ? extent : 1) * 6e-3 * this.__data__.size;
+      var _a, _b, _c, _d;
+      const extent = this.graph.__data__.extremes.x_max || 1;
+      const sizeScale = ((_a = this.__data__.meta) == null ? void 0 : _a.sizeScale) ?? 1;
+      if ((_b = this.__data__.meta) == null ? void 0 : _b.fixedSize) {
+        const rect = (_d = (_c = this.graph.svg_element) == null ? void 0 : _c.getBoundingClientRect) == null ? void 0 : _d.call(_c);
+        const zoom = this.graph.zoom_level || 1;
+        const pxPerUnit = rect && rect.width > 0 ? rect.width / (2 * extent) : 1;
+        const targetPx = this.__data__.size * 2 * sizeScale;
+        return targetPx / pxPerUnit / zoom;
+      }
+      return extent * 6e-3 * this.__data__.size * sizeScale;
     }
     /** Optional halo stroke (e.g. white outline on unit points to separate
      *  overlapping dots in dense clusters). Width scales with the dot so it holds
@@ -3141,6 +3150,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._tweenRaf = null;
       this._highlight = { edges: /* @__PURE__ */ new Set(), nodes: /* @__PURE__ */ new Set() };
       this._highlightGroup = null;
+      this._tooltipEl = null;
       this.graph = this;
       this.parent = null;
       this.__data__ = new Graph(DefaultGraphOptions);
@@ -3237,7 +3247,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   kind: "point",
                   name: pt.ID,
                   group: group ?? void 0,
-                  unit: pt.ID
+                  unit: pt.ID,
+                  fixedSize: config.pointFixedSize
                 };
                 this.__data__.points.set(pt.ID, pt);
                 pointsLayer.__data__.objects.set(pt.ID, pt);
@@ -3288,7 +3299,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   const meanPt = new Point({
                     ID: `mean-${group}`,
                     dimensions: [mx, my],
-                    meta: { kind: "mean", name: group, group }
+                    meta: { kind: "mean", name: group, group, fixedSize: config.meanFixedSize }
                   });
                   meanPt.color = new Color(color);
                   meanPt.size = 4;
@@ -3326,7 +3337,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   const meanPt = new Point({
                     ID: `mean-${group}`,
                     dimensions: [x / n * pointScale, -(y / n) * pointScale],
-                    meta: { kind: "mean", name: group, group }
+                    meta: { kind: "mean", name: group, group, fixedSize: config.meanFixedSize }
                   });
                   meanPt.color = new Color(color);
                   meanPt.size = 4;
@@ -3829,6 +3840,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           (meansEl == null ? void 0 : meansEl.getAttribute("label")) ?? this.getAttribute("label-means") ?? labelsShorthand,
           Label.DISPLAY_TYPES.ON
         ),
+        // fixed-size keeps mean markers a constant on-screen px size (webENA parity).
+        meanFixedSize: !!meansEl && meansEl.hasAttribute("fixed-size"),
         // Points — presence of <qe-points> = show unit dots.
         showPoints: !!pointsEl,
         labelPoints: parseLabelMode(
@@ -3836,6 +3849,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           Label.DISPLAY_TYPES.OFF
         ),
         pointSize: (pointsEl == null ? void 0 : pointsEl.getAttribute("size")) ? parseFloat(pointsEl.getAttribute("size")) : null,
+        // fixed-size keeps unit dots a constant on-screen px size (webENA parity).
+        pointFixedSize: !!pointsEl && pointsEl.hasAttribute("fixed-size"),
         // Edges — presence of <qe-edges> = draw a network.
         showEdges: !!edgesEl,
         edgeGroup: (edgesEl == null ? void 0 : edgesEl.getAttribute("group")) ?? null,
@@ -3913,7 +3928,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "opacity-range",
           "x",
           "y",
-          "size"
+          "size",
+          "fixed-size"
         ]
       });
       const forId = this.getAttribute("for");
@@ -3933,10 +3949,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
     }
     disconnectedCallback() {
-      var _a;
+      var _a, _b;
       (_a = this._childObserver) == null ? void 0 : _a.disconnect();
       this._childObserver = null;
       _QEGraphElement._instances.delete(this);
+      (_b = this._tooltipEl) == null ? void 0 : _b.remove();
+      this._tooltipEl = null;
     }
     /** All connected <qe-graph> instances (newest membership order). */
     static instances() {
@@ -3980,10 +3998,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         };
       }).filter((e) => e.source != null && e.target != null);
     }
-    /** Marks (circles/rects) and undirected edge lines participate in tweening. */
+    /** Marks (circles/rects), undirected edge lines, and directed / self-edge
+     *  triangle paths all participate in tweening. */
     _tweenTargets() {
       return [...this.svg_element.querySelectorAll(
-        "circle[data-point-id], rect[data-point-id], line[data-edge-source]"
+        "circle[data-point-id], rect[data-point-id], line[data-edge-source], path[data-edge-source]"
       )];
     }
     _readCoords(el) {
@@ -3992,6 +4011,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (tag === "circle") return { t: "c", cx: n("cx"), cy: n("cy") };
       if (tag === "rect") return { t: "r", x: n("x"), y: n("y") };
       if (tag === "line") return { t: "l", x1: n("x1"), y1: n("y1"), x2: n("x2"), y2: n("y2") };
+      if (tag === "path") {
+        const d = el.getAttribute("d") || "";
+        return { t: "p", d, nums: (d.match(_QEGraphElement._PATH_NUM_RE) || []).map(Number) };
+      }
       return null;
     }
     /** Snapshot current tween-target positions keyed by element. */
@@ -4033,11 +4056,19 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           } else if (nc.t === "r") {
             el.setAttribute("x", String(lerp(oc.x, nc.x, k)));
             el.setAttribute("y", String(lerp(oc.y, nc.y, k)));
-          } else {
+          } else if (nc.t === "l") {
             el.setAttribute("x1", String(lerp(oc.x1, nc.x1, k)));
             el.setAttribute("y1", String(lerp(oc.y1, nc.y1, k)));
             el.setAttribute("x2", String(lerp(oc.x2, nc.x2, k)));
             el.setAttribute("y2", String(lerp(oc.y2, nc.y2, k)));
+          } else {
+            if (!oc.nums || oc.nums.length !== nc.nums.length) return;
+            let i = 0;
+            const d = nc.d.replace(
+              _QEGraphElement._PATH_NUM_RE,
+              () => String(lerp(oc.nums[i], nc.nums[i++], k))
+            );
+            el.setAttribute("d", d);
           }
         });
         this._tweenRaf = t < 1 ? requestAnimationFrame(step) : null;
@@ -4387,13 +4418,55 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           this._emit(next.type === "edge" ? "qe-edge-hover" : "qe-node-hover", { ...next.detail, originalEvent: ev });
           hovered = { type: next.type, key: nextKey };
         }
+        if (this.hasAttribute("tooltip") && next) {
+          this._showTooltip(this._tooltipText(next.type, next.detail), ev.clientX, ev.clientY);
+        } else {
+          this._hideTooltip();
+        }
       });
       svg.addEventListener("mouseleave", () => {
         if (hovered) {
           this._emit(hovered.type === "edge" ? "qe-edge-unhover" : "qe-node-unhover", { key: hovered.key });
           hovered = null;
         }
+        this._hideTooltip();
       });
+    }
+    /** "source – target (weight)" for edges; the mark name for nodes/means/points. */
+    _tooltipText(type, d) {
+      if (type === "edge") {
+        const w = Number(d.weight);
+        const wStr = Number.isFinite(w) ? ` (${+w.toFixed(3)})` : "";
+        return `${d.source} – ${d.target}${wStr}`;
+      }
+      return String(d.name ?? d.id);
+    }
+    _showTooltip(text, clientX, clientY) {
+      if (!this._tooltipEl) {
+        const el = document.createElement("div");
+        el.setAttribute("data-qe-tooltip", "");
+        Object.assign(el.style, {
+          position: "fixed",
+          zIndex: "2147483647",
+          pointerEvents: "none",
+          background: "rgba(20,20,20,0.92)",
+          color: "#fff",
+          font: "12px/1.4 system-ui, sans-serif",
+          padding: "3px 7px",
+          borderRadius: "4px",
+          whiteSpace: "nowrap",
+          transform: "translate(-50%, calc(-100% - 8px))"
+        });
+        document.body.appendChild(el);
+        this._tooltipEl = el;
+      }
+      this._tooltipEl.textContent = text;
+      this._tooltipEl.style.left = `${clientX}px`;
+      this._tooltipEl.style.top = `${clientY}px`;
+      this._tooltipEl.style.display = "block";
+    }
+    _hideTooltip() {
+      if (this._tooltipEl) this._tooltipEl.style.display = "none";
     }
     draw() {
       var _a;
@@ -4526,6 +4599,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     }
   `;
   _QEGraphElement._instances = /* @__PURE__ */ new Set();
+  _QEGraphElement._PATH_NUM_RE = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
   let QEGraphElement = _QEGraphElement;
   customElements.define(QEGraphElement.tagName, QEGraphElement);
   const getGraph = /* @__PURE__ */ __name((key) => QEGraphElement.getGraph(key), "getGraph");

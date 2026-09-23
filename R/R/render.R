@@ -68,6 +68,8 @@
     means_parts <- c(means_parts, "confidence")
   means_label <- opts[["label-means"]] %||% "on"
   means_parts <- c(means_parts, sprintf('label="%s"', means_label))
+  if (isTRUE(opts[["mean-fixed-size"]]))
+    means_parts <- c(means_parts, "fixed-size")
   children <- c(children,
     sprintf('    <qe-means %s></qe-means>', paste(means_parts, collapse = " ")))
 
@@ -77,6 +79,8 @@
     pt_parts <- sprintf('label="%s"', pt_label)
     if (!is.null(opts[["point-size"]]))
       pt_parts <- c(pt_parts, sprintf('size="%s"', opts[["point-size"]]))
+    if (isTRUE(opts[["point-fixed-size"]]))
+      pt_parts <- c(pt_parts, "fixed-size")
     children <- c(children,
       sprintf('    <qe-points %s></qe-points>', paste(pt_parts, collapse = " ")))
   }
@@ -255,6 +259,9 @@ print.qe_plot <- function(x, ...) {
 #'   extraction time.  An error is raised if the column name does not match.
 #' @param intervals Logical.  Show 95% CI box(es) around group mean(s).
 #'   Default `TRUE`.
+#' @param fixed_size Logical. When `TRUE`, group mean markers keep a constant
+#'   on-screen pixel size regardless of data extent, container size, or zoom.
+#'   Default `FALSE` (markers scale with the coordinate space).
 #'
 #' @return The modified `qe_plot` object.
 #'
@@ -271,7 +278,7 @@ print.qe_plot <- function(x, ...) {
 #' }
 #'
 #' @export
-qe_group <- function(p, ..., by = NULL, intervals = TRUE) {
+qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
   requested <- c(...)   # character vector of group names, or length-0
 
   # Validate `by` against the model's group_col
@@ -304,6 +311,7 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE) {
   }
 
   p$graph_opts$confidence <- intervals
+  p$graph_opts[["mean-fixed-size"]] <- isTRUE(fixed_size)
   p
 }
 
@@ -417,11 +425,15 @@ qe_edges <- function(p, group = NULL, unit = NULL,
 #' @param show Logical. Default `TRUE`.
 #' @param size Optional numeric dot size. Omit for the default (2.5).  Larger
 #'   values draw bigger dots; the size is relative to the code-node size.
+#' @param fixed_size Logical. When `TRUE`, unit dots keep a constant on-screen
+#'   pixel size regardless of data extent, container size, or zoom. Default
+#'   `FALSE` (dots scale with the coordinate space, like nodes and edges).
 #' @return The modified `qe_plot` object.
 #' @export
-qe_points <- function(p, show = TRUE, size = NULL) {
+qe_points <- function(p, show = TRUE, size = NULL, fixed_size = FALSE) {
   p$graph_opts$points <- show
   p$graph_opts[["point-size"]] <- size
+  p$graph_opts[["point-fixed-size"]] <- isTRUE(fixed_size)
   p
 }
 

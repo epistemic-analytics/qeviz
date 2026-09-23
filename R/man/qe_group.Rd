@@ -4,7 +4,7 @@
 \alias{qe_group}
 \title{Select which group means to display}
 \usage{
-qe_group(p, ..., by = NULL, intervals = TRUE)
+qe_group(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
@@ -19,6 +19,10 @@ extraction time.  An error is raised if the column name does not match.}
 
 \item{intervals}{Logical.  Show 95\% CI box(es) around group mean(s).
 Default \code{TRUE}.}
+
+\item{fixed_size}{Logical. When \code{TRUE}, group mean markers keep a constant
+on-screen pixel size regardless of data extent, container size, or zoom.
+Default \code{FALSE} (markers scale with the coordinate space).}
 }
 \value{
 The modified \code{qe_plot} object.

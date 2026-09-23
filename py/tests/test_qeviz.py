@@ -421,6 +421,28 @@ def test_points_no_size_by_default():
     assert "size=" not in html
 
 
+def test_points_fixed_size():
+    html = _vis_block(_make_plot().points(fixed_size=True)._build_html_doc())
+    assert "<qe-points" in html and "fixed-size" in html
+
+
+def test_points_no_fixed_size_by_default():
+    html = _vis_block(_make_plot().points()._build_html_doc())
+    assert "fixed-size" not in html
+
+
+def test_means_fixed_size():
+    html = _vis_block(_make_plot().group(fixed_size=True)._build_html_doc())
+    means_line = next(l for l in html.splitlines() if "<qe-means" in l)
+    assert "fixed-size" in means_line
+
+
+def test_means_no_fixed_size_by_default():
+    html = _vis_block(_make_plot().group()._build_html_doc())
+    means_line = next(l for l in html.splitlines() if "<qe-means" in l)
+    assert "fixed-size" not in means_line
+
+
 def test_axes_default_labels():
     html = _vis_block(_make_plot().axes()._build_html_doc())
     assert "<qe-axes x y>" in html

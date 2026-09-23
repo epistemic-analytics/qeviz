@@ -31,7 +31,7 @@ polynomial smoothing.}
 
 \item{max_degree}{Upper bound on polynomial degree when \code{smooth = "poly"}.
 With \code{degree_selection = "loocv_2d"} the actual degree is chosen in
-\code{1..max_degree}; with \code{"fixed"} this degree is always used.}
+\verb{1..max_degree}; with \code{"fixed"} this degree is always used.}
 
 \item{degree_selection}{Degree selection when \code{smooth = "poly"}. \code{"loocv_2d"}
 (default) picks the degree by joint 2D leave-one-out cross-validation;

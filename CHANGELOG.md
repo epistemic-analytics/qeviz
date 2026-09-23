@@ -6,6 +6,49 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [0.3.0] - 2026-09-23
+
+Interaction and read surface for embedding qeviz as the interactive network
+renderer in the **web ENA** tool (and rENA). All new interaction is exposed as
+framework-agnostic DOM `CustomEvent`s and imperative methods on the public
+`<qe-graph>` — no framework coupling.
+
+### Added
+- **Interaction events** dispatched on `<qe-graph>` (`bubbles`, `composed`):
+  `qe-node-click` / `qe-node-hover` / `qe-node-unhover` (nodes, group means, and
+  unit points, unified with a `kind` field), `qe-edge-click` / `qe-edge-hover` /
+  `qe-edge-unhover` (including self-connection glyphs), and `qe-label-move` when a
+  label is dragged. Each `detail` carries resolved identity, coordinates/weights,
+  and the `originalEvent`.
+- **Instance registry + read APIs**: `getGraph(idOrPlotGroup)` / `getGraphs()`, and
+  per-graph `getNodes()` / `getEdges()` / `getPoints()` / `pointsInRect()` for
+  host-side hit-testing, drag-select, and export.
+- **Selection / highlight API**: `setHighlight({ nodes, edges })` / `clearHighlight()`
+  drives selection styling via an overlay that survives model updates.
+- **Draggable, pinnable labels** — drag to reposition (the label pins open);
+  `qe-label-move` fires on drop so the host can persist or mirror the position.
+- **Transitions & export**: the `animate` attribute tweens marks between
+  `setModelData` updates (marks, undirected edges, and now directed / self-edge
+  triangle paths); `toSVG()` and `toPNG(scale)` snapshot the current plot.
+- **Fixed-on-screen marker sizing**: `fixed-size` on `<qe-points>` / `<qe-means>`
+  (and `fixed_size=` on `qe_points` / `qe_group` in R, `.points()` / `.group()` in
+  Python, `qe_points` / `qe_group` in Julia) keeps those markers a constant pixel
+  size regardless of data extent, container size, or zoom. Default is unchanged
+  (markers scale with the coordinate space).
+- **Opt-in built-in tooltip**: `<qe-graph tooltip>` shows `source – target (weight)`
+  over edges and the mark name over nodes. Hosts can still build their own from the
+  hover events.
+
+### Changed
+- Point clicks no longer stop propagation, so they reach the `<qe-graph>`
+  delegation and surface as `qe-node-click`.
+
+### Fixed
+- Corrected the `ModelData` docs: the edges frame only supports the **wide
+  adjacency matrix** (columns `"{source}.{target}"`, one row per unit); the
+  previously documented long/edge-list auto-detection never existed. Removed the
+  unused `weight_col` field.
+
 ## [0.2.0] - 2026-09-21
 
 ### Added

@@ -22,9 +22,12 @@ export interface QEFrame {
  *   nodes   — one row per node; must include an id column and x/y position
  *             columns. Additional columns are available as node metadata.
  *
- *   edges   — adjacency matrix (one row per unit, one column per node-pair)
- *             OR edge list (columns: source, target, weight / weight_col).
- *             Auto-detected from column names.
+ *   edges   — wide adjacency matrix: one row per unit, one column per node-pair
+ *             named "{source}.{target}" (e.g. "Data.Design"; a self-connection
+ *             is "Data.Data"). Cell values are edge weights. This is the rENA /
+ *             tma co-occurrence "connection.counts" layout. Long/edge-list
+ *             format (source/target/weight rows) is NOT parsed — pivot to the
+ *             wide layout before passing it in.
  *
  *   points  — one row per unit/observation; must include an id column and
  *             x/y position columns. An optional group column colours the
@@ -46,7 +49,6 @@ export interface QEFrame {
  *   x_col       — x-position column (auto: first numeric column)
  *   y_col       — y-position column (auto: second numeric column)
  *   group_col   — grouping column in points (auto: first non-id character col)
- *   weight_col  — weight column for edge-list format (default: "weight")
  *
  * ── Other options ────────────────────────────────────────────────────────────
  *
@@ -71,7 +73,6 @@ export interface ModelData {
   x_col?:       string;
   y_col?:       string;
   group_col?:   string;
-  weight_col?:  string;
 }
 
 // ── Domain-specific aliases ──────────────────────────────────────────────────
