@@ -19,3 +19,4 @@ tools/parity/polyfit.mjs
 
 # rENA vs qeviz comparison harness output
 tools/rena-compare/out/
+tools/rena-compare/out-ona/

@@ -1,11 +1,13 @@
 // tools/rena-compare/report.js — inlined into index.html by harness.R.
 //
-// rENA and adapter checks arrive precomputed from R (window.QEC). The qeviz
+// Reference-renderer (rENA or ona) and adapter checks arrive precomputed from
+// R (window.QEC). The qeviz
 // render checks run here: each qeviz iframe posts what it drew, and check()
 // mirrors qec_check() in harness.R.
 (function () {
   const Q = window.QEC;
   const TOL = Q.tol;
+  const REF = Q.reference || { label: 'rENA', tag: 'plotly' };
 
   const row = (check, delta, tol, detail = '', level = 'fail') => ({
     check, max_delta: delta, tol, detail,
@@ -45,22 +47,47 @@
     }
 
     if (truth.edges) {
+      // Directed: match source → target (the node the wide end sits on).
+      const k2 = truth.directed ? (a, b) => `${a} -> ${b}` : key;
       const hueA = hue(Q.colors[net.group]);
       const hueB = net.compare ? hue(Q.colors[net.compare]) : null;
       const drawn = new Map(got.edges.map(e => {
         const s = hueB == null || hueDist(hue(e.color), hueA) <= hueDist(hue(e.color), hueB) ? 1 : -1;
-        return [key(e.a, e.b), { ...e, w: s * e.w }];
+        return [k2(e.a, e.b), { ...e, w: s * e.w }];
       }));
-      const pairs = truth.edges.map(t => [t, drawn.get(key(t.a, t.b))]);
+      const pairs = truth.edges.map(t => [t, drawn.get(k2(t.a, t.b))]);
       const missing = pairs.filter(([, g]) => !g).length;
-      const extra = [...drawn.keys()].filter(k => !truth.edges.some(t => key(t.a, t.b) === k)).length;
+      const extra = [...drawn.keys()].filter(k => !truth.edges.some(t => k2(t.a, t.b) === k)).length;
       const det = [missing && `${missing} missing`, extra && `${extra} unexpected`].filter(Boolean).join('; ');
-      out.push(row('edge weights (signed)',
+      out.push(row(truth.directed ? 'directed edge weights (signed)' : 'edge weights (signed)',
         missing ? null : maxAbs(pairs.map(([t, g]) => t.w - g.w)), TOL, det));
       if (!missing && truth.edges.some(t => t.w < 0)) {
         const flips = pairs.filter(([t, g]) => Math.sign(t.w) !== Math.sign(g.w)).length;
         out.push(row('subtraction edge colour/sign', flips, 0,
           `${flips} of ${pairs.length} edges on the wrong side`));
+      }
+      if (!missing && truth.directed && got.nodes.length && got.nodes.every(n => n.d != null)) {
+        // Directed: diameter ∝ Σ |w| of edges directed AT the node + its
+        // self-connection, at the plot's own width-per-weight.
+        const ks = got.edges.map(e => e.width / Math.abs(e.w)).sort((a, b) => a - b);
+        const k = ks[Math.floor(ks.length / 2)];
+        const selfW = c => Math.abs((truth.self || []).find(s => s.code === c)?.w ?? 0);
+        const conn = got.nodes.map(n => [n, got.edges.filter(e => e.b === n.code)
+            .reduce((a, e) => a + Math.abs(e.w), 0) + selfW(n.code)]).filter(([, w]) => w > 0);
+        const ratios = conn.map(([n, w]) => n.d / (k * w));
+        out.push(row('node diameter = Σ incoming edge widths + self',
+          maxAbs(ratios.map(r => r - 1)), 1e-3,
+          `diameter ÷ (incoming + self) = ${Math.min(...ratios).toFixed(3)} – ${Math.max(...ratios).toFixed(3)}`));
+      } else if (!missing && got.nodes.length && got.nodes.every(n => n.d != null)) {
+        // Node diameter must equal the summed drawn widths of its edges.
+        const sw = n => got.edges.filter(e => e.a === n.code || e.b === n.code)
+                                 .reduce((a, e) => a + e.width, 0);
+        const conn = got.nodes.map(n => [n, sw(n)]).filter(([, s]) => s > 0);
+        const top = Math.max(...conn.map(([, s]) => s));
+        const ratios = conn.map(([n, s]) => n.d / s);
+        out.push(row('node diameter = Σ edge widths',
+          Math.max(...conn.map(([n, s]) => Math.abs(n.d - s))) / top, 1e-6,
+          `diameter ÷ Σ widths = ${Math.min(...ratios).toFixed(2)} – ${Math.max(...ratios).toFixed(2)}`));
       }
       if (!missing) {
         const mt = Math.max(...pairs.map(([t]) => Math.abs(t.w)));
@@ -69,6 +96,14 @@
           maxAbs(pairs.map(([t, g]) => Math.abs(t.w) / mt - g.width / mg)), 0.02,
           'relative widths (encoding, not data)', 'warn'));
       }
+    }
+
+    if (truth.self && got.self && got.self.length) {
+      // Self-connection glyph should grow with the self weight alone.
+      const r = got.self.map(s => s.d / Math.abs((truth.self.find(t => t.code === s.code) || {}).w));
+      const med = [...r].sort((a, b) => a - b)[Math.floor(r.length / 2)];
+      out.push(row('self-connection size ∝ self weight', maxAbs(r.map(x => x / med - 1)), 0.02,
+        `size ÷ weight varies ${(Math.min(...r) / med).toFixed(2)} – ${(Math.max(...r) / med).toFixed(2)} × median`, 'warn'));
     }
 
     if (truth.means) {
@@ -123,13 +158,30 @@
   }
 
   const results = {};   // view -> { rena, adapter, qeviz }
+  const qeK = {};       // view -> qeviz thickness per unit weight
+
+  function renderScale() {
+    const nets = Q.views.filter(v => v.rena_k != null);
+    if (!nets.length) { document.getElementById('scale').remove(); return; }
+    const waiting = nets.filter(v => qeK[v.name] == null).length;
+    const rel = (k, ref) => (k == null || ref == null ? null : k / ref);
+    const refR = nets[0].rena_k, refQ = qeK[nets[0].name];
+    const status = r => r == null ? '' : Math.abs(r - 1) <= 1e-3 ? 'PASS' : 'FAIL';
+    const cell = r => r == null ? '<td class="num">—</td><td></td>'
+      : `<td class="num">${r.toFixed(3)}</td><td><span class="st st-${status(r).toLowerCase()}">${status(r)}</span></td>`;
+    document.getElementById('scale-table').innerHTML =
+      `<table><thead><tr><th>Plot</th><th>${esc(REF.label)}</th><th></th><th>qeviz</th><th></th></tr></thead><tbody>${
+        nets.map(v => `<tr><td>${esc(v.title)}</td>${cell(rel(v.rena_k, refR))}${cell(rel(qeK[v.name], refQ))}</tr>`).join('')
+      }</tbody></table>` + (waiting ? `<p class="pending">${waiting} qeviz plot(s) rendering…</p>` : '');
+    window.__QEC_SCALE__ = { rena: nets.map(v => rel(v.rena_k, refR)), qeviz: nets.map(v => rel(qeK[v.name], refQ)) };
+  }
   function tally() {
     const all = Object.values(results).flatMap(r => ['rena', 'adapter', 'qeviz']
       .flatMap(k => (r[k] || []).map(x => ({ ...x, renderer: k }))));
     const by = k => ['PASS', 'WARN', 'FAIL'].map(s => all.filter(x => x.renderer === k && x.status === s).length);
     const waiting = Q.views.filter(v => !results[v.name].qeviz).length;
     document.getElementById('summary').innerHTML = [
-      ['rENA render', 'rena'], ['qeviz adapter', 'adapter'], ['qeviz render', 'qeviz'],
+      [`${REF.label} render`, 'rena'], ['qeviz adapter', 'adapter'], ['qeviz render', 'qeviz'],
     ].map(([label, k]) => {
       const [p, w, f] = by(k);
       const pending = k === 'qeviz' && waiting > 0;
@@ -163,8 +215,8 @@
     sec.innerHTML = `
       <h2>${esc(v.title)}</h2>
       <div class="cols">
-        <div class="col"><h3>rENA <span class="tag">plotly</span></h3>
-          <iframe src="panels/rena_${v.name}.html" class="frame"></iframe>
+        <div class="col"><h3>${esc(REF.label)} <span class="tag">${esc(REF.tag)}</span></h3>
+          <iframe src="panels/ref_${v.name}.html" class="frame"></iframe>
           ${codeBlock(v.code.rena)}
           <div class="checks" id="c-rena-${v.name}"></div></div>
         <div class="col"><h3>qeviz <span class="tag">web component</span></h3>
@@ -191,7 +243,12 @@
       results[m.view].qeviz = [row('check', null, 0, String(err))];
     }
     renderChecks(el, results[m.view].qeviz);
+    if (m.data && m.data.edges.length) {
+      qeK[m.view] = m.data.edges.reduce((a, e) => a + e.width, 0) /
+                    m.data.edges.reduce((a, e) => a + Math.abs(e.w), 0);
+    }
     window.__QEC_QEVIZ__ = results;
+    renderScale();
     tally();
   }
 
@@ -206,7 +263,10 @@
     if (Q.views.every(v => results[v.name].qeviz)) clearInterval(poll);
   }, 250);
 
+  renderScale();
   document.getElementById('meta').textContent =
-    `${Q.label} · rENA ${Q.versions.rENA} · qeviz ${Q.versions.qeviz} · tolerance ${Q.tol} · ${Q.generated}`;
+    `${Q.label} · ${REF.label} ${Q.versions.ref} · qeviz ${Q.versions.qeviz} · tolerance ${Q.tol} · ${Q.generated}`;
+  document.title = `${REF.label} vs qeviz accuracy`;
+  document.querySelector('h1').textContent = `${REF.label} vs qeviz — plot accuracy`;
   tally();
 })();

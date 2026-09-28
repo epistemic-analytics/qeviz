@@ -17,7 +17,10 @@
     const nodesHidden = nodeLayer && nodeLayer.svg_element &&
                         nodeLayer.svg_element.style.display === 'none';
     const nodes = nodesHidden ? []
-      : g.getNodes().map(n => ({ code: n.id, x: n.x, y: -n.y }));
+      : g.getNodes().map(n => {
+          const el = g.svg_element.querySelector(`circle[data-point-id="${CSS.escape(n.id)}"]`);
+          return { code: n.id, x: n.x, y: -n.y, d: el ? 2 * +el.getAttribute('r') : null };
+        });
     const points = g.getPoints().map(p => ({ id: p.id, group: p.group, x: p.x, y: -p.y }));
 
     const layer = g.__children__.search('__children__', 'points');
@@ -42,18 +45,61 @@
       Object.assign(m, { x_lo: x, x_hi: x + w, y_lo: -(y + h), y_hi: -y });
     });
 
+    // Sign comes from each edge's *base* group colour. The rendered stroke fades
+    // saturation with weight, so a near-zero difference renders almost grey and
+    // its hue no longer says which group it belongs to.
+    const edgeLayer = g.__children__.search('__children__', 'edges');
+    const baseColor = new Map();
+    if (edgeLayer) [...edgeLayer.__data__.objects.values()].forEach(o => {
+      const m = o.meta || {};
+      if (m.source != null) baseColor.set(`${m.source}|${m.target}`, String(o.base_color ?? o.color));
+    });
+
     // Visible edge strokes (skip the transparent hit-target twins).
     const edges = [...g.svg_element.querySelectorAll('line[data-edge-source]')]
       .filter(l => l.getAttribute('stroke') !== 'transparent')
-      .map(l => ({
-        a: l.getAttribute('data-edge-source'),
-        b: l.getAttribute('data-edge-target'),
-        w: +l.getAttribute('data-edge-weight'),   // |w|; sign resolved from colour
-        color: l.getAttribute('stroke'),
-        width: +l.getAttribute('stroke-width'),
-      }));
+      .map(l => {
+        const a = l.getAttribute('data-edge-source'), b = l.getAttribute('data-edge-target');
+        return {
+          a, b,
+          w: +l.getAttribute('data-edge-weight'),   // |w|; sign resolved from colour
+          color: baseColor.get(`${a}|${b}`) ?? l.getAttribute('stroke'),
+          width: +l.getAttribute('stroke-width'),
+        };
+      });
 
-    return { nodes, points, means, edges };
+    // Directed (ONA) edges: tapered paths "M apex L base1 L base2 z". The wide
+    // end is attributed to whichever node it geometrically sits on (b), and a
+    // is the other endpoint — so the check tests the drawing, not attributes.
+    const num = d => (d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []).map(Number);
+    const allNodes = g.getNodes();
+    const nearestNode = (x, y) => allNodes.reduce((best, n) => {
+      const d = Math.hypot(n.x - x, n.y - y);
+      return d < best.d ? { id: n.id, d } : best;
+    }, { id: null, d: Infinity }).id;
+    const self = [];
+    [...g.svg_element.querySelectorAll('path[data-edge-source]')]
+      .filter(pth => pth.getAttribute('fill') !== 'transparent')
+      .forEach(pth => {
+        const src = pth.getAttribute('data-edge-source'), tgt = pth.getAttribute('data-edge-target');
+        const n = num(pth.getAttribute('d') || '');
+        if (pth.getAttribute('data-edge-self') === 'true') {
+          // NodeEdge: "M cx,y a R,R 0 1,0 2R,0 …" → diameter 2R
+          if (n.length >= 3) self.push({ code: tgt, d: 2 * n[2], w: +pth.getAttribute('data-edge-weight') });
+          return;
+        }
+        if (n.length < 6) return;
+        const b = nearestNode((n[2] + n[4]) / 2, (n[3] + n[5]) / 2);
+        edges.push({
+          a: b === tgt ? src : tgt, b,
+          w: +pth.getAttribute('data-edge-weight'),
+          color: baseColor.get(`${src}|${tgt}`) ?? pth.getAttribute('fill'),
+          width: Math.hypot(n[2] - n[4], n[3] - n[5]),
+          directed: true,
+        });
+      });
+
+    return { nodes, points, means, edges, self };
   }
 
   function ready(g) {

@@ -56,12 +56,19 @@
 <h1>rENA vs qeviz — plot accuracy</h1>
 <p id="meta"></p>
 <div id="summary"></div>
+<section id="scale">
+  <h2>Cross-plot edge scale</h2>
+  <p class="codenote">Thickness per unit of weight (Σ width ÷ Σ |weight|) in each network plot, relative
+  to the first. Separate plots of one model are only comparable by eye if this is 1.00 everywhere.</p>
+  <div id="scale-table"><p class="pending">Waiting for qeviz to render…</p></div>
+</section>
 <div class="note">
   Both sides plot the <b>same ena.set</b>. Each renderer's output is read back and compared
   against values computed directly from the set, in model space: nodes from
   <code>rotation$nodes</code>, networks from <code>colMeans(line.weights)</code>, means and
-  <code>t.test</code> CIs from <code>points</code>. qeviz is drawn with
-  <code>scale-points="false"</code> to match rENA, which does not rescale points.
+  <code>t.test</code> CIs from <code>points</code>. For ordered (ONA) models, edges are matched by
+  direction (source → the node the wide end sits on). qeviz is drawn with
+  <code>scale-points="false"</code> to match the reference renderer, which does not rescale points.
   <b>WARN</b> rows describe how the plot is drawn (like relative line widths), not the data.
 </div>
 <section id="setup"></section>
