@@ -296,6 +296,9 @@ class QEPlot:
         compare: Optional[str] = None,
         also: Optional[str] = None,
         show: bool = True,
+        color_scale: str = "model",
+        edge_width: Optional[float] = None,
+        magnify: Optional[float] = None,
     ) -> "QEPlot":
         """
         Select which edge network to draw.
@@ -313,7 +316,26 @@ class QEPlot:
         compare Second group to subtract (``group − compare``).
         also    Second group to overlay alongside ``group``.
         show    ``False`` suppresses all edges regardless of other args.
+        color_scale
+                How weights map onto webENA's colour ramps (saturation
+                0.25–1, opacity 0.3–1): ``"model"`` (default) rescales from the
+                model's smallest to largest non-zero weight, so plots of one
+                model share a colour scale; ``"plot"`` rescales within this plot
+                (webENA); ``"absolute"`` uses saturation = opacity = |weight|.
+        edge_width
+                Width of a weight-1 edge as a fraction of the plot width (qeviz
+                default 0.04). Width is absolute, so equal weights draw equally
+                wide; node diameter is the sum of its edges' widths.
+        magnify Multiply this plot's edge widths and node sizes (not colour).
+                Whenever set — including ``1`` — the plot is labelled
+                "(scaled N.Nx)".
         """
+        if color_scale not in ("model", "plot", "absolute"):
+            raise ValueError('edges(): color_scale must be "model", "plot", or "absolute".')
+        if edge_width is not None and not (0 < edge_width <= 1):
+            raise ValueError("edges(): edge_width must be in (0, 1].")
+        if magnify is not None and not magnify > 0:
+            raise ValueError("edges(): magnify must be a positive number.")
         if group and unit:
             raise ValueError("edges(): supply either 'group' or 'unit', not both.")
 
@@ -355,6 +377,9 @@ class QEPlot:
         p._opts["unit"]    = unit
         p._opts["compare"] = compare
         p._opts["also"]    = also
+        p._opts["edge_color_scale"] = None if color_scale == "model" else color_scale
+        p._opts["edge_width"] = edge_width
+        p._opts["edge_magnify"] = magnify
         return p
 
     def points(
@@ -378,14 +403,20 @@ class QEPlot:
         p._opts["point_fixed_size"] = bool(fixed_size)
         return p
 
-    def nodes(self, show: Union[bool, str] = "auto") -> "QEPlot":
+    def nodes(self, show: Union[bool, str] = "auto", unconnected: str = "dot") -> "QEPlot":
         """
         Show or hide the code nodes.
 
         ``"auto"`` (default) draws nodes only when an edge network is drawn,
         matching rENA. ``"always"`` / ``True`` and ``"never"`` / ``False``
-        override that. Node positions always set the plot extent.
+        override that. Node positions always set the plot extent. With an
+        edge network a node's diameter equals the summed widths of its edges
+        (directed: only edges directed at it, plus its self-connection);
+        ``unconnected="hide"`` hides nodes with no drawn edges (default
+        ``"dot"`` shows a tiny dot).
         """
+        if unconnected not in ("dot", "hide"):
+            raise ValueError('nodes(): unconnected must be "dot" or "hide".')
         if show is True:
             show = "always"
         elif show is False:
@@ -394,6 +425,7 @@ class QEPlot:
             raise ValueError('nodes(): show must be "auto", "always", or "never".')
         p = self._copy()
         p._opts["nodes_show"] = show
+        p._opts["nodes_unconnected"] = unconnected
         return p
 
     def axes(
@@ -559,6 +591,10 @@ class QEPlot:
                 edge_parts.append(f'compare="{opts["compare"]}"')
             if opts.get("also"):
                 edge_parts.append(f'also="{opts["also"]}"')
+            if edge_parts and opts.get("edge_magnify") is not None:
+                edge_parts.append(f'magnify="{opts["edge_magnify"]:g}"')
+            if edge_parts and opts.get("edge_color_scale"):
+                edge_parts.append(f'color-scale="{opts["edge_color_scale"]}"')
             if edge_parts:
                 children.append(
                     f'    <qe-edges {" ".join(edge_parts)}></qe-edges>'
@@ -570,7 +606,8 @@ class QEPlot:
         has_network = any(c.startswith("    <qe-edges") for c in children)
         if node_show == "always" or (node_show == "auto" and has_network):
             node_label = opts.get("label_nodes", "on")
-            children.insert(0, f'    <qe-nodes label="{node_label}"></qe-nodes>')
+            unconn = ' unconnected="hide"' if opts.get("nodes_unconnected") == "hide" else ""
+            children.insert(0, f'    <qe-nodes label="{node_label}"{unconn}></qe-nodes>')
 
         # <qe-trajectories> — only when explicitly shown
         if opts.get("show_trajectories", False):
@@ -612,7 +649,9 @@ class QEPlot:
 
         children_str = "\n".join(children)
         return (
-            f'<qe-graph width="{self._width}" height="{self._height}">\n'
+            f'<qe-graph width="{self._width}" height="{self._height}"'
+            + (f' edge-width="{opts["edge_width"]:g}"' if opts.get("edge_width") is not None else "")
+            + '>\n'
             f'{children_str}\n'
             f'  </qe-graph>'
         )

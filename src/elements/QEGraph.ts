@@ -9,6 +9,7 @@ import { Trajectory } from "../objects/Trajectory";
 import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
 import { QELabel } from "./QELabel";
+import { DEFAULT_EDGE_WIDTH, OPACITY_RANGE, SATURATION_RANGE, UNCONNECTED_NODE_SIZE, nodeSizeForEdges, rampFor, widthPerWeight } from "../objects/Sizing";
 import "./QEChildElements.js";
 
 // Accessible color palette for group assignment (Paul Tol's bright scheme)
@@ -94,6 +95,23 @@ function readIntervalBounds(
   const yHigh = get(`${dim1}.high`) ?? get(`${dim1}_high`);
   if (xLow == null || xHigh == null || yLow == null || yHigh == null) return null;
   return { x_low: xLow, x_high: xHigh, y_low: yLow, y_high: yHigh };
+}
+
+/**
+ * <qe-edges color-scale>: the range that edge weights are rescaled from onto
+ * webENA's saturation (0.25–1) and opacity (0.3–1) ramps.
+ *   "model" (default) — min / max non-zero |weight| across the whole model
+ *                       (every unit), so separate plots of one model share
+ *                       one colour scale.
+ *   "plot"            — this plot's own min / max (webENA's per-network
+ *                       behaviour).
+ *   "absolute"        — no rescaling: saturation = opacity = |weight|.
+ */
+type ColorScale = 'model' | 'plot' | 'absolute';
+
+function parseColorScale(attr: string | null): ColorScale {
+  const a = attr?.trim().toLowerCase();
+  return a === 'plot' || a === 'absolute' ? a : 'model';
 }
 
 /**
@@ -189,6 +207,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _axisXText: string | null = null;
   private _axisYText: string | null = null;
   private _axisLabelEls: Map<'x' | 'y', SVGTextElement> = new Map();
+  // "(scaled 1.5x)" label, drawn whenever <qe-edges magnify> is present.
+  private _magnifyText: string | null = null;
+  private _magnifyEl: SVGTextElement | null = null;
 
   constructor() {
     super();
@@ -239,6 +260,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // back to the dimension name; a value is used verbatim; null = no label.
       this._showAxes  = config.showAxes;
       this._axisXText = config.axisXLabel === null ? null : (config.axisXLabel || String(dims?.[0] ?? 'x'));
+      // Present on any <qe-edges magnify>, including "1" — as webENA labels
+      // its side plots "(scaled 1.0x)" so an exported set says which plot was
+      // magnified.
+      this._magnifyText = config.edgeMagnify == null ? null
+        : `(scaled ${config.edgeMagnify.toFixed(1)}x)`;
       this._axisYText = config.axisYLabel === null ? null : (config.axisYLabel || String(dims?.[1] ?? 'y'));
 
       // ── Group color map ──────────────────────────────────────────────────────
@@ -889,32 +915,63 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             });
           }
 
-          // ── Step 7: Compute node sizes BEFORE creating edges ──────────────────
-          // NodeEdge dot radii must fit *inside* each code node, so we need the
-          // host node's effective radius at edge-creation time.  Pre-tally
-          // weights and apply sizes up front.
+          // ── Step 7: Mark sizes and colour ────────────────────────────────────
+          // Width is absolute (webENA): raw weight × one width-per-weight set by
+          // <qe-graph edge-width>, shared by edges, directed wide ends,
+          // self-connection dots and nodes (diameter = Σ edge widths).
           const isDirected    = !!(model as any).directed;
-          // Normalize against the actual max weight in this render, not a hard
-          // floor of 1.  ENA line weights are typically ≪ 1 (e.g. 0.05–0.5);
-          // using Math.max(1, ...) would cap saturation/opacity at the raw weight
-          // value (e.g. 0.47 max → only 47% vivid), making all edges look faded.
-          const nonSelfWeights = drawEdges.filter(e => e.pair[0] !== e.pair[1]).map(e => e.weight);
-          const maxEdgeWeight  = nonSelfWeights.length > 0 ? Math.max(...nonSelfWeights) : 1e-9;
-          const selfWeights    = drawEdges.filter(e => e.pair[0] === e.pair[1]).map(e => e.weight);
-          const maxSelfWeight  = selfWeights.length > 0 ? Math.max(...selfWeights) : 0;
+          // <qe-edges magnify> scales this plot's widths and node sizes (not
+          // colour) — e.g. to read a faint subtraction — and is always
+          // labelled "(scaled Nx)" so it is never mistaken for the shared scale.
+          const widthFrac     = widthPerWeight(config.edgeWidth) * (config.edgeMagnify ?? 1);
+
+          // Colour (webENA ramps): each class (lines vs self-loops) rescales
+          // |weight| from [min, max] onto saturation 0.25–1 / opacity 0.3–1.
+          // The range comes from the whole model — every non-zero weight in
+          // the edges frame — so plots of one model share a colour scale;
+          // webENA takes it from each plotted network ("plot").
+          const rangeOf = (ws: number[]): [number, number] => {
+            const nz = ws.map(Math.abs).filter(v => v > 0);
+            return nz.length ? [Math.min(...nz), Math.max(...nz)] : [0, 0];
+          };
+          const modelRange = (self: boolean): [number, number] => {
+            const vals: number[] = [];
+            edgePairs.forEach(({ col, pair }) => {
+              if ((pair[0] === pair[1]) !== self) return;
+              const column = model.edges.col(col);
+              if (column) for (const v of column) vals.push(Number(v));
+            });
+            return rangeOf(vals);
+          };
+          const plotRange = (self: boolean): [number, number] =>
+            rangeOf(drawEdges.filter(e => (e.pair[0] === e.pair[1]) === self).map(e => e.weight));
+          const cscale = config.edgeColorScale;
+          const colourRange = (self: boolean): [number, number] =>
+            cscale === 'plot' ? plotRange(self) : modelRange(self);
+          const lineRange = colourRange(false), selfRange = colourRange(true);
+          const colourOf = (w: number, self: boolean) => {
+            if (cscale === 'absolute') { const a = Math.min(1, Math.abs(w)); return { saturation: a, opacity: a }; }
+            const [lo, hi] = self ? selfRange : lineRange;
+            return { saturation: rampFor(w, lo, hi, SATURATION_RANGE), opacity: rampFor(w, lo, hi, OPACITY_RANGE) };
+          };
+
+          // Weight accumulated at each node:
+          //   Undirected: every edge touching the node (both endpoints).
+          //   Directed:   only edges directed *at* the node (pair[1] is the
+          //               target; its wide end is drawn there), including the
+          //               node's self-connection.
           const nodeWeightSum: Record<string, number> = {};
           drawEdges.forEach(({ pair, weight }) => {
             const isSelf = pair[0] === pair[1];
             if (isSelf && !isDirected) return;  // skip illegal undirected diagonals
-            nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
-            if (!isSelf) {
-              nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
-            }
+            const add = (id: string) => { nodeWeightSum[id] = (nodeWeightSum[id] ?? 0) + Math.abs(weight); };
+            if (isDirected) { add(pair[1]); return; }
+            add(pair[0]); add(pair[1]);
           });
-          const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
 
-          // Apply node sizes (range [2, 5]) to the actual Point objects.
-          const nodeSizes: Record<string, number> = {};
+          // Node sizes: diameter = Σ widths of the edges counted above. Nodes
+          // with nothing counted get a tiny dot, or are hidden with
+          // <qe-nodes unconnected="hide">.
           model.nodes.rows().forEach((row: DataFrameRow) => {
             const codeIdx = row.names.indexOf(nodeIdCol);
             const id = codeIdx >= 0 ? String(row[codeIdx]) : '';
@@ -922,8 +979,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const pt = nodeLayer.__data__.objects.get(id) as Point | undefined;
             if (!pt) return;
             const w = nodeWeightSum[id] ?? 0;
-            pt.size = 2 + (w / maxNodeWeight) * 3;
-            nodeSizes[id] = pt.size;
+            const unconnected = !(w > 0);
+            pt.size = unconnected ? (config.hideUnconnectedNodes ? 0 : UNCONNECTED_NODE_SIZE)
+                    : nodeSizeForEdges(w, widthFrac);
+            (pt as any).meta = { ...((pt as any).meta ?? {}),
+                                 hidden: unconnected && config.hideUnconnectedNodes };
           });
 
           // ── Step 8: Create edge objects ───────────────────────────────────────
@@ -946,12 +1006,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const isSelf  = pair[0] === pair[1];
             if (isSelf && !isDirected) return;  // undirected ENA has zero diagonal
 
-            // Opacity normalizes within each visual class: lines compare against
-            // the strongest line, self-loops against the strongest self-loop.
-            // Mixing the two scales (everything ÷ maxEdgeWeight) would wash
-            // self-loops out, since self-weights are typically smaller.
-            const classMax = isSelf ? Math.max(maxSelfWeight, 1e-9) : maxEdgeWeight;
-            const opacity  = Math.min(1, weight / classMax);
+            // Colour ramps rescale within each visual class (lines vs
+            // self-loops), since self-weights are typically smaller.
+            const { saturation, opacity } = colourOf(weight, isSelf);
             const fromPt = new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} });
             const toPt   = new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x,   toNode.y],   meta: {} });
             // Pick the edge class by topology:
@@ -984,16 +1041,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             (edgeLine as any).meta = {
               isMeanEdge:   true,
               weight,
-              // NodeEdge compares within the self-loop class; cross-pair edges
-              // compare within their own class.  Store the correct denominator
-              // so QELine.update() can compute opacity and display size properly.
-              maxWeight:    isSelf ? maxSelfWeight : maxEdgeWeight,
+              // Width per unit weight (extent units), shared by all marks.
+              widthFrac,
+              saturation,
               opacity,
               isDirected,
               isSelf,
-              // nodeSize is needed by QELine.update() to compute the NodeEdge
-              // display radius at update time (when extremes.x_max is available).
-              nodeSize:     isSelf ? (nodeSizes[pair[0]] ?? 2) : undefined,
               // Identity for the qe-edge-* interaction events.
               source:       pair[0],
               target:       pair[1],
@@ -1036,6 +1089,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             if (!id) return;
             const pt = nodeLayer.__data__.objects.get(id) as Point | undefined;
             if (!pt) return;
+            if ((pt as any).meta?.hidden) {
+              this._nodeLabels.get(id)?.remove();
+              this._nodeLabels.delete(id);
+              return;
+            }
             let lbl = this._nodeLabels.get(id);
             if (!lbl) {
               lbl = new QELabel(id, pt, labelSvg, this, labelNodes);
@@ -1089,6 +1147,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // Nodes
     labelNodes: number;
     showNodes: boolean;
+    edgeWidth: number;
+    hideUnconnectedNodes: boolean;
     scalePoints: boolean;
     // Means
     showMeans: boolean;
@@ -1107,6 +1167,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     edgeUnit: string | null;
     edgeCompare: string | null;
     edgeAlso: string | null;
+    edgeColorScale: ColorScale;
+    edgeMagnify: number | null;
 
     showTrajectories: boolean;
     trajectoryUnits: string | null;
@@ -1141,6 +1203,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         Label.DISPLAY_TYPES.ON
       ),
       showNodes: !!nodesEl,
+      edgeWidth: (() => {
+        const v = Number(this.getAttribute('edge-width'));
+        return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_EDGE_WIDTH;
+      })(),
+      hideUnconnectedNodes: nodesEl?.getAttribute('unconnected')?.toLowerCase() === 'hide',
       scalePoints: this.getAttribute('scale-points') !== 'false',
 
       // Means — presence of <qe-means> = show; absence = hide.
@@ -1170,6 +1237,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       edgeUnit:    edgesEl?.getAttribute('unit')     ?? null,
       edgeCompare: edgesEl?.getAttribute('compare')  ?? null,
       edgeAlso:    edgesEl?.getAttribute('also')     ?? null,
+      edgeColorScale: parseColorScale(edgesEl?.getAttribute('color-scale') ?? null),
+      edgeMagnify: edgesEl?.hasAttribute('magnify') ? (() => {
+        const v = Number(edgesEl.getAttribute('magnify'));
+        return Number.isFinite(v) && v > 0 ? v : 1;
+      })() : null,
 
       // Trajectories — presence of <qe-trajectories> = draw cognitive trajectories
       showTrajectories:      !!trajectoriesEl,
@@ -1228,9 +1300,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       attributes:      true,
       subtree:         true,
       attributeFilter: [
-        'group', 'unit', 'compare', 'also',
-        'groups', 'confidence', 'label',
-        'scale-points', 'labels', 'label-nodes', 'label-means', 'label-points',
+        'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
+        'groups', 'confidence', 'label', 'unconnected',
+        'scale-points', 'edge-width', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
         'x', 'y', 'size', 'fixed-size',
@@ -1923,6 +1995,28 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
     place('x', this._axisXText);
     place('y', this._axisYText);
+
+    // Magnification label, top-left inside the plot; independent of axes.
+    if (this._magnifyText == null) {
+      this._magnifyEl?.remove();
+      this._magnifyEl = null;
+    } else {
+      if (!this._magnifyEl) {
+        this._magnifyEl = document.createElementNS('http://www.w3.org/2000/svg', 'text') as SVGTextElement;
+        this._magnifyEl.setAttribute('data-magnify-label', '');
+        this._magnifyEl.setAttribute('pointer-events', 'none');
+      }
+      if (!this._magnifyEl.parentElement) parent.appendChild(this._magnifyEl);
+      const el = this._magnifyEl;
+      el.textContent = this._magnifyText;
+      el.setAttribute('font-size',   (fontSize * 0.85).toString());
+      el.setAttribute('font-family', 'system-ui, sans-serif');
+      el.setAttribute('font-style',  'italic');
+      el.setAttribute('fill',        '#556');
+      el.setAttribute('x', (-extent + gap).toString());
+      el.setAttribute('y', (-extent + fontSize + gap).toString());
+      el.setAttribute('text-anchor', 'start');
+    }
   }
 
   update_labels(): void {

@@ -44,10 +44,13 @@ export class Color {
 
 export class WeightedColor extends Color {
   weight: number;
+  /** Optional alpha; defaults to `weight` (saturation and alpha together). */
+  alpha: number | undefined;
 
-  constructor(base: Color | string, weight: number) {
+  constructor(base: Color | string, weight: number, alpha?: number) {
     super(base);
     this.weight = weight;
+    this.alpha = alpha;
   }
 
   // Parse hex → HSV (h in [0, 360), s/v in [0, 1]).
@@ -97,6 +100,7 @@ export class WeightedColor extends Color {
   toString(): string {
     const { h, v } = WeightedColor.toHSV(this.base);
     const w = Math.min(1, Math.abs(this.weight));
-    return WeightedColor.hsvToRgba(h, w, v, w);
+    const a = this.alpha === undefined ? w : Math.min(1, Math.max(0, this.alpha));
+    return WeightedColor.hsvToRgba(h, w, v, a);
   }
 }

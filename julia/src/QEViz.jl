@@ -223,7 +223,16 @@ function qe_edges(p::QEPlot;
                   unit::Union{AbstractString,Nothing}    = nothing,
                   compare::Union{AbstractString,Nothing} = nothing,
                   also::Union{AbstractString,Nothing}    = nothing,
-                  show::Bool = true)::QEPlot
+                  show::Bool = true,
+                  color_scale::AbstractString = "model",
+                  edge_width::Union{Real,Nothing} = nothing,
+                  magnify::Union{Real,Nothing} = nothing)::QEPlot
+    color_scale in ("model", "plot", "absolute") ||
+        error("qe_edges(): color_scale must be \"model\", \"plot\", or \"absolute\".")
+    !isnothing(edge_width) && !(0 < edge_width <= 1) &&
+        error("qe_edges(): edge_width must be in (0, 1].")
+    !isnothing(magnify) && !(magnify > 0) &&
+        error("qe_edges(): magnify must be a positive number.")
     !isnothing(group) && !isnothing(unit) &&
         error("qe_edges(): supply either `group` or `unit`, not both.")
 
@@ -263,6 +272,9 @@ function qe_edges(p::QEPlot;
     p.opts["unit"]       = isnothing(unit)    ? nothing : string(unit)
     p.opts["compare"]    = isnothing(compare) ? nothing : string(compare)
     p.opts["also"]       = isnothing(also)    ? nothing : string(also)
+    p.opts["edge_color_scale"] = color_scale == "model" ? nothing : String(color_scale)
+    p.opts["edge_width"]   = edge_width
+    p.opts["edge_magnify"] = magnify
     p
 end
 
@@ -283,18 +295,25 @@ function qe_points(p::QEPlot; show::Bool = true, size::Union{Real,Nothing} = not
 end
 
 """
-    qe_nodes(p; show="auto")
+    qe_nodes(p; show="auto", unconnected="dot")
 
 Show or hide the code nodes. `"auto"` (default) draws nodes only when an edge
 network is drawn, matching rENA; `"always"` / `true` and `"never"` / `false`
-override that. Node positions always set the plot extent.
+override that. Node positions always set the plot extent. A node's diameter
+equals the summed widths of its edges (directed: only edges directed at it,
+plus its self-connection);
+`unconnected="hide"` hides nodes with no drawn edges (default `"dot"`).
 """
-function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto")::QEPlot
+function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto",
+                  unconnected::AbstractString = "dot")::QEPlot
     s = show === true ? "always" : show === false ? "never" : String(show)
     s in ("auto", "always", "never") ||
         throw(ArgumentError("qe_nodes(): show must be \"auto\", \"always\", or \"never\"."))
+    unconnected in ("dot", "hide") ||
+        throw(ArgumentError("qe_nodes(): unconnected must be \"dot\" or \"hide\"."))
     p = _copy(p)
     p.opts["nodes_show"] = s
+    p.opts["nodes_unconnected"] = String(unconnected)
     p
 end
 
@@ -462,6 +481,10 @@ function _build_graph_element(p::QEPlot)::String
         !isnothing(u) && push!(edge_parts, "unit=\""    * u * "\"")
         !isnothing(c) && push!(edge_parts, "compare=\"" * c * "\"")
         !isnothing(a) && push!(edge_parts, "also=\""    * a * "\"")
+        mg = get(opts, "edge_magnify", nothing)
+        !isempty(edge_parts) && !isnothing(mg) && push!(edge_parts, "magnify=\"" * string(mg) * "\"")
+        cs = get(opts, "edge_color_scale", nothing)
+        !isempty(edge_parts) && !isnothing(cs) && push!(edge_parts, "color-scale=\"" * cs * "\"")
         if !isempty(edge_parts)
             push!(children, "    <qe-edges " * join(edge_parts, " ") * "></qe-edges>")
         end
@@ -473,7 +496,8 @@ function _build_graph_element(p::QEPlot)::String
     has_network = any(c -> startswith(c, "    <qe-edges"), children)
     if node_show == "always" || (node_show == "auto" && has_network)
         node_label = get(opts, "label_nodes", "on")
-        pushfirst!(children, "    <qe-nodes label=\"" * node_label * "\"></qe-nodes>")
+        unconn = get(opts, "nodes_unconnected", "dot") == "hide" ? " unconnected=\"hide\"" : ""
+        pushfirst!(children, "    <qe-nodes label=\"" * node_label * "\"" * unconn * "></qe-nodes>")
     end
 
     # <qe-trajectories> — only when explicitly shown
@@ -509,7 +533,9 @@ function _build_graph_element(p::QEPlot)::String
     end
 
     children_str = join(children, "\n")
-    "<qe-graph width=\"" * p.width * "\" height=\"" * p.height * "\">\n" *
+    "<qe-graph width=\"" * p.width * "\" height=\"" * p.height * "\"" *
+    (isnothing(get(p.opts, "edge_width", nothing)) ? "" : " edge-width=\"" * string(p.opts["edge_width"]) * "\"") *
+    ">\n" *
     children_str * "\n  </qe-graph>"
 end
 

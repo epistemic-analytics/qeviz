@@ -47,9 +47,44 @@ test_that("qe_nodes always / never override the network rule", {
   expect_error(qe_nodes(qe_plot(model), "sometimes"))
 })
 
+test_that("qe_nodes unconnected = hide emits the attribute", {
+  expect_false(grepl("unconnected", .graph_el(qe_plot(model) |> qe_edges("OA")), fixed = TRUE))
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA") |> qe_nodes(unconnected = "hide")),
+               '<qe-nodes label="on" unconnected="hide">', fixed = TRUE)
+  expect_error(qe_nodes(qe_plot(model), unconnected = "fade"))
+})
+
 test_that("qe-nodes stays the first child element", {
   g <- .graph_el(qe_plot(model) |> qe_edges("OA"))
   expect_lt(regexpr("<qe-nodes", g, fixed = TRUE), regexpr("<qe-means", g, fixed = TRUE))
+})
+
+test_that("qe_edges color_scale defaults to model (no attribute)", {
+  expect_false(grepl("color-scale=", .graph_el(qe_plot(model) |> qe_edges("OA")), fixed = TRUE))
+})
+
+test_that("qe_edges color_scale = plot / absolute emit the attribute", {
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA", color_scale = "plot")),
+               '<qe-edges group="OA" color-scale="plot">', fixed = TRUE)
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA", color_scale = "absolute")),
+               'color-scale="absolute"', fixed = TRUE)
+  expect_error(qe_edges(qe_plot(model), "OA", color_scale = "big"))
+})
+
+test_that("qe_edges edge_width sets <qe-graph edge-width>", {
+  expect_false(grepl("edge-width", .graph_el(qe_plot(model) |> qe_edges("OA")), fixed = TRUE))
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA", edge_width = 0.05)),
+               '<qe-graph width="100%" height="440" edge-width="0.05">', fixed = TRUE)
+  expect_error(qe_edges(qe_plot(model), "OA", edge_width = 2))
+})
+
+test_that("qe_edges magnify emits the attribute (including 1)", {
+  expect_false(grepl("magnify", .graph_el(qe_plot(model) |> qe_edges("OA")), fixed = TRUE))
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA", magnify = 1.5)),
+               'magnify="1.5"', fixed = TRUE)
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA", magnify = 1)),
+               'magnify="1"', fixed = TRUE)
+  expect_error(qe_edges(qe_plot(model), "OA", magnify = 0))
 })
 
 test_that("qe_points size emits a size attribute", {

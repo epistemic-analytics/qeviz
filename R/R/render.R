@@ -97,6 +97,10 @@
       edge_parts <- c(edge_parts, sprintf('compare="%s"', opts[["compare"]]))
     if (!is.null(opts[["also"]]))
       edge_parts <- c(edge_parts, sprintf('also="%s"',    opts[["also"]]))
+    if (length(edge_parts) > 0 && !is.null(opts[["edge-magnify"]]))
+      edge_parts <- c(edge_parts, sprintf('magnify="%s"', opts[["edge-magnify"]]))
+    if (length(edge_parts) > 0 && !is.null(opts[["edge-color-scale"]]))
+      edge_parts <- c(edge_parts, sprintf('color-scale="%s"', opts[["edge-color-scale"]]))
     if (length(edge_parts) > 0) {
       children <- c(children,
         sprintf('    <qe-edges %s></qe-edges>', paste(edge_parts, collapse = " ")))
@@ -149,12 +153,14 @@
   node_show <- opts[["nodes-show"]] %||% "auto"
   if (node_show == "always" || (node_show == "auto" && has_network)) {
     node_label <- opts[["label-nodes"]] %||% "on"
+    unconn     <- if (identical(opts[["nodes-unconnected"]], "hide")) ' unconnected="hide"' else ""
     children <- append(children,
-      sprintf('    <qe-nodes label="%s"></qe-nodes>', node_label), after = nodes_at - 1L)
+      sprintf('    <qe-nodes label="%s"%s></qe-nodes>', node_label, unconn), after = nodes_at - 1L)
   }
 
   children_str <- paste(children, collapse = "\n")
-  sprintf('<qe-graph width="%s" height="%s">\n%s\n  </qe-graph>', w, h, children_str)
+  ew <- if (is.null(opts[["edge-width"]])) "" else sprintf(' edge-width="%s"', opts[["edge-width"]])
+  sprintf('<qe-graph width="%s" height="%s"%s>\n%s\n  </qe-graph>', w, h, ew, children_str)
 }
 
 # ── Internal: build the full HTML document string ─────────────────────────────
@@ -348,11 +354,32 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 #'   Cannot be combined with `unit`.
 #' @param show    Logical.  `FALSE` suppresses all edge rendering regardless of
 #'   other arguments.  Default `TRUE`.
+#' @param color_scale How edge weights map to colour, using webENA's ramps
+#'   (saturation 0.25–1, opacity 0.3–1). `"model"` (default) rescales from the
+#'   smallest to the largest non-zero weight anywhere in the model, so separate
+#'   plots of the same model (one group, another group, a unit, a subtraction)
+#'   share one colour scale. `"plot"` rescales within this plot, as webENA
+#'   does. `"absolute"` skips the ramps: saturation = opacity = |weight|.
+#' @param edge_width Width of an edge of weight 1, as a fraction of the plot
+#'   width. Width is absolute (raw weight × this), as in webENA, so equal
+#'   weights draw equally wide in graphs of the same size; each node's
+#'   diameter is the sum of its edges' widths. `NULL` uses qeviz's default
+#'   (0.04).
+#' @param magnify Multiply this plot's edge widths and node sizes (colour is
+#'   unchanged), e.g. to make a faint subtraction readable. Whenever it is set
+#'   — including `1` — the plot is labelled "(scaled N.Nx)", so exported plots
+#'   state their scaling (webENA labels its side plots "(scaled 1.0x)" for the
+#'   same reason). `NULL` (default) means no magnification and no label.
 #'
 #' @return The modified `qe_plot` object.
 #'
 #' @examples
 #' \dontrun{
+#' # Two plots on the same scale (the default): SecondGame's lighter, thinner
+#' # lines mean weaker connections, not a different scaling
+#' qe_plot(set) |> qe_edges("FirstGame")
+#' qe_plot(set) |> qe_edges("SecondGame")
+#'
 #' # Single group mean network
 #' qe_plot(set) |> qe_edges("FirstGame")
 #'
@@ -374,7 +401,9 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 #'
 #' @export
 qe_edges <- function(p, group = NULL, unit = NULL,
-                     compare = NULL, also = NULL, show = TRUE) {
+                     compare = NULL, also = NULL, show = TRUE,
+                     color_scale = c("model", "plot", "absolute"), edge_width = NULL,
+                     magnify = NULL) {
   if (!is.null(group) && !is.null(unit))
     stop("qe_edges(): supply either 'group' or 'unit', not both.", call. = FALSE)
 
@@ -420,7 +449,18 @@ qe_edges <- function(p, group = NULL, unit = NULL,
   if (!is.null(unit) && (!is.null(compare) || !is.null(also)))
     stop("qe_edges(): 'compare' and 'also' cannot be combined with 'unit'.", call. = FALSE)
 
+  color_scale <- match.arg(color_scale)
+  if (!is.null(edge_width) && !(is.numeric(edge_width) && length(edge_width) == 1L &&
+                                is.finite(edge_width) && edge_width > 0 && edge_width <= 1))
+    stop("qe_edges(): edge_width must be a number in (0, 1].", call. = FALSE)
+  if (!is.null(magnify) && !(is.numeric(magnify) && length(magnify) == 1L &&
+                             is.finite(magnify) && magnify > 0))
+    stop("qe_edges(): magnify must be a positive number.", call. = FALSE)
+
   p$graph_opts$edges   <- TRUE
+  p$graph_opts[["edge-color-scale"]] <- if (color_scale == "model") NULL else color_scale
+  p$graph_opts[["edge-width"]] <- edge_width
+  p$graph_opts[["edge-magnify"]] <- magnify
   p$graph_opts$group   <- group
   p$graph_opts$unit    <- unit
   p$graph_opts$compare <- compare
@@ -453,9 +493,17 @@ qe_points <- function(p, show = TRUE, size = NULL, fixed_size = FALSE) {
 #' `<qe-nodes>` element is emitted only then.  Node positions always come from
 #' the model and set the plot extent, so the scale does not change.
 #'
+#' Each node's diameter equals the summed widths of its drawn edges (for
+#' directed / ONA models, only the edges directed at the node, plus its
+#' self-connection), so node size is proportional to its accumulated
+#' connection weight and comparable across plots of the same model.
+#'
 #' @param p    A `qe_plot` object.
 #' @param show `"auto"` (default), `"always"`, or `"never"`.  `TRUE` / `FALSE`
 #'   are accepted as `"always"` / `"never"`.
+#' @param unconnected What to draw for nodes with no drawn edges: `"dot"`
+#'   (default, a tiny dot that still marks the code's position) or `"hide"`
+#'   (omit the node and its label).
 #' @return The modified `qe_plot` object.
 #' @examples
 #' \dontrun{
@@ -463,11 +511,14 @@ qe_points <- function(p, show = TRUE, size = NULL, fixed_size = FALSE) {
 #' qe_plot(set) |> qe_group() |> qe_nodes("always")
 #' }
 #' @export
-qe_nodes <- function(p, show = c("auto", "always", "never")) {
+qe_nodes <- function(p, show = c("auto", "always", "never"),
+                     unconnected = c("dot", "hide")) {
   if (isTRUE(show))  show <- "always"
   if (isFALSE(show)) show <- "never"
   show <- match.arg(show)
+  unconnected <- match.arg(unconnected)
   p$graph_opts[["nodes-show"]] <- show
+  p$graph_opts[["nodes-unconnected"]] <- if (unconnected == "hide") "hide" else NULL
   p
 }
 

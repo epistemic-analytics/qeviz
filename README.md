@@ -129,6 +129,9 @@ All three languages share the same chain operations:
 | `compare` | Second group to subtract (`group − compare`). Positive differences use the primary colour. |
 | `also` | Second group to overlay alongside `group`. |
 | `show` / `show=false` | Suppress all edges. |
+| `color_scale` | Colour mapping (webENA ramps: saturation 0.25–1, opacity 0.3–1). `"model"` (default) rescales across the whole model, so plots of one model share a colour scale; `"plot"` rescales within the plot (webENA); `"absolute"` uses saturation = opacity = weight. |
+| `edge_width` | Width of a weight-1 edge as a fraction of the plot width (default 0.04). Width is absolute — equal weights draw equally wide — and each node's diameter is the sum of its edges' widths. |
+| `magnify` | Multiply this plot's widths and node sizes (not colour), e.g. for a faint subtraction. When set (even `1`), the plot is labelled "(scaled N.Nx)". |
 
 Label modes: `"on"`, `"off"`, `"click"`, `"auto"`.
 
@@ -150,7 +153,7 @@ qe_plot(set) |> qe_edges("FirstGame") |> qe_axes(x = "Task focus", y = TRUE)
 
 ## TypeScript / web component
 
-The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML page.  Layer configuration uses declarative child elements; each layer draws only when its element is present. Code-node positions always come from the model and set the plot extent, but the nodes are drawn only when `<qe-nodes>` is present. The R / Python / Julia wrappers emit `<qe-nodes>` alongside an edge network by default (`qe_nodes()` / `.nodes()` override that).
+The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML page. Mark sizes and colour follow webENA: `<qe-graph edge-width>` sets the width of a weight-1 edge (absolute, as a fraction of the plot width), `<qe-edges color-scale>` picks the colour rescaling (`model` / `plot` / `absolute`), and `<qe-edges magnify>` scales one plot and labels it.  Layer configuration uses declarative child elements; each layer draws only when its element is present. Code-node positions always come from the model and set the plot extent, but the nodes are drawn only when `<qe-nodes>` is present. The R / Python / Julia wrappers emit `<qe-nodes>` alongside an edge network by default (`qe_nodes()` / `.nodes()` override that).
 
 ```html
 <script src="qeviz.umd.js"></script>

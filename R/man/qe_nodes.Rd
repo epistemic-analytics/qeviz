@@ -4,13 +4,21 @@
 \alias{qe_nodes}
 \title{Show or hide the code nodes}
 \usage{
-qe_nodes(p, show = c("auto", "always", "never"))
+qe_nodes(
+  p,
+  show = c("auto", "always", "never"),
+  unconnected = c("dot", "hide")
+)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
 
 \item{show}{\code{"auto"} (default), \code{"always"}, or \code{"never"}.  \code{TRUE} / \code{FALSE}
 are accepted as \code{"always"} / \code{"never"}.}
+
+\item{unconnected}{What to draw for nodes with no drawn edges: \code{"dot"}
+(default, a tiny dot that still marks the code's position) or \code{"hide"}
+(omit the node and its label).}
 }
 \value{
 The modified \code{qe_plot} object.
@@ -20,6 +28,12 @@ By default (\code{"auto"}) code nodes are drawn only when an edge network is
 drawn, matching rENA, where nodes are part of \code{ena.plot.network()}: the
 \verb{<qe-nodes>} element is emitted only then.  Node positions always come from
 the model and set the plot extent, so the scale does not change.
+}
+\details{
+Each node's diameter equals the summed widths of its drawn edges (for
+directed / ONA models, only the edges directed at the node, plus its
+self-connection), so node size is proportional to its accumulated
+connection weight and comparable across plots of the same model.
 }
 \examples{
 \dontrun{

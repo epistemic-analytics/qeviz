@@ -599,9 +599,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   __name(_Color, "Color");
   let Color = _Color;
   const _WeightedColor = class _WeightedColor extends Color {
-    constructor(base, weight) {
+    constructor(base, weight, alpha) {
       super(base);
       this.weight = weight;
+      this.alpha = alpha;
     }
     // Parse hex → HSV (h in [0, 360), s/v in [0, 1]).
     static toHSV(hex) {
@@ -672,7 +673,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     toString() {
       const { h, v } = _WeightedColor.toHSV(this.base);
       const w = Math.min(1, Math.abs(this.weight));
-      return _WeightedColor.hsvToRgba(h, w, v, w);
+      const a = this.alpha === void 0 ? w : Math.min(1, Math.max(0, this.alpha));
+      return _WeightedColor.hsvToRgba(h, w, v, a);
     }
   };
   __name(_WeightedColor, "WeightedColor");
@@ -2184,9 +2186,22 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       return __privateGet(this, _edge);
     }
     get path() {
-      let _this = __privateGet(this, _edge);
-      let _mid = _this.from_point, head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.2), nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.35), mid = Tools.Geometry.Line.midpoint(head, nock), rot_mid = Tools.Geometry.Line.rotate(_this.line, mid), rot_nock = Tools.Geometry.Line.rotate(_this.line, nock), mid_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_mid), mid_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_mid), nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock), nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock);
-      let p = `M${head.join(" ")} ${mid_int0.join(" ")} ${nock_int0.join(" ")}  ${mid.join(" ")} ${nock_int1.join(" ")}  ${mid_int1.join(" ")}z`;
+      const _this = __privateGet(this, _edge);
+      const T = [_this.to.x, _this.to.y];
+      const A = _this.from_point;
+      const [B0, B1] = _this.base_pts;
+      const L = Math.hypot(A[0] - T[0], A[1] - T[1]);
+      const W = Math.hypot(B0[0] - B1[0], B0[1] - B1[1]);
+      if (!(L > 0) || !(W > 0)) return "";
+      const u = [(A[0] - T[0]) / L, (A[1] - T[1]) / L];
+      const b = Math.hypot(B0[0] - T[0], B0[1] - T[1]);
+      const v = [(B0[0] - T[0]) / b, (B0[1] - T[1]) / b];
+      const halfW = /* @__PURE__ */ __name((d) => W / 2 * Math.max(0, 1 - d / L), "halfW");
+      const at = /* @__PURE__ */ __name((d, s) => `${T[0] + u[0] * d + v[0] * s} ${T[1] + u[1] * d + v[1] * s}`, "at");
+      const dh = 0.2 * L;
+      const c = Math.min(0.15 * L, 0.8 * 2 * halfW(dh));
+      const dm = dh + c / 2, dn = dh + c;
+      const p = `M${at(dh, 0)} L${at(dm, halfW(dm))} L${at(dn, halfW(dn))} L${at(dm, 0)} L${at(dn, -halfW(dn))} L${at(dm, -halfW(dm))}z`;
       return p;
     }
   };
@@ -2329,6 +2344,46 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
   };
   __name(_Drawable, "Drawable");
   let Drawable = _Drawable;
+  const DEFAULT_EDGE_WIDTH = 0.04;
+  const SATURATION_RANGE = [0.25, 1];
+  const OPACITY_RANGE = [0.3, 1];
+  function rampFor(w, lo, hi, range) {
+    const a = Math.abs(w);
+    if (!(a > 0)) return 0;
+    if (!(hi > lo)) return range[1];
+    const t = Math.min(1, Math.max(0, (a - lo) / (hi - lo)));
+    return range[0] + t * (range[1] - range[0]);
+  }
+  __name(rampFor, "rampFor");
+  const EDGE_WIDTH_PER_EXTENT = 0.011;
+  const TAPERED_OUTLINE_PX = 0.75;
+  const CHEVRON_DARKEN = 0.8;
+  const CHEVRON_HALO_PX = 0.75;
+  const POINT_RADIUS_PER_EXTENT = 6e-3;
+  const UNCONNECTED_NODE_SIZE = 0.6;
+  function widthPerWeight(edgeWidth) {
+    return 2 * edgeWidth;
+  }
+  __name(widthPerWeight, "widthPerWeight");
+  function nodeSizeForEdges(weightSum, widthFrac) {
+    return weightSum * widthFrac / (2 * POINT_RADIUS_PER_EXTENT);
+  }
+  __name(nodeSizeForEdges, "nodeSizeForEdges");
+  function flattenOnWhite(col) {
+    const m = /rgba?\(([^)]+)\)/.exec(col);
+    if (!m) return col;
+    const [r, g, b, a = 1] = m[1].split(",").map(Number);
+    const f = /* @__PURE__ */ __name((c) => Math.round(255 + (c - 255) * a), "f");
+    return `rgb(${f(r)},${f(g)},${f(b)})`;
+  }
+  __name(flattenOnWhite, "flattenOnWhite");
+  function darkenRgba(col, k) {
+    const m = /rgba?\(([^)]+)\)/.exec(col);
+    if (!m) return col;
+    const [r, g, b, a = 1] = m[1].split(",").map(Number);
+    return `rgba(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)},${a})`;
+  }
+  __name(darkenRgba, "darkenRgba");
   const _QELine = class _QELine extends Drawable {
     constructor(__data__, parent, graph, __children__ = new QEArray()) {
       super(__data__, parent, graph, __children__);
@@ -2394,21 +2449,24 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const weight = typeof meta.weight === "number" ? meta.weight : 0;
         const maxW = typeof meta.maxWeight === "number" ? meta.maxWeight : 1;
         const opacity = typeof meta.opacity === "number" ? meta.opacity : Math.min(1, weight / (maxW || 1));
-        const sw = (extent > 0 ? extent : 1) * 0.011 * (weight / (maxW || 1));
+        const ext = extent > 0 ? extent : 1;
+        const sw = typeof meta.widthFrac === "number" ? ext * meta.widthFrac * weight : ext * EDGE_WIDTH_PER_EXTENT * (weight / (maxW || 1));
         const baseColor = this.__data__._color || new Color("#000000");
-        const edgeColor = new WeightedColor(baseColor, opacity).toString();
+        const saturation = typeof meta.saturation === "number" ? meta.saturation : opacity;
+        const edgeColor = new WeightedColor(baseColor, saturation, opacity).toString();
         if (this.__data__ instanceof NodeEdge) {
-          const nodeSize = typeof meta.nodeSize === "number" ? meta.nodeSize : 2;
-          const nodeR = extent * 6e-3 * nodeSize;
-          this.__data__.weight = 2 * nodeR * 0.55 * opacity;
+          this.__data__.weight = sw;
           this.svg_element.setAttribute("d", this.__data__.path);
           this.svg_element.setAttribute("fill", edgeColor);
           this.svg_element.setAttribute("stroke", "none");
         } else if (this.__data__ instanceof TaperedEdge) {
-          this.__data__.weight = sw * 4;
+          this.__data__.weight = sw;
           this.svg_element.setAttribute("d", this.__data__.path);
           this.svg_element.setAttribute("fill", edgeColor);
-          this.svg_element.setAttribute("stroke", "none");
+          this.svg_element.setAttribute("stroke", edgeColor);
+          this.svg_element.setAttribute("stroke-width", String(TAPERED_OUTLINE_PX));
+          this.svg_element.setAttribute("vector-effect", "non-scaling-stroke");
+          this.svg_element.setAttribute("stroke-linejoin", "round");
           if (meta.isDirected) {
             try {
               const arrow = new EdgeArrow(this.__data__);
@@ -2422,8 +2480,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   this.parent.appendChild(this._arrow_el);
                 }
                 this._arrow_el.setAttribute("d", arrowPath);
-                const arrowColor = baseColor.toString();
-                this._arrow_el.setAttribute("fill", arrowColor);
+                this._arrow_el.setAttribute("fill", darkenRgba(flattenOnWhite(edgeColor), CHEVRON_DARKEN));
+                this._arrow_el.setAttribute("stroke", "#ffffff");
+                this._arrow_el.setAttribute("stroke-width", String(CHEVRON_HALO_PX));
+                this._arrow_el.setAttribute("vector-effect", "non-scaling-stroke");
+                this._arrow_el.setAttribute("stroke-linejoin", "round");
               }
             } catch (_) {
             }
@@ -2515,7 +2576,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const targetPx = this.__data__.size * 2 * sizeScale;
         return targetPx / pxPerUnit / zoom;
       }
-      return extent * 6e-3 * this.__data__.size * sizeScale;
+      return extent * POINT_RADIUS_PER_EXTENT * this.__data__.size * sizeScale;
     }
     /** Optional halo stroke (e.g. white outline on unit points to separate
      *  overlapping dots in dense clusters). Width scales with the dot so it holds
@@ -3127,6 +3188,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     return { x_low: xLow, x_high: xHigh, y_low: yLow, y_high: yHigh };
   }
   __name(readIntervalBounds, "readIntervalBounds");
+  function parseColorScale(attr) {
+    const a = attr == null ? void 0 : attr.trim().toLowerCase();
+    return a === "plot" || a === "absolute" ? a : "model";
+  }
+  __name(parseColorScale, "parseColorScale");
   function parseLabelMode(attr, defaultMode) {
     switch (attr == null ? void 0 : attr.toLowerCase()) {
       case "on":
@@ -3160,6 +3226,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._axisXText = null;
       this._axisYText = null;
       this._axisLabelEls = /* @__PURE__ */ new Map();
+      this._magnifyText = null;
+      this._magnifyEl = null;
       this._animateMs = 0;
       this._tweenRaf = null;
       this._highlight = { edges: /* @__PURE__ */ new Set(), nodes: /* @__PURE__ */ new Set() };
@@ -3186,6 +3254,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const config = this._readLayerConfig();
         this._showAxes = config.showAxes;
         this._axisXText = config.axisXLabel === null ? null : config.axisXLabel || String((dims == null ? void 0 : dims[0]) ?? "x");
+        this._magnifyText = config.edgeMagnify == null ? null : `(scaled ${config.edgeMagnify.toFixed(1)}x)`;
         this._axisYText = config.axisYLabel === null ? null : config.axisYLabel || String((dims == null ? void 0 : dims[1]) ?? "y");
         const groupColorMap = {};
         if (groupColName && ((_a = model.points) == null ? void 0 : _a.names)) {
@@ -3694,21 +3763,46 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               });
             }
             const isDirected = !!model.directed;
-            const nonSelfWeights = drawEdges.filter((e2) => e2.pair[0] !== e2.pair[1]).map((e2) => e2.weight);
-            const maxEdgeWeight = nonSelfWeights.length > 0 ? Math.max(...nonSelfWeights) : 1e-9;
-            const selfWeights = drawEdges.filter((e2) => e2.pair[0] === e2.pair[1]).map((e2) => e2.weight);
-            const maxSelfWeight = selfWeights.length > 0 ? Math.max(...selfWeights) : 0;
+            const widthFrac = widthPerWeight(config.edgeWidth) * (config.edgeMagnify ?? 1);
+            const rangeOf = /* @__PURE__ */ __name((ws) => {
+              const nz = ws.map(Math.abs).filter((v) => v > 0);
+              return nz.length ? [Math.min(...nz), Math.max(...nz)] : [0, 0];
+            }, "rangeOf");
+            const modelRange = /* @__PURE__ */ __name((self2) => {
+              const vals = [];
+              edgePairs.forEach(({ col, pair }) => {
+                if (pair[0] === pair[1] !== self2) return;
+                const column = model.edges.col(col);
+                if (column) for (const v of column) vals.push(Number(v));
+              });
+              return rangeOf(vals);
+            }, "modelRange");
+            const plotRange = /* @__PURE__ */ __name((self2) => rangeOf(drawEdges.filter((e2) => e2.pair[0] === e2.pair[1] === self2).map((e2) => e2.weight)), "plotRange");
+            const cscale = config.edgeColorScale;
+            const colourRange = /* @__PURE__ */ __name((self2) => cscale === "plot" ? plotRange(self2) : modelRange(self2), "colourRange");
+            const lineRange = colourRange(false), selfRange = colourRange(true);
+            const colourOf = /* @__PURE__ */ __name((w, self2) => {
+              if (cscale === "absolute") {
+                const a = Math.min(1, Math.abs(w));
+                return { saturation: a, opacity: a };
+              }
+              const [lo, hi] = self2 ? selfRange : lineRange;
+              return { saturation: rampFor(w, lo, hi, SATURATION_RANGE), opacity: rampFor(w, lo, hi, OPACITY_RANGE) };
+            }, "colourOf");
             const nodeWeightSum = {};
             drawEdges.forEach(({ pair, weight }) => {
               const isSelf = pair[0] === pair[1];
               if (isSelf && !isDirected) return;
-              nodeWeightSum[pair[0]] = (nodeWeightSum[pair[0]] ?? 0) + weight;
-              if (!isSelf) {
-                nodeWeightSum[pair[1]] = (nodeWeightSum[pair[1]] ?? 0) + weight;
+              const add = /* @__PURE__ */ __name((id) => {
+                nodeWeightSum[id] = (nodeWeightSum[id] ?? 0) + Math.abs(weight);
+              }, "add");
+              if (isDirected) {
+                add(pair[1]);
+                return;
               }
+              add(pair[0]);
+              add(pair[1]);
             });
-            const maxNodeWeight = Math.max(1, ...Object.values(nodeWeightSum));
-            const nodeSizes = {};
             model.nodes.rows().forEach((row) => {
               const codeIdx = row.names.indexOf(nodeIdCol);
               const id = codeIdx >= 0 ? String(row[codeIdx]) : "";
@@ -3716,8 +3810,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const pt = nodeLayer.__data__.objects.get(id);
               if (!pt) return;
               const w = nodeWeightSum[id] ?? 0;
-              pt.size = 2 + w / maxNodeWeight * 3;
-              nodeSizes[id] = pt.size;
+              const unconnected = !(w > 0);
+              pt.size = unconnected ? config.hideUnconnectedNodes ? 0 : UNCONNECTED_NODE_SIZE : nodeSizeForEdges(w, widthFrac);
+              pt.meta = {
+                ...pt.meta ?? {},
+                hidden: unconnected && config.hideUnconnectedNodes
+              };
             });
             const totalWeightByPair = {};
             if (isDirected) {
@@ -3732,8 +3830,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               if (!fromNode || !toNode) return;
               const isSelf = pair[0] === pair[1];
               if (isSelf && !isDirected) return;
-              const classMax = isSelf ? Math.max(maxSelfWeight, 1e-9) : maxEdgeWeight;
-              const opacity = Math.min(1, weight / classMax);
+              const { saturation, opacity } = colourOf(weight, isSelf);
               const fromPt = new Point({ ID: `${pair[0]}-src`, dimensions: [fromNode.x, fromNode.y], meta: {} });
               const toPt = new Point({ ID: `${pair[1]}-dst`, dimensions: [toNode.x, toNode.y], meta: {} });
               let edgeLine;
@@ -3757,16 +3854,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               edgeLine.meta = {
                 isMeanEdge: true,
                 weight,
-                // NodeEdge compares within the self-loop class; cross-pair edges
-                // compare within their own class.  Store the correct denominator
-                // so QELine.update() can compute opacity and display size properly.
-                maxWeight: isSelf ? maxSelfWeight : maxEdgeWeight,
+                // Width per unit weight (extent units), shared by all marks.
+                widthFrac,
+                saturation,
                 opacity,
                 isDirected,
                 isSelf,
-                // nodeSize is needed by QELine.update() to compute the NodeEdge
-                // display radius at update time (when extremes.x_max is available).
-                nodeSize: isSelf ? nodeSizes[pair[0]] ?? 2 : void 0,
                 // Identity for the qe-edge-* interaction events.
                 source: pair[0],
                 target: pair[1],
@@ -3795,11 +3888,17 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               }
             });
             model.nodes.rows().forEach((row) => {
+              var _a2, _b2;
               const codeIdx = row.names.indexOf(nodeIdCol);
               const id = codeIdx >= 0 ? String(row[codeIdx]) : "";
               if (!id) return;
               const pt = nodeLayer.__data__.objects.get(id);
               if (!pt) return;
+              if ((_a2 = pt.meta) == null ? void 0 : _a2.hidden) {
+                (_b2 = this._nodeLabels.get(id)) == null ? void 0 : _b2.remove();
+                this._nodeLabels.delete(id);
+                return;
+              }
               let lbl = this._nodeLabels.get(id);
               if (!lbl) {
                 lbl = new QELabel(id, pt, labelSvg, this, labelNodes);
@@ -3857,6 +3956,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     // should render.  Called once at the top of every model-updated handler so
     // all rendering decisions are derived from a single snapshot.
     _readLayerConfig() {
+      var _a;
       const nodesEl = this.querySelector("qe-nodes");
       const meansEl = this.querySelector("qe-means");
       const pointsEl = this.querySelector("qe-points");
@@ -3872,6 +3972,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           Label.DISPLAY_TYPES.ON
         ),
         showNodes: !!nodesEl,
+        edgeWidth: (() => {
+          const v = Number(this.getAttribute("edge-width"));
+          return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_EDGE_WIDTH;
+        })(),
+        hideUnconnectedNodes: ((_a = nodesEl == null ? void 0 : nodesEl.getAttribute("unconnected")) == null ? void 0 : _a.toLowerCase()) === "hide",
         scalePoints: this.getAttribute("scale-points") !== "false",
         // Means — presence of <qe-means> = show; absence = hide.
         showMeans: !!meansEl,
@@ -3898,6 +4003,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         edgeUnit: (edgesEl == null ? void 0 : edgesEl.getAttribute("unit")) ?? null,
         edgeCompare: (edgesEl == null ? void 0 : edgesEl.getAttribute("compare")) ?? null,
         edgeAlso: (edgesEl == null ? void 0 : edgesEl.getAttribute("also")) ?? null,
+        edgeColorScale: parseColorScale((edgesEl == null ? void 0 : edgesEl.getAttribute("color-scale")) ?? null),
+        edgeMagnify: (edgesEl == null ? void 0 : edgesEl.hasAttribute("magnify")) ? (() => {
+          const v = Number(edgesEl.getAttribute("magnify"));
+          return Number.isFinite(v) && v > 0 ? v : 1;
+        })() : null,
         // Trajectories — presence of <qe-trajectories> = draw cognitive trajectories
         showTrajectories: !!trajectoriesEl,
         trajectoryUnits: (trajectoriesEl == null ? void 0 : trajectoriesEl.getAttribute("units")) ?? null,
@@ -3949,10 +4059,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "unit",
           "compare",
           "also",
+          "color-scale",
+          "magnify",
           "groups",
           "confidence",
           "label",
+          "unconnected",
           "scale-points",
+          "edge-width",
           "labels",
           "label-nodes",
           "label-means",
@@ -4534,6 +4648,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      * cached SVG <text> nodes in the labels group; null text removes them.
      */
     update_axes() {
+      var _a;
       const axesLayer = this.__children__.search("__children__", "axes");
       if (axesLayer == null ? void 0 : axesLayer.svg_element) {
         axesLayer.svg_element.style.display = this._showAxes ? "" : "none";
@@ -4576,6 +4691,26 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }, "place");
       place("x", this._axisXText);
       place("y", this._axisYText);
+      if (this._magnifyText == null) {
+        (_a = this._magnifyEl) == null ? void 0 : _a.remove();
+        this._magnifyEl = null;
+      } else {
+        if (!this._magnifyEl) {
+          this._magnifyEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          this._magnifyEl.setAttribute("data-magnify-label", "");
+          this._magnifyEl.setAttribute("pointer-events", "none");
+        }
+        if (!this._magnifyEl.parentElement) parent.appendChild(this._magnifyEl);
+        const el = this._magnifyEl;
+        el.textContent = this._magnifyText;
+        el.setAttribute("font-size", (fontSize * 0.85).toString());
+        el.setAttribute("font-family", "system-ui, sans-serif");
+        el.setAttribute("font-style", "italic");
+        el.setAttribute("fill", "#556");
+        el.setAttribute("x", (-extent + gap).toString());
+        el.setAttribute("y", (-extent + fontSize + gap).toString());
+        el.setAttribute("text-anchor", "start");
+      }
     }
     update_labels() {
       this._nodeLabels.forEach((lbl) => lbl.update());

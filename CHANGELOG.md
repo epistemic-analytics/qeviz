@@ -8,16 +8,39 @@ versioned together.
 
 ## [0.4.0] - 2026-09-28
 
-Rendering fixes found by side-by-side accuracy testing against rENA's plotly
-plots (`tools/rena-compare/`), aligning qeviz defaults with rENA.
+Rendering changes found by side-by-side accuracy testing against rENA's and ona's
+own plots (`tools/rena-compare/`), bringing qeviz in line with rENA / ona / webENA
+conventions and making separate plots of one model comparable by eye.
 
 ### Changed (breaking)
+- **Edge width is absolute, as in webENA.** Width = raw weight × `<qe-graph
+  edge-width>` (the width of a weight-1 edge as a fraction of the plot width,
+  default 0.04), so equal weights draw equally wide in graphs of the same size,
+  ENA or ONA. Previously each plot was normalized to its own strongest edge, so
+  every network's strongest edge looked equally bold and plots of FirstGame,
+  SecondGame and their subtraction could not be compared. Directed edges' wide
+  ends and self-connection dots use the same width per unit of weight (the old
+  fixed ×4 for directed edges is gone).
+- **Edge colour uses webENA's ramps, rescaled across the model.** Saturation maps
+  onto 0.25–1 and opacity onto 0.3–1, linearly from the smallest to the largest
+  non-zero weight in the model's whole edges frame (every unit; self-connections
+  have their own range), so plots of one model share one colour scale and weak
+  edges stay visible. webENA rescales per network; `<qe-edges color-scale="plot">`
+  gives that, and `color-scale="absolute"` uses saturation = opacity = |weight|.
+- **Code-node size equals its accumulated edge width.** Each node's diameter is the
+  sum of the drawn widths of its edges, so node size is proportional to connection
+  weight and comparable across plots (previously `2 + 3 × Σw / max(1, plot max)`).
+  Undirected: every edge touching the node. Directed (ONA): only edges directed
+  *at* the node — their wide ends are drawn on the target — plus its
+  self-connection, matching ona and webENA. Self-connection dots have diameter =
+  the self weight's width, so they are proportional to the self weight and always
+  fit inside the node. Nodes with no drawn edges show as a tiny dot; `<qe-nodes
+  unconnected="hide">` hides them.
 - **Code nodes draw only when `<qe-nodes>` is present**, like every other layer
   element. Node positions still come from the model and anchor the plot extent,
   so the scale does not change when nodes are hidden. The R / Python / Julia
   wrappers emit `<qe-nodes>` only alongside an edge network (rENA draws nodes as
-  part of `ena.plot.network()`); override with `qe_nodes(p, "always" | "never")`
-  (R), `.nodes()` (Python), or `qe_nodes(p; show=...)` (Julia).
+  part of `ena.plot.network()`); `qe_nodes()` / `.nodes()` override that.
 - **Axis labels are opt-in.** `qe_axes()` / `.axes()` now draws the axis lines
   only; `x = TRUE` / `y = TRUE` label an axis with its dimension name and a string
   sets custom text.
@@ -27,9 +50,31 @@ plots (`tools/rena-compare/`), aligning qeviz defaults with rENA.
   its columns after the dimensions (`SVD1`, `SVD1.low`, `SVD1.high`, ...).
 
 ### Added
-- `qe_nodes()` (R, Julia) and `.nodes()` (Python) to force code nodes on or off.
+- **`<qe-edges magnify>`** multiplies a plot's edge widths and node sizes (not
+  colour), like webENA's "Scale edge weights" for its comparison plot — e.g. to
+  read a faint subtraction. Whenever the attribute is present, including `"1"`,
+  the plot is labelled "(scaled N.Nx)" (included in SVG / PNG exports), so a set
+  of exported plots states which were magnified; webENA labels its side plots
+  "(scaled 1.0x)" for the same reason.
+- Wrapper arguments for the above: `qe_edges(color_scale =, edge_width =,
+  magnify =)` (R), `.edges(color_scale=, edge_width=, magnify=)` (Python),
+  `qe_edges(p; color_scale=, edge_width=, magnify=)` (Julia).
+- `qe_nodes(show =, unconnected =)` (R, Julia) and `.nodes()` (Python) to force
+  code nodes on or off and to hide unconnected nodes.
+- `tools/rena-compare/`: accuracy harness comparing qeviz with rENA (`run.R`) and
+  ona (`run_ona.R`) on one shared model, and an edge-width / colour / magnify
+  demo page (`edge_width.R`).
 
 ### Fixed
+- **Directed edges stay legible when long and thin.** Tapered edges get a hairline
+  outline (constant on-screen width, same colour as the fill), as ona and webENA
+  draw, so a narrow triangle no longer fades out along its length.
+- **Direction chevrons keep their shape and read darker.** Their length now
+  follows the triangle's local width instead of a fixed share of the edge length
+  (long edges stretched them into slivers), the geometry no longer uses
+  slope-intercept intersections that broke on near-vertical edges, and they are
+  filled with the edge's colour flattened onto white and darkened, with a white
+  halo — previously the plain base colour made them *lighter* than strong edges.
 - **Group mean markers no longer hide small confidence intervals.** The marker's
   half-side is capped at half the CI box's shorter half-side
   (`MEAN_MAX_FRACTION_OF_INTERVAL`); markers keep their normal size when the CI is

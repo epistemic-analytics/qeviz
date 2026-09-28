@@ -4,6 +4,24 @@ import { Color, WeightedColor } from "../objects/Color";
 import { Drawable } from "./Drawable";
 import { QEArray, QEElement } from "./QELayer";
 import { QEGraphElement } from "./QEGraph";
+import { CHEVRON_DARKEN, CHEVRON_HALO_PX, EDGE_WIDTH_PER_EXTENT, TAPERED_OUTLINE_PX } from "../objects/Sizing";
+
+/** Composite an rgba() colour over white, returning an opaque rgb(). */
+function flattenOnWhite(col: string): string {
+  const m = /rgba?\(([^)]+)\)/.exec(col);
+  if (!m) return col;
+  const [r, g, b, a = 1] = m[1].split(',').map(Number);
+  const f = (c: number) => Math.round(255 + (c - 255) * a);
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+
+/** Scale an rgba()/rgb() colour's RGB channels by `k` (alpha unchanged). */
+function darkenRgba(col: string, k: number): string {
+  const m = /rgba?\(([^)]+)\)/.exec(col);
+  if (!m) return col;
+  const [r, g, b, a = 1] = m[1].split(',').map(Number);
+  return `rgba(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)},${a})`;
+}
 
 export class QELine extends Drawable implements QEElement {
   __name__: string = "unnamed-line";
@@ -92,33 +110,45 @@ export class QELine extends Drawable implements QEElement {
       // coordinate space rendered at ~460px, 1 data-unit ≈ 86px, so
       // rENA's max stroke (0.47 × 5 ≈ 2.4px) ≈ 0.028 data units.
       // Factor 0.011 × extent(2.66) × 1.0 ≈ 0.029 → ~2.5px at 86px/unit.
-      const sw      = (extent > 0 ? extent : 1) * 0.011 * (weight / (maxW || 1));
+      // Width = weight × the plot's shared width-per-weight (objects/Sizing.ts);
+      // the fallback keeps edges visible if an edge arrives without one.
+      const ext     = extent > 0 ? extent : 1;
+      const sw      = typeof meta.widthFrac === 'number'
+        ? ext * meta.widthFrac * weight
+        : ext * EDGE_WIDTH_PER_EXTENT * (weight / (maxW || 1));
 
       // Build a WeightedColor from the stored base color + normalized weight so
       // that toString() produces hsla(h, s*w%, l%, w) — matching the Web ENA
       // convention of scaling both saturation and alpha together with weight.
       const baseColor = (this.__data__ as any)._color || new Color('#000000');
-      const edgeColor = new WeightedColor(baseColor, opacity).toString();
+      // Saturation and opacity come from the graph's colour ramps
+      // (<qe-edges color-scale>); older edges carry only opacity.
+      const saturation = typeof meta.saturation === 'number' ? meta.saturation : opacity;
+      const edgeColor = new WeightedColor(baseColor, saturation, opacity).toString();
 
       if (this.__data__ instanceof NodeEdge) {
-        // Recompute display radius here using the live extent (extremes.x_max).
-        // The weight stored at creation time is a placeholder (0) because
-        // extremes are not yet computed when the edge objects are first built.
-        const nodeSize = typeof meta.nodeSize === 'number' ? meta.nodeSize : 2;
-        const nodeR    = extent * 0.006 * nodeSize;
-        // Inner dot diameter = nodeR × 0.55 × opacity so the outer dark ring
-        // (nodeR − inner_r ≈ 0.45 × nodeR) is clearly visible.
-        (this.__data__ as NodeEdge).weight = 2 * nodeR * 0.55 * opacity;
+        // Diameter = the self weight's width (same width-per-weight as edges
+        // and nodes), matching ona. The node's diameter includes this self
+        // weight, so the dot always fits inside it. Computed here because the
+        // live extent is not known when the edge objects are built.
+        (this.__data__ as NodeEdge).weight = sw;
         (this.svg_element as SVGPathElement).setAttribute('d', (this.__data__ as NodeEdge).path);
         this.svg_element.setAttribute('fill',   edgeColor);
         this.svg_element.setAttribute('stroke', 'none');
       } else if (this.__data__ instanceof TaperedEdge) {
-        // TaperedEdge.path uses .weight as the total base width.  Scale it up
-        // (≈4·sw) so the wide end is visibly thicker than an undirected line.
-        (this.__data__ as TaperedEdge).weight = sw * 4;
+        // TaperedEdge.path uses .weight as the total base width (the wide end,
+        // at the target node); node sizes sum these base widths.
+        (this.__data__ as TaperedEdge).weight = sw;
         (this.svg_element as SVGPathElement).setAttribute('d', (this.__data__ as TaperedEdge).path);
         this.svg_element.setAttribute('fill',   edgeColor);
-        this.svg_element.setAttribute('stroke', 'none');
+        // Hairline outline (constant on-screen width, same weighted colour as
+        // the fill). A long, thin triangle tapers below a pixel for most of its
+        // length; the outline keeps the whole connection legible without
+        // changing its width or colour encoding (ona draws a similar halo).
+        this.svg_element.setAttribute('stroke', edgeColor);
+        this.svg_element.setAttribute('stroke-width', String(TAPERED_OUTLINE_PX));
+        this.svg_element.setAttribute('vector-effect', 'non-scaling-stroke');
+        this.svg_element.setAttribute('stroke-linejoin', 'round');
 
         // ── Direction-indicator chevron ──────────────────────────────────────
         // For directed mean edges, overlay an EdgeArrow chevron filled with a
@@ -141,10 +171,16 @@ export class QELine extends Drawable implements QEElement {
                 this.parent.appendChild(this._arrow_el);
               }
               this._arrow_el.setAttribute('d', arrowPath);
-              // Fully opaque base colour — rendered on top of the semi-transparent
-              // triangle it produces a clearly darker same-hue chevron shape.
-              const arrowColor = baseColor.toString();
-              this._arrow_el.setAttribute('fill', arrowColor);
+              // As ona draws arrows: the edge's weighted colour flattened onto
+              // white ("fake alpha", so it is opaque and weak edges still get
+              // lighter chevrons), then darkened — plus ona's optional white
+              // halo, at a constant on-screen width, so it stands out from the
+              // triangle it sits on.
+              this._arrow_el.setAttribute('fill', darkenRgba(flattenOnWhite(edgeColor), CHEVRON_DARKEN));
+              this._arrow_el.setAttribute('stroke', '#ffffff');
+              this._arrow_el.setAttribute('stroke-width', String(CHEVRON_HALO_PX));
+              this._arrow_el.setAttribute('vector-effect', 'non-scaling-stroke');
+              this._arrow_el.setAttribute('stroke-linejoin', 'round');
             }
           } catch (_) {
             // EdgeArrow geometry degenerates for very short or zero-weight edges —

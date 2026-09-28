@@ -55,6 +55,9 @@ All chain functions return the modified `qe_plot` — the original is unchanged,
 | `compare` | Second group to subtract (`group − compare`) |
 | `also` | Second group to overlay alongside `group` |
 | `show = FALSE` | Suppress all edges |
+| `color_scale` | `"model"` (default): webENA colour ramps rescaled across the whole model; `"plot"`: within the plot (webENA); `"absolute"`: saturation = opacity = weight |
+| `edge_width` | Width of a weight-1 edge as a fraction of the plot width (default 0.04); absolute, so equal weights draw equally wide |
+| `magnify` | Scale this plot's widths and node sizes (not colour); labels the plot "(scaled N.Nx)", even at `1` |
 
 ## Introspection
 

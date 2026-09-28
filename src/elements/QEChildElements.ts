@@ -23,9 +23,14 @@
 /**
  * <qe-nodes> — renders the code nodes.
  * Presence = draw nodes; absence = hide them (positions still set the extent).
+ * A node's diameter equals the summed widths of its drawn edges: every edge
+ * touching it (undirected), or the wide ends of the edges directed at it,
+ * including its self-connection (directed / ONA).
  *
  * Attributes:
- *   label  "on" | "off" | "click" | "auto"   (default "on")
+ *   label        "on" | "off" | "click" | "auto"   (default "on")
+ *   unconnected  "dot" (default) — nodes with no drawn edges show as a tiny
+ *                dot; "hide" — hide them (and their labels).
  */
 export class QENodesElement extends HTMLElement {
   static tagName = 'qe-nodes' as const;
@@ -72,6 +77,24 @@ export class QEPointsElement extends HTMLElement {
  *            (e.g. "FirstGame::steven z"). Mutually exclusive with `group`.
  *   compare  Second group to subtract (group − compare).
  *   also     Second group to overlay alongside `group`.
+ *   scale    Reference node weight for mark sizes — the node drawn at
+ *            <qe-graph mark-size> × the plot width (edge widths follow):
+ *            "model" (default) — the largest node among the model's
+ *                                group-mean networks, so separate plots of
+ *                                one model are comparable;
+ *            "plot"            — this plot's own largest node;
+ *            <number>          — a fixed node weight.
+ *   magnify  Multiply this plot's edge widths and node sizes (not colour),
+ *            e.g. to read a faint subtraction. Whenever the attribute is
+ *            present — any value, including "1" — the plot is labelled
+ *            "(scaled N.Nx)", so exported plots state their scaling.
+ *   color-scale  How |weight| maps onto webENA's colour ramps (saturation
+ *            0.25–1, opacity 0.3–1):
+ *            "model" (default) — rescaled from the model's smallest to largest
+ *                                non-zero weight (every unit), so plots of one
+ *                                model share a colour scale;
+ *            "plot"            — rescaled within this plot (webENA);
+ *            "absolute"        — no ramps: saturation = opacity = |weight|.
  */
 export class QEEdgesElement extends HTMLElement {
   static tagName = 'qe-edges' as const;

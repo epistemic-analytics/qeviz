@@ -363,6 +363,23 @@ end
         qe_nodes(qe_edges(qe_plot(model); group="FirstGame"); show=false)))
 end
 
+@testset "qe_nodes unconnected hide" begin
+    g = QEViz._build_graph_element(qe_nodes(qe_edges(qe_plot(model); group="FirstGame"); unconnected="hide"))
+    @test occursin("<qe-nodes label=\"on\" unconnected=\"hide\">", g)
+end
+
+@testset "qe_edges color_scale / edge_width / magnify" begin
+    g0 = QEViz._build_graph_element(qe_edges(qe_plot(model); group="FirstGame"))
+    @test !occursin("color-scale", g0) && !occursin("edge-width", g0) && !occursin("magnify", g0)
+    g = QEViz._build_graph_element(qe_edges(qe_plot(model); group="FirstGame",
+                                            color_scale="plot", edge_width=0.05, magnify=1.5))
+    @test occursin("color-scale=\"plot\"", g)
+    @test occursin("edge-width=\"0.05\"", g)
+    @test occursin("magnify=\"1.5\"", g)
+    @test_throws ErrorException qe_edges(qe_plot(model); group="FirstGame", color_scale="big")
+    @test_throws ErrorException qe_edges(qe_plot(model); group="FirstGame", magnify=0)
+end
+
 @testset "qe_axes lines only by default (labels opt-in)" begin
     g = QEViz._build_graph_element(qe_axes(qe_plot(model)))
     @test occursin("<qe-axes>", g)

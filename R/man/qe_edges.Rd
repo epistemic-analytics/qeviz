@@ -10,7 +10,10 @@ qe_edges(
   unit = NULL,
   compare = NULL,
   also = NULL,
-  show = TRUE
+  show = TRUE,
+  color_scale = c("model", "plot", "absolute"),
+  edge_width = NULL,
+  magnify = NULL
 )
 }
 \arguments{
@@ -33,6 +36,25 @@ Cannot be combined with \code{unit}.}
 
 \item{show}{Logical.  \code{FALSE} suppresses all edge rendering regardless of
 other arguments.  Default \code{TRUE}.}
+
+\item{color_scale}{How edge weights map to colour, using webENA's ramps
+(saturation 0.25–1, opacity 0.3–1). \code{"model"} (default) rescales from the
+smallest to the largest non-zero weight anywhere in the model, so separate
+plots of the same model (one group, another group, a unit, a subtraction)
+share one colour scale. \code{"plot"} rescales within this plot, as webENA
+does. \code{"absolute"} skips the ramps: saturation = opacity = |weight|.}
+
+\item{edge_width}{Width of an edge of weight 1, as a fraction of the plot
+width. Width is absolute (raw weight × this), as in webENA, so equal
+weights draw equally wide in graphs of the same size; each node's
+diameter is the sum of its edges' widths. \code{NULL} uses qeviz's default
+(0.04).}
+
+\item{magnify}{Multiply this plot's edge widths and node sizes (colour is
+unchanged), e.g. to make a faint subtraction readable. Whenever it is set
+— including \code{1} — the plot is labelled "(scaled N.Nx)", so exported plots
+state their scaling (webENA labels its side plots "(scaled 1.0x)" for the
+same reason). \code{NULL} (default) means no magnification and no label.}
 }
 \value{
 The modified \code{qe_plot} object.
@@ -49,6 +71,11 @@ Use \code{\link[=qe_units]{qe_units()}} to inspect the unit IDs present in the m
 }
 \examples{
 \dontrun{
+# Two plots on the same scale (the default): SecondGame's lighter, thinner
+# lines mean weaker connections, not a different scaling
+qe_plot(set) |> qe_edges("FirstGame")
+qe_plot(set) |> qe_edges("SecondGame")
+
 # Single group mean network
 qe_plot(set) |> qe_edges("FirstGame")
 

@@ -459,6 +459,27 @@ def test_nodes_override():
         _make_plot().nodes("sometimes")
 
 
+def test_nodes_unconnected_hide():
+    assert "unconnected" not in _vis_block(_make_plot().edges("A")._build_html_doc())
+    html = _vis_block(_make_plot().edges("A").nodes(unconnected="hide")._build_html_doc())
+    assert '<qe-nodes label="on" unconnected="hide">' in html
+    with pytest.raises(ValueError):
+        _make_plot().nodes(unconnected="fade")
+
+
+def test_edges_color_scale_edge_width_magnify():
+    base = _vis_block(_make_plot().edges("A")._build_html_doc())
+    assert "color-scale" not in base and "edge-width" not in base and "magnify" not in base
+    html = _vis_block(_make_plot().edges("A", color_scale="plot", edge_width=0.05, magnify=1.5)._build_html_doc())
+    assert 'color-scale="plot"' in html
+    assert 'edge-width="0.05"' in html
+    assert 'magnify="1.5"' in html
+    assert 'magnify="1"' in _vis_block(_make_plot().edges("A", magnify=1)._build_html_doc())
+    for bad in ({"color_scale": "big"}, {"edge_width": 2}, {"magnify": 0}):
+        with pytest.raises(ValueError):
+            _make_plot().edges("A", **bad)
+
+
 def test_axes_lines_only_by_default():
     # Axis labels are opt-in.
     html = _vis_block(_make_plot().axes()._build_html_doc())

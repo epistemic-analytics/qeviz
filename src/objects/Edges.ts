@@ -147,20 +147,30 @@ export class EdgeArrow extends PlottedObject {
      *                    mid_int1---^     ^----nock_int1
      *
      */
-    let _this = this.#edge;
-    let
-      _mid = _this.from_point,
-      head = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.2),
-      nock = Tools.Geometry.Line.point_along([[_this.to.x, _this.to.y], _mid], 0.35),
-      mid = Tools.Geometry.Line.midpoint(head, nock),
-      rot_mid = Tools.Geometry.Line.rotate(_this.line, mid),
-      rot_nock = Tools.Geometry.Line.rotate(_this.line, nock),
-      mid_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_mid),
-      mid_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_mid),
-      nock_int0 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[0]], rot_nock),
-      nock_int1 = Tools.Geometry.Line.intersection([_mid, _this.base_pts[1]], rot_nock)
-      ;
-    let p = `M${head.join(' ')} ${mid_int0.join(' ')} ${nock_int0.join(' ')}  ${mid.join(' ')} ${nock_int1.join(' ')}  ${mid_int1.join(' ')}z`;
+    // Pure vector geometry on the tapered edge: T = target (wide end, base
+    // points B0/B1), A = apex. The chevron sits 20% of the way from T toward
+    // A, but its length follows the triangle's local width (≈ a constant
+    // shape) rather than a fixed share of the edge length — on long, thin
+    // edges the old fractional sizing stretched it into a sliver. (The old
+    // slope-intercept intersections also misbehaved on near-vertical edges.)
+    const _this = this.#edge;
+    const T: [number, number] = [_this.to.x, _this.to.y];
+    const A: [number, number] = _this.from_point;
+    const [B0, B1] = _this.base_pts as [[number, number], [number, number]];
+    const L = Math.hypot(A[0] - T[0], A[1] - T[1]);
+    const W = Math.hypot(B0[0] - B1[0], B0[1] - B1[1]);
+    if (!(L > 0) || !(W > 0)) return '';
+    const u = [(A[0] - T[0]) / L, (A[1] - T[1]) / L];          // along the edge, T → A
+    const b = Math.hypot(B0[0] - T[0], B0[1] - T[1]);
+    const v = [(B0[0] - T[0]) / b, (B0[1] - T[1]) / b];        // across, toward B0
+    const halfW = (d: number) => (W / 2) * Math.max(0, 1 - d / L);
+    const at = (d: number, s: number) => `${T[0] + u[0] * d + v[0] * s} ${T[1] + u[1] * d + v[1] * s}`;
+
+    const dh = 0.2 * L;                                         // head
+    const c  = Math.min(0.15 * L, 0.8 * 2 * halfW(dh));         // length ≈ local width
+    const dm = dh + c / 2, dn = dh + c;                         // notch, back
+    const p = `M${at(dh, 0)} L${at(dm, halfW(dm))} L${at(dn, halfW(dn))} ` +
+              `L${at(dm, 0)} L${at(dn, -halfW(dn))} L${at(dm, -halfW(dm))}z`;
     return p;
   }
 }

@@ -2,6 +2,7 @@ import { PlottedObject } from "../objects/PlottedObject";
 import { Drawable } from "./Drawable";
 import { QEArray, QEElement } from "./QELayer";
 import { QEGraphElement } from "./QEGraph";
+import { POINT_RADIUS_PER_EXTENT } from "../objects/Sizing";
 
 export class QEPoint extends Drawable implements QEElement {
   __name__: string = "unnamed-point";
@@ -54,7 +55,7 @@ export class QEPoint extends Drawable implements QEElement {
       const targetPx = this.__data__.size * 2 * sizeScale;   // size 2.5 → 5px radius
       return (targetPx / pxPerUnit) / zoom;
     }
-    return extent * 0.006 * this.__data__.size * sizeScale;
+    return extent * POINT_RADIUS_PER_EXTENT * this.__data__.size * sizeScale;
   }
 
   /** Optional halo stroke (e.g. white outline on unit points to separate
