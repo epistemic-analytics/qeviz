@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rENA vs qeviz accuracy</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem 2rem;
+         background: #f4f4f5; color: #111; }
+  h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+  #meta { color: #555; font-size: .8rem; margin: 0 0 1rem; }
+  #summary { display: flex; gap: .75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .tile { background: #fff; border: 1px solid #ddd; border-left: 4px solid #999;
+          border-radius: 6px; padding: .6rem .9rem; min-width: 200px; }
+  .tile.ok { border-left-color: #2e7d32; } .tile.warn { border-left-color: #b8860b; }
+  .tile.bad { border-left-color: #c62828; }
+  .tl { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: #666; }
+  .tv { font-size: 1.1rem; font-weight: 600; margin: .1rem 0; }
+  .ts { font-size: .75rem; color: #555; }
+  section { background: #fff; border: 1px solid #ddd; border-radius: 8px;
+            padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+  h2 { font-size: 1rem; margin: 0 0 .6rem; }
+  h3 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;
+       color: #666; margin: 0 0 .4rem; }
+  .tag { font-size: .65rem; background: #e5e7eb; color: #374151; padding: 1px 6px;
+         border-radius: 4px; text-transform: none; letter-spacing: 0; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } body { padding: 1rem; } }
+  .col { min-width: 0; }
+  .frame { display: block; width: 100%; height: 480px; border: 1px solid #e5e7eb;
+           border-radius: 4px; background: #fafafa; }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .5rem; }
+  th, td { text-align: left; padding: .25rem .4rem; border-bottom: 1px solid #eee; }
+  th { color: #666; font-weight: 500; }
+  td.num { font-variant-numeric: tabular-nums; }
+  td.det { color: #666; }
+  .st { font-weight: 600; font-size: .7rem; padding: 1px 6px; border-radius: 3px; }
+  .st-pass { background: #e8f5e9; color: #2e7d32; }
+  .st-warn { background: #fff8e1; color: #8d6e00; }
+  .st-fail { background: #ffebee; color: #c62828; }
+  .pending { color: #888; font-size: .78rem; font-style: italic; }
+  details { margin-top: .5rem; font-size: .78rem; color: #555; }
+  pre { background: #f6f8fa; border: 1px solid #e5e7eb; border-radius: 4px; margin: .4rem 0 0;
+        padding: .6rem .75rem; overflow-x: auto; font-size: .74rem; line-height: 1.45;
+        white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre code, .note code, .codenote code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  details.code { margin-top: .6rem; }
+  details.code summary { cursor: pointer; font-size: .75rem; color: #555; }
+  .codenote { font-size: .72rem; color: #666; margin: .35rem 0 0; }
+  .note { font-size: .8rem; color: #444; background: #fff; border: 1px solid #ddd;
+          border-radius: 6px; padding: .6rem .9rem; margin-bottom: 1.5rem; line-height: 1.45; }
+</style>
+</head>
+<body>
+<h1>rENA vs qeviz — plot accuracy</h1>
+<p id="meta"></p>
+<div id="summary"></div>
+<div class="note">
+  Both sides plot the <b>same ena.set</b>. Each renderer's output is read back and compared
+  against values computed directly from the set, in model space: nodes from
+  <code>rotation$nodes</code>, networks from <code>colMeans(line.weights)</code>, means and
+  <code>t.test</code> CIs from <code>points</code>. qeviz is drawn with
+  <code>scale-points="false"</code> to match rENA, which does not rescale points.
+  <b>WARN</b> rows describe how the plot is drawn (like relative line widths), not the data.
+</div>
+<section id="setup"></section>
+<main id="views"></main>
+<script>/*__QEC_DATA__*/</script>
+<script>/*__QEC_JS__*/</script>
+</body>
+</html>

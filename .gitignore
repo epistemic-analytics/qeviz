@@ -16,3 +16,6 @@ demo/test_matched_mult_files/
 # Parity harness generated artifacts
 tools/parity/reference.json
 tools/parity/polyfit.mjs
+
+# rENA vs qeviz comparison harness output
+tools/rena-compare/out/

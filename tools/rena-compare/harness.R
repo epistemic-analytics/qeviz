@@ -1,0 +1,507 @@
+# tools/rena-compare/harness.R
+#
+# Side-by-side accuracy harness: one rENA ena.set, two renderers.
+#
+#   truth   — computed directly from the set (nodes, mean networks, means, CIs)
+#   rENA    — ena.plot.* → plotly; numbers read back from plotly_build()
+#   adapter — qe_extract() ModelData (what qeviz is handed)
+#   qeviz   — rendered in the browser; numbers read back via the qe-graph
+#             read APIs by qe_probe.js and checked live in report.html
+#
+# All comparisons happen in model space: qeviz's y-flip is undone, and qeviz is
+# rendered with scale-points="false" so unit points / means are not rescaled
+# to the node extent (rENA never rescales points; it only pads the axes).
+#
+# Requires rENA and qeviz to be loaded already (see run.R).
+
+.QEC_DIR <- if (exists("QEC_DIR")) QEC_DIR else "tools/rena-compare"
+
+# Same order as GROUP_PALETTE in src/elements/QEGraph.ts. qeviz assigns these
+# by first appearance in the points frame; rENA gets the identical mapping.
+QEC_PALETTE <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
+                 "#66CCEE", "#AA3377", "#BBBBBB", "#000000")
+
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
+# ── View specs ────────────────────────────────────────────────────────────────
+#
+# A view describes *what* to draw; both renderers are built from the same spec.
+#   network: NULL | list(group = "A") | list(group = "A", compare = "B")
+#   means:   character vector of groups whose mean (+ CI) to show
+#   ci:      draw 95% CI boxes around the means
+#   points:  draw every unit point
+
+qec_view <- function(name, title, network = NULL, means = character(0),
+                     ci = TRUE, points = FALSE) {
+  list(name = name, title = title, network = network,
+       means = means, ci = ci, points = points)
+}
+
+qec_default_views <- function(groups) {
+  a <- groups[1]; b <- groups[2]
+  list(
+    qec_view("net_a", sprintf("%s mean network + CI", a),
+             network = list(group = a), means = a),
+    qec_view("net_b", sprintf("%s mean network + CI", b),
+             network = list(group = b), means = b),
+    qec_view("subtract", sprintf("Subtraction: %s − %s + both means", a, b),
+             network = list(group = a, compare = b), means = c(a, b)),
+    qec_view("means", "Both group means + CI, no network",
+             means = c(a, b)),
+    qec_view("means_noci", "Both group means, intervals off",
+             means = c(a, b), ci = FALSE),
+    qec_view("points", "All unit points + group means",
+             means = c(a, b), points = TRUE)
+  )
+}
+
+# ── Model-space helpers ───────────────────────────────────────────────────────
+
+.qec_dims <- function(set) {
+  nodes <- as.data.frame(set$rotation$nodes)
+  names(nodes)[vapply(nodes, is.numeric, logical(1))][1:2]
+}
+
+.qec_edge_matrix <- function(set) {
+  lw <- as.data.frame(set$line.weights)
+  cols <- grep(" & ", names(lw), fixed = TRUE, value = TRUE)
+  m <- as.matrix(lw[, cols, drop = FALSE])
+  storage.mode(m) <- "double"
+  m
+}
+
+.qec_network <- function(set, spec, group_col) {
+  if (is.null(spec)) return(NULL)
+  m <- .qec_edge_matrix(set)
+  grp <- as.character(as.data.frame(set$meta.data)[[group_col]])
+  net <- colMeans(m[grp == spec$group, , drop = FALSE])
+  if (!is.null(spec$compare))
+    net <- net - colMeans(m[grp == spec$compare, , drop = FALSE])
+  net
+}
+
+.qec_split_pairs <- function(names) {
+  parts <- strsplit(names, " & ", fixed = TRUE)
+  data.frame(a = vapply(parts, `[`, "", 1), b = vapply(parts, `[`, "", 2),
+             stringsAsFactors = FALSE)
+}
+
+qec_group_colors <- function(set, group_col) {
+  g <- unique(as.character(as.data.frame(set$points)[[group_col]]))
+  stats::setNames(QEC_PALETTE[(seq_along(g) - 1) %% length(QEC_PALETTE) + 1], g)
+}
+
+# ── Truth: computed straight from the ena.set ─────────────────────────────────
+
+qec_truth <- function(set, view, group_col) {
+  dims  <- .qec_dims(set)
+  nodes <- as.data.frame(set$rotation$nodes)
+  pts   <- as.data.frame(set$points)
+
+  # Code nodes are drawn only alongside a network (rENA draws them in
+  # ena.plot.network(); qeviz's <qe-nodes show="auto"> does the same).
+  out <- list(nodes_drawn = !is.null(view$network),
+              nodes = data.frame(code = as.character(nodes$code),
+                                 x = nodes[[dims[1]]], y = nodes[[dims[2]]],
+                                 stringsAsFactors = FALSE))
+
+  net <- .qec_network(set, view$network, group_col)
+  if (!is.null(net)) {
+    e <- .qec_split_pairs(names(net))
+    e$w <- unname(net)
+    # Neither renderer draws a zero-weight edge; don't expect one.
+    out$edges <- e[abs(e$w) > 1e-6, , drop = FALSE]
+  }
+
+  out$means <- do.call(rbind, lapply(view$means, function(g) {
+    sub <- pts[pts[[group_col]] == g, dims, drop = FALSE]
+    cx <- stats::t.test(sub[[1]])$conf.int
+    cy <- stats::t.test(sub[[2]])$conf.int
+    data.frame(group = g, x = mean(sub[[1]]), y = mean(sub[[2]]),
+               x_lo = cx[1], x_hi = cx[2], y_lo = cy[1], y_hi = cy[2],
+               stringsAsFactors = FALSE)
+  }))
+
+  out$ci <- isTRUE(view$ci)
+
+  if (isTRUE(view$points)) {
+    out$points <- data.frame(id = as.character(pts$ENA_UNIT),
+                             group = as.character(pts[[group_col]]),
+                             x = pts[[dims[1]]], y = pts[[dims[2]]],
+                             stringsAsFactors = FALSE)
+  }
+  out
+}
+
+# ── Plot code ─────────────────────────────────────────────────────────────────
+#
+# Each renderer's plot is built from R code *text* generated from the view spec.
+# That exact text is eval()'d to make the plot and shown verbatim in the report,
+# so the code on the page is guaranteed to be the code that ran.
+
+.qec_q   <- function(x) deparse(x)
+.qec_sym <- function(x) if (make.names(x) == x) x else paste0("`", x, "`")
+
+# rENA: ena.plot.network / ena.plot.group / ena.plot.points directly. The pipe
+# API (add_network, add_group, add_points) delegates to these same functions,
+# but add_group() collapses to colMeans() first and so can never draw a CI.
+qec_code_rena <- function(view, group_col, colors) {
+  gc  <- .qec_sym(group_col)
+  rows_of <- function(frame, g) sprintf("as.matrix(set$%s[%s == %s])", frame, gc, .qec_q(g))
+  L   <- sprintf("p <- ena.plot(set, title = %s)", .qec_q(view$title))
+
+  if (!is.null(net <- view$network)) {
+    a <- sprintf("colMeans(%s)", rows_of("line.weights", net$group))
+    if (is.null(net$compare)) {
+      L <- c(L, "p <- ena.plot.network(p,",
+             sprintf("  network = %s,", a),
+             sprintf("  colors  = %s)", .qec_q(colors[[net$group]])))
+    } else {
+      L <- c(L, "p <- ena.plot.network(p,",
+             sprintf("  network = %s -", a),
+             sprintf("            colMeans(%s),", rows_of("line.weights", net$compare)),
+             sprintf("  colors  = c(%s, %s))", .qec_q(colors[[net$group]]),
+                     .qec_q(colors[[net$compare]])))
+    }
+  }
+
+  if (isTRUE(view$points)) {
+    for (g in names(colors))
+      L <- c(L, sprintf("p <- ena.plot.points(p, points = %s, colors = %s)",
+                        rows_of("points", g), .qec_q(colors[[g]])))
+  }
+
+  for (g in view$means) {
+    L <- c(L, sprintf("p <- ena.plot.group(p, %s,", rows_of("points", g)),
+           sprintf("  labels = %s, colors = %s, confidence.interval = %s)",
+                   .qec_q(g), .qec_q(colors[[g]]),
+                   .qec_q(if (isTRUE(view$ci)) "box" else "none")))
+  }
+  paste(c(L, "p$plot"), collapse = "\n")
+}
+
+qec_render_rena <- function(set, view, group_col, colors) {
+  code <- qec_code_rena(view, group_col, colors)
+  env  <- list2env(list(set = set), parent = globalenv())
+  eval(parse(text = code), envir = env)
+  list(plot = env$p, code = code)
+}
+
+.qec_hex_rgb <- function(col) as.numeric(grDevices::col2rgb(col))
+
+.qec_hue <- function(col) {
+  if (is.null(col) || !nzchar(col)) return(NA_real_)
+  rgb <- if (grepl("^rgba?\\(", col)) {
+    as.numeric(strsplit(gsub("rgba?\\(|\\)", "", col), ",")[[1]][1:3])
+  } else .qec_hex_rgb(col)
+  grDevices::rgb2hsv(rgb[1], rgb[2], rgb[3])[1, 1]
+}
+
+.qec_hue_dist <- function(h1, h2) { d <- abs(h1 - h2); min(d, 1 - d) }
+
+qec_extract_rena <- function(p, view, colors) {
+  tr    <- plotly::plotly_build(p$plot)$x$data
+  mult  <- p$get("multiplier")
+  num   <- function(v) suppressWarnings(as.numeric(unlist(v)))
+  txt   <- function(t) as.character(unlist(t$text %||% character(0)))
+  out   <- list()
+
+  # Nodes: the one trace whose text labels are the code names.
+  node_tr <- Filter(function(t) length(t$x) > 1 && length(txt(t)) == length(t$x) &&
+                      !identical(t$mode, "lines"), tr)
+  if (length(node_tr)) {
+    t <- node_tr[[1]]
+    out$nodes <- data.frame(code = txt(t), x = num(t$x), y = num(t$y),
+                            stringsAsFactors = FALSE)
+  }
+
+  # Edges: 2-point line traces whose endpoints sit on nodes.
+  # Default ena.plot.network (scale.weights = FALSE): width = |w| * multiplier.
+  if (!is.null(view$network) && !is.null(out$nodes)) {
+    hue_a <- .qec_hue(colors[[view$network$group]])
+    hue_b <- if (!is.null(view$network$compare)) .qec_hue(colors[[view$network$compare]])
+    at_node <- function(x, y) {
+      d <- abs(out$nodes$x - x) + abs(out$nodes$y - y)
+      if (min(d) < 1e-9) out$nodes$code[which.min(d)] else NA_character_
+    }
+    rows <- lapply(tr, function(t) {
+      if (!identical(t$mode, "lines") || length(t$x) != 2 || is.null(t$line$width)) return(NULL)
+      x <- num(t$x); y <- num(t$y)
+      a <- at_node(x[1], y[1]); b <- at_node(x[2], y[2])
+      if (is.na(a) || is.na(b)) return(NULL)
+      sign <- 1
+      if (!is.null(hue_b)) {
+        h <- .qec_hue(t$line$color)
+        sign <- if (.qec_hue_dist(h, hue_a) <= .qec_hue_dist(h, hue_b)) 1 else -1
+      }
+      data.frame(a = a, b = b, w = sign * t$line$width / mult,
+                 width = t$line$width, stringsAsFactors = FALSE)
+    })
+    out$edges <- do.call(rbind, rows)
+  }
+
+  # Means: single-point trace named after the group; the CI box is the
+  # 5-point "Conf. Int." line trace that immediately follows it.
+  means <- lapply(view$means, function(g) {
+    i <- which(vapply(tr, function(t) identical(t$name, g) && length(t$x) == 1, logical(1)))
+    if (!length(i)) return(NULL)
+    i <- i[length(i)]
+    row <- data.frame(group = g, x = num(tr[[i]]$x), y = num(tr[[i]]$y),
+                      x_lo = NA_real_, x_hi = NA_real_, y_lo = NA_real_, y_hi = NA_real_,
+                      stringsAsFactors = FALSE)
+    if (i < length(tr) && identical(tr[[i + 1]]$name, "Conf. Int.")) {
+      bx <- num(tr[[i + 1]]$x); by <- num(tr[[i + 1]]$y)
+      row$x_lo <- min(bx); row$x_hi <- max(bx); row$y_lo <- min(by); row$y_hi <- max(by)
+    }
+    row
+  })
+  out$means <- do.call(rbind, means)
+
+  # Unit points: unnamed single-marker traces (ena.plot.points draws one per unit).
+  if (isTRUE(view$points)) {
+    pt <- Filter(function(t) length(t$x) == 1 && !nzchar(t$name %||% "") &&
+                   is.numeric(unlist(t$x)) && !identical(t$mode, "lines"), tr)
+    out$points <- data.frame(x = vapply(pt, function(t) num(t$x), 0),
+                             y = vapply(pt, function(t) num(t$y), 0))
+  }
+  out
+}
+
+# ── Adapter: what qe_extract() hands to qeviz ─────────────────────────────────
+
+qec_extract_adapter <- function(model, view) {
+  rows <- function(f) do.call(rbind, lapply(f$data, as.data.frame, stringsAsFactors = FALSE))
+  nodes <- rows(model$nodes)
+  pts   <- rows(model$points)
+  edges <- rows(model$edges)
+  grps  <- rows(model$groups)
+  gcol  <- model$group_col
+  xc    <- model$x_col; yc <- model$y_col
+
+  out <- list(nodes = data.frame(code = nodes$code, x = nodes[[xc]], y = nodes[[yc]],
+                                 stringsAsFactors = FALSE))
+  if (!is.null(view$network)) {
+    ecols <- names(edges)[vapply(edges, is.numeric, logical(1))]
+    wmean <- function(g) colMeans(as.matrix(edges[edges[[gcol]] == g, ecols, drop = FALSE]))
+    net <- wmean(view$network$group)
+    if (!is.null(view$network$compare)) net <- net - wmean(view$network$compare)
+    out$edges <- data.frame(col = ecols, w = unname(net), stringsAsFactors = FALSE)
+  }
+  g <- grps[grps[[gcol]] %in% view$means, , drop = FALSE]
+  b <- function(col, side) g[[paste0(col, ".", side)]]
+  out$means <- data.frame(group = g[[gcol]], x = g[[xc]], y = g[[yc]],
+                          x_lo = b(xc, "low"), x_hi = b(xc, "high"),
+                          y_lo = b(yc, "low"), y_hi = b(yc, "high"),
+                          stringsAsFactors = FALSE)
+  # The groups frame always carries bounds; whether to draw them is the
+  # renderer's decision, so there is nothing to check here when intervals are off.
+  if (!isTRUE(view$ci)) out$means[, c("x_lo", "x_hi", "y_lo", "y_hi")] <- NA_real_
+  if (isTRUE(view$points))
+    out$points <- data.frame(id = pts[[model$id_col]], x = pts[[xc]], y = pts[[yc]],
+                             stringsAsFactors = FALSE)
+  out
+}
+
+# ── Checks (mirrored in report.js for the in-browser qeviz side) ──────────────
+
+.qec_row <- function(check, delta, tol, detail = "", level = "fail") {
+  status <- if (is.na(delta)) "FAIL" else if (delta <= tol) "PASS"
+            else if (level == "warn") "WARN" else "FAIL"
+  data.frame(check = check, max_delta = delta, tol = tol, status = status,
+             detail = detail, stringsAsFactors = FALSE)
+}
+
+.qec_pair_key <- function(a, b) ifelse(a <= b, paste(a, b, sep = "|"), paste(b, a, sep = "|"))
+
+qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
+  edge_key <- match.arg(edge_key)
+  res <- list()
+
+  tn <- truth$nodes; gn <- got$nodes
+  if (!isTRUE(truth$nodes_drawn) && edge_key == "pair") {
+    n <- if (is.null(gn)) 0L else nrow(gn)
+    res$nodes <- .qec_row("no code nodes without a network", n, 0, sprintf("%d drawn", n))
+  } else if (is.null(gn)) {
+    res$nodes <- .qec_row("node positions", NA, tol, "nodes not drawn")
+  } else {
+    m <- match(tn$code, gn$code)
+    d <- if (anyNA(m)) NA else max(abs(tn$x - gn$x[m]), abs(tn$y - gn$y[m]))
+    res$nodes <- .qec_row("node positions", d, tol,
+                          if (anyNA(m)) paste("missing:", paste(tn$code[is.na(m)], collapse = ", ")) else "")
+  }
+
+  if (!is.null(truth$edges)) {
+    te <- truth$edges
+    if (is.null(got$edges) || !nrow(got$edges)) {
+      res$edges <- .qec_row("edge weights (signed)", NA, tol, "no edges found")
+    } else if (edge_key == "col") {
+      # Adapter: columns are "A.B"; compare on the full vector incl. zeros.
+      tk <- paste(te$a, te$b, sep = "."); m <- match(tk, got$edges$col)
+      d <- if (anyNA(m)) NA else max(abs(te$w - got$edges$w[m]))
+      res$edges <- .qec_row("edge weights (signed)", d, tol,
+                            if (anyNA(m)) sprintf("%d edge columns missing", sum(is.na(m))) else "")
+    } else {
+      ge <- got$edges
+      tk <- .qec_pair_key(te$a, te$b); gk <- .qec_pair_key(ge$a, ge$b)
+      m  <- match(tk, gk)
+      extra <- setdiff(gk, tk)
+      d  <- if (anyNA(m)) NA else max(abs(te$w - ge$w[m]))
+      det <- c(if (anyNA(m)) sprintf("%d missing", sum(is.na(m))),
+               if (length(extra)) sprintf("%d unexpected", length(extra)))
+      res$edges <- .qec_row("edge weights (signed)", d, tol, paste(det, collapse = "; "))
+      if (!anyNA(m) && any(te$w < 0)) {
+        flips <- sum(sign(te$w) != sign(ge$w[m]))
+        res$sign <- .qec_row("subtraction edge colour/sign", flips, 0,
+                             sprintf("%d of %d edges on the wrong side", flips, nrow(te)))
+      }
+      if (!anyNA(m) && !is.null(ge$width)) {
+        # Visual encoding: width should be proportional to |w|.
+        rel_t <- abs(te$w) / max(abs(te$w)); rel_g <- ge$width[m] / max(ge$width[m])
+        res$width <- .qec_row("edge width ∝ |weight|", max(abs(rel_t - rel_g)), 0.02,
+                              "relative widths (encoding, not data)", level = "warn")
+      }
+    }
+  }
+
+  if (!is.null(truth$means)) {
+    tm <- truth$means; gm <- got$means
+    m <- if (is.null(gm)) rep(NA, nrow(tm)) else match(tm$group, gm$group)
+    d <- if (anyNA(m)) NA else max(abs(tm$x - gm$x[m]), abs(tm$y - gm$y[m]))
+    res$means <- .qec_row("group mean positions", d, tol,
+                          if (anyNA(m)) "group mean missing" else "")
+    if (!anyNA(m)) {
+      b <- c("x_lo", "x_hi", "y_lo", "y_hi")
+      if (isFALSE(truth$ci)) {
+        drawn <- sum(stats::complete.cases(gm[m, b, drop = FALSE]))
+        res$ci <- .qec_row("no CI box when intervals off", drawn, 0,
+                           sprintf("%d box(es) drawn", drawn))
+      } else {
+        d <- max(abs(as.matrix(tm[, b]) - as.matrix(gm[m, b])))
+        res$ci <- .qec_row("95% CI box bounds", d, tol,
+                           if (is.na(d)) "CI box not drawn" else "")
+      }
+    }
+  }
+
+  if (!is.null(truth$points)) {
+    tp <- truth$points; gp <- got$points
+    if (is.null(gp) || !nrow(gp)) {
+      res$points <- .qec_row("unit point positions", NA, tol, "no points found")
+    } else {
+      if (!is.null(gp$id)) {
+        m <- match(tp$id, gp$id)
+        d <- if (anyNA(m)) NA else max(abs(tp$x - gp$x[m]), abs(tp$y - gp$y[m]))
+      } else {
+        # rENA traces carry no unit id: nearest-neighbour match.
+        d <- max(vapply(seq_len(nrow(tp)), function(i)
+          min(pmax(abs(gp$x - tp$x[i]), abs(gp$y - tp$y[i]))), 0))
+      }
+      res$points <- .qec_row("unit point positions", d, tol,
+                             sprintf("%d expected, %d drawn", nrow(tp), nrow(gp)))
+      if (nrow(tp) != nrow(gp)) res$points$status <- "FAIL"
+    }
+  }
+  do.call(rbind, res)
+}
+
+# ── qeviz: build the panel HTML for a view ────────────────────────────────────
+
+qec_code_qe <- function(view, group_col) {
+  L <- sprintf("qe_plot(set, title = %s, height = 460, group_col = %s) |>",
+               .qec_q(view$title), .qec_q(group_col))
+  means <- paste(c(vapply(view$means, .qec_q, ""),
+                   sprintf("intervals = %s", isTRUE(view$ci))), collapse = ", ")
+  L <- c(L, sprintf("  qe_group(%s) |>", means))
+  net <- view$network
+  L <- c(L, if (is.null(net)) "  qe_edges(show = FALSE) |>"
+            else if (is.null(net$compare)) sprintf("  qe_edges(group = %s) |>", .qec_q(net$group))
+            else sprintf("  qe_edges(group = %s, compare = %s) |>", .qec_q(net$group), .qec_q(net$compare)))
+  if (isTRUE(view$points)) L <- c(L, "  qe_points() |>")
+  paste(c(L, "  qe_axes() |>", '  qe_labels(nodes = "on")'), collapse = "\n")
+}
+
+# The page-level override has no R-API equivalent yet, so it is applied to the
+# rendered HTML and noted beneath the code in the report.
+QEC_QE_NOTE <- paste('Rendered with <qe-graph scale-points="false"> (added to the HTML by the harness;',
+                     "not yet exposed in the R API) so unit points and means are not rescaled to",
+                     "the node extent, matching rENA.")
+
+qec_render_qe <- function(set, view, group_col, probe_js) {
+  code <- qec_code_qe(view, group_col)
+  env  <- list2env(list(set = set), parent = globalenv())
+  p    <- eval(parse(text = code), envir = env)
+
+  html <- qeviz::qe_html(p)
+  html <- .qec_fill(html, "<qe-graph ", '<qe-graph scale-points="false" ')
+  probe <- sprintf("<script>window.__QEC_VIEW__ = %s;</script>\n<script>%s</script>\n</body>",
+                   jsonlite::toJSON(view$name, auto_unbox = TRUE), probe_js)
+  list(html = .qec_fill(html, "</body>", probe), model = p$model, code = code)
+}
+
+# Literal first-occurrence replacement. sub(fixed = TRUE) still interprets
+# backslashes in the replacement, which would mangle JSON / JS escapes.
+.qec_fill <- function(x, marker, value) {
+  i <- regexpr(marker, x, fixed = TRUE)
+  if (i < 0) stop("marker not found: ", marker)
+  paste0(substr(x, 1, i - 1), value, substr(x, i + nchar(marker), nchar(x)))
+}
+
+# ── Driver ────────────────────────────────────────────────────────────────────
+
+qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
+                        group_col = "Condition", tol = 1e-5,
+                        label = "ENA model", setup_code = NULL) {
+  dir.create(file.path(out_dir, "panels"), recursive = TRUE, showWarnings = FALSE)
+  colors <- qec_group_colors(set, group_col)
+  if (is.null(views)) views <- qec_default_views(names(colors))
+  probe_js <- paste(readLines(file.path(.QEC_DIR, "qe_probe.js"), warn = FALSE), collapse = "\n")
+
+  results <- lapply(views, function(v) {
+    message("• ", v$name, ": ", v$title)
+    truth <- qec_truth(set, v, group_col)
+
+    rp <- qec_render_rena(set, v, group_col, colors)
+    htmlwidgets::saveWidget(rp$plot$plot, normalizePath(file.path(out_dir, "panels",
+                            paste0("rena_", v$name, ".html")), mustWork = FALSE),
+                            selfcontained = FALSE, libdir = "lib", title = v$title)
+    rena <- qec_extract_rena(rp$plot, v, colors)
+
+    qe <- qec_render_qe(set, v, group_col, probe_js)
+    writeLines(qe$html, file.path(out_dir, "panels", paste0("qe_", v$name, ".html")))
+    adapter <- qec_extract_adapter(qe$model, v)
+
+    list(view = v, truth = truth, code = list(rena = rp$code, qe = qe$code),
+         checks = list(rena = qec_check(truth, rena, tol),
+                       adapter = qec_check(truth, adapter, tol, edge_key = "col")))
+  })
+
+  payload <- list(
+    label = label, tol = tol, colors = as.list(colors),
+    setup_code = setup_code, qe_note = QEC_QE_NOTE,
+    generated = format(Sys.time(), "%Y-%m-%d %H:%M"),
+    versions = list(rENA = as.character(utils::packageVersion("rENA")),
+                    qeviz = as.character(utils::packageVersion("qeviz"))),
+    views = lapply(results, function(r) list(
+      name = r$view$name, title = r$view$title, network = r$view$network,
+      code = r$code, truth = r$truth,
+      rena = r$checks$rena, adapter = r$checks$adapter))
+  )
+  json <- jsonlite::toJSON(payload, auto_unbox = TRUE, digits = NA,
+                           dataframe = "rows", null = "null", na = "null")
+  tpl  <- paste(readLines(file.path(.QEC_DIR, "report.html"), warn = FALSE), collapse = "\n")
+  js   <- paste(readLines(file.path(.QEC_DIR, "report.js"), warn = FALSE), collapse = "\n")
+  html <- .qec_fill(tpl, "/*__QEC_DATA__*/", paste0("window.QEC = ", json, ";"))
+  html <- .qec_fill(html, "/*__QEC_JS__*/", js)
+  out  <- file.path(out_dir, "index.html")
+  writeLines(html, out)
+
+  # Console summary (the qeviz-render column is only available in the browser).
+  summary <- do.call(rbind, lapply(results, function(r) {
+    rbind(cbind(view = r$view$name, renderer = "rENA", r$checks$rena),
+          cbind(view = r$view$name, renderer = "adapter", r$checks$adapter))
+  }))
+  print(summary[, c("view", "renderer", "check", "status", "max_delta")], row.names = FALSE)
+  message("\nReport: ", normalizePath(out),
+          "\n(qeviz render checks run in the browser when the report loads.)")
+  invisible(summary)
+}
