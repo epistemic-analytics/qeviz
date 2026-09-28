@@ -90,11 +90,14 @@ test_that("qe_extract nodes row count matches source", {
   expect_length(m$nodes$data, nrow(mock_set$rotation$nodes))
 })
 
-test_that("qe_extract point positions are renamed to x / y", {
+test_that("qe_extract keeps the set's dimension names (used as axis labels)", {
   m    <- qe_extract(mock_set)
-  cols <- names(m$points$types)
-  expect_true("x" %in% cols)
-  expect_true("y" %in% cols)
+  expect_equal(c(m$x_col, m$y_col), c("SVD1", "SVD2"))
+  expect_true(all(c("SVD1", "SVD2") %in% names(m$points$types)))
+  expect_true(all(c("SVD1", "SVD2") %in% names(m$nodes$types)))
+  expect_true(all(c("SVD1.low", "SVD1.high", "SVD2.low", "SVD2.high")
+                  %in% names(m$groups$types)))
+  expect_false(any(c("x", "y") %in% names(m$points$types)))
 })
 
 test_that("qe_extract with real rENA data", {

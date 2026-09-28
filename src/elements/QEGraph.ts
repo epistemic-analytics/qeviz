@@ -69,6 +69,18 @@ function computeCIRect(
   return { halfW: t95 * seX, halfH: t95 * seY };
 }
 
+/** Mean markers never exceed this fraction of their interval box's shorter
+ *  half-side. Marker size is otherwise arbitrary (extent- or pixel-based), so
+ *  without a cap a tight CI disappears underneath the mean square. */
+const MEAN_MAX_FRACTION_OF_INTERVAL = 0.5;
+
+function capMeanToInterval(meanPt: Point | undefined, halfW: number, halfH: number): void {
+  if (!meanPt) return;
+  const half = Math.min(Math.abs(halfW), Math.abs(halfH));
+  if (!(half > 0)) return;   // degenerate interval (n = 1, zero variance): keep default size
+  (meanPt as any).meta = { ...((meanPt as any).meta ?? {}), maxRadius: half * MEAN_MAX_FRACTION_OF_INTERVAL };
+}
+
 function readIntervalBounds(
   row: DataFrameRow, dim0: string, dim1: string
 ): { x_low: number; x_high: number; y_low: number; y_high: number } | null {
@@ -430,13 +442,21 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               this.__data__.points.set(meanPt.ID, meanPt);
               pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
 
-              // Bounds rect (CI, IQR, or any interval) — rendered behind points
-              const bounds = readIntervalBounds(row, dims[0] as string, dims[1] as string);
-              if (bounds) {
+              // Bounds rect (CI, IQR, or any interval) — rendered behind points.
+              // Gated on <qe-means confidence> like Path B; without the gate
+              // qe_group(intervals = FALSE) still drew boxes.
+              const bounds = config.showCI
+                ? readIntervalBounds(row, dims[0] as string, dims[1] as string)
+                : null;
+              if (!bounds) {
+                const stale = this._ciRects.get(group);
+                if (stale) { stale.remove(); this._ciRects.delete(group); }
+              } else {
                 const rect_x      = bounds.x_low  * pointScale;
                 const rect_y      = -bounds.y_high * pointScale;
                 const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
                 const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                capMeanToInterval(meanPt, rect_width / 2, rect_height / 2);
 
                 let el = this._ciRects.get(group);
                 if (!el) {
@@ -495,6 +515,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                   const rect_y      = -bounds.y_high * pointScale;
                   const rect_width  = (bounds.x_high - bounds.x_low) * pointScale;
                   const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                  capMeanToInterval(this.__data__.points.get(`mean-${group}`) as Point | undefined,
+                                    rect_width / 2, rect_height / 2);
                   let el = this._ciRects.get(group);
                   if (!el) {
                     el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
@@ -523,6 +545,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                   const rawVarY = y2 / n - μy * μy;
                   const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
                   const cx = μx * pointScale, cy = -(μy) * pointScale;
+                  capMeanToInterval(this.__data__.points.get(`mean-${group}`) as Point | undefined,
+                                    halfW, halfH);
                   let el = this._ciRects.get(group);
                   if (!el) {
                     el = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
@@ -986,8 +1010,22 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           if (edgenodeLayer) edgenodeLayer.__data__.__state__.setVariable('layer_updated', edgenodeLayer.__data__);
         }
 
+        // ── Node visibility ──────────────────────────────────────────────────
+        // Node positions come from the model and stay in the layer either way,
+        // so they keep anchoring the extent (the plot does not rescale when
+        // nodes are toggled); <qe-nodes> presence only controls the drawing,
+        // as <qe-axes> does for the axis sub-tree.
+        const nodesVisible = config.showNodes;
+        if (nodeLayer.svg_element) {
+          (nodeLayer.svg_element as SVGElement).style.display = nodesVisible ? '' : 'none';
+        }
+        if (!nodesVisible) {
+          this._nodeLabels.forEach(lbl => lbl.remove());
+          this._nodeLabels.clear();
+        }
+
         // ── Node labels ──────────────────────────────────────────────────────
-        if (labelSvg && labelNodes !== 0) {
+        if (labelSvg && labelNodes !== 0 && nodesVisible) {
           // Clean up stale node labels
           this._nodeLabels.forEach((lbl, id) => {
             if (!nodeLayer.__data__.objects.get(id)) { lbl.remove(); this._nodeLabels.delete(id); }
@@ -1050,6 +1088,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _readLayerConfig(): {
     // Nodes
     labelNodes: number;
+    showNodes: boolean;
     scalePoints: boolean;
     // Means
     showMeans: boolean;
@@ -1095,11 +1134,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     const labelsShorthand = this.getAttribute('labels');
 
     return {
-      // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
+      // Nodes — always placed from the model (they anchor the coordinate
+      // space); <qe-nodes> presence draws them, like every other layer.
       labelNodes: parseLabelMode(
         nodesEl?.getAttribute('label') ?? this.getAttribute('label-nodes') ?? labelsShorthand,
         Label.DISPLAY_TYPES.ON
       ),
+      showNodes: !!nodesEl,
       scalePoints: this.getAttribute('scale-points') !== 'false',
 
       // Means — presence of <qe-means> = show; absence = hide.

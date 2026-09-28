@@ -328,10 +328,10 @@ end
 
 # ══ HTML output ══════════════════════════════════════════════════════════════════
 
-@testset "graph element contains qe-nodes and qe-means" begin
+@testset "graph element contains qe-means (no qe-nodes without a network)" begin
     p   = qe_plot(model)
     g   = QEViz._build_graph_element(p)
-    @test occursin("<qe-nodes", g)
+    @test !occursin("<qe-nodes", g)
     @test occursin("<qe-means", g)
 end
 
@@ -355,14 +355,27 @@ end
     @test !occursin("size=", g2)
 end
 
-@testset "qe_axes default dimension-name labels" begin
+@testset "qe-nodes only with a network by default" begin
+    @test !occursin("<qe-nodes", QEViz._build_graph_element(qe_plot(model)))
+    @test occursin("<qe-nodes", QEViz._build_graph_element(qe_edges(qe_plot(model); group="FirstGame")))
+    @test occursin("<qe-nodes", QEViz._build_graph_element(qe_nodes(qe_plot(model); show="always")))
+    @test !occursin("<qe-nodes", QEViz._build_graph_element(
+        qe_nodes(qe_edges(qe_plot(model); group="FirstGame"); show=false)))
+end
+
+@testset "qe_axes lines only by default (labels opt-in)" begin
     g = QEViz._build_graph_element(qe_axes(qe_plot(model)))
+    @test occursin("<qe-axes>", g)
+end
+
+@testset "qe_axes dimension-name labels" begin
+    g = QEViz._build_graph_element(qe_axes(qe_plot(model); x=true, y=true))
     @test occursin("<qe-axes x y>", g)
 end
 
-@testset "qe_axes custom x label, default y" begin
+@testset "qe_axes custom x label only" begin
     g = QEViz._build_graph_element(qe_axes(qe_plot(model); x="Task focus"))
-    @test occursin("<qe-axes x=\"Task focus\" y>", g)
+    @test occursin("<qe-axes x=\"Task focus\">", g)
 end
 
 @testset "qe_axes lines-only" begin

@@ -55,8 +55,9 @@ find_dims <- function(df) {
 #' @param x_col Name of the x-coordinate column.
 #' @param y_col Name of the y-coordinate column.
 #' @param group_col Name of the grouping column.
-#' @return A `data.frame` with columns `group`, `x`, `y`, `x.low`, `x.high`,
-#'   `y.low`, `y.high`.
+#' @return A `data.frame` with the group column, `x_col`, `y_col`, and
+#'   `<x_col>.low`, `<x_col>.high`, `<y_col>.low`, `<y_col>.high` (the bound
+#'   names qeviz looks up from the model's dimension names).
 #' @keywords internal
 group_summary <- function(pts, x_col, y_col, group_col) {
   groups <- sort(unique(pts[[group_col]]))
@@ -68,13 +69,14 @@ group_summary <- function(pts, x_col, y_col, group_col) {
     mx   <- mean(x, na.rm = TRUE);  my <- mean(y, na.rm = TRUE)
     se_x <- stats::sd(x,  na.rm = TRUE) / sqrt(n)
     se_y <- stats::sd(y,  na.rm = TRUE) / sqrt(n)
-    row <- data.frame(
-      x      = mx,            y      = my,
-      x.low  = mx - t_v * se_x, x.high = mx + t_v * se_x,
-      y.low  = my - t_v * se_y, y.high = my + t_v * se_y,
-      stringsAsFactors = FALSE
+    row <- stats::setNames(
+      data.frame(g, mx, my,
+                 mx - t_v * se_x, mx + t_v * se_x,
+                 my - t_v * se_y, my + t_v * se_y,
+                 stringsAsFactors = FALSE),
+      c(group_col, x_col, y_col,
+        paste0(x_col, c(".low", ".high")), paste0(y_col, c(".low", ".high")))
     )
-    row[[group_col]] <- g
-    row[, c(group_col, "x", "y", "x.low", "x.high", "y.low", "y.high")]
+    row
   }))
 }

@@ -10,18 +10,18 @@ trajectory_model <- qe_model_data(nodes_df, edges_df, points_df,
 # whose comments mention tag names and would confuse whole-document grepping.
 .graph_el <- function(p) qeviz:::.build_graph_element(p$graph_opts)
 
-test_that("qe_axes emits axis element with dimension-name labels", {
-  expect_match(.graph_el(qe_plot(model) |> qe_axes()), "<qe-axes x y>", fixed = TRUE)
+test_that("qe_axes draws lines only by default (labels are opt-in)", {
+  expect_match(.graph_el(qe_plot(model) |> qe_axes()), "<qe-axes>", fixed = TRUE)
 })
 
-test_that("qe_axes supports a custom x label with default y", {
+test_that("qe_axes x/y = TRUE emit dimension-name labels", {
+  expect_match(.graph_el(qe_plot(model) |> qe_axes(x = TRUE, y = TRUE)),
+               "<qe-axes x y>", fixed = TRUE)
+})
+
+test_that("qe_axes supports a custom x label alone", {
   expect_match(.graph_el(qe_plot(model) |> qe_axes(x = "Task focus")),
-               '<qe-axes x="Task focus" y>', fixed = TRUE)
-})
-
-test_that("qe_axes lines-only when x and y are FALSE", {
-  expect_match(.graph_el(qe_plot(model) |> qe_axes(x = FALSE, y = FALSE)),
-               "<qe-axes>", fixed = TRUE)
+               '<qe-axes x="Task focus">', fixed = TRUE)
 })
 
 test_that("qe_axes show=FALSE omits the axes element", {
@@ -30,6 +30,26 @@ test_that("qe_axes show=FALSE omits the axes element", {
 
 test_that("plots omit axes unless qe_axes is called", {
   expect_false(grepl("<qe-axes", .graph_el(qe_plot(model)), fixed = TRUE))
+})
+
+test_that("qe-nodes is emitted only alongside an edge network by default", {
+  expect_false(grepl("<qe-nodes", .graph_el(qe_plot(model)), fixed = TRUE))
+  expect_false(grepl("<qe-nodes", .graph_el(qe_plot(model) |> qe_group()), fixed = TRUE))
+  expect_match(.graph_el(qe_plot(model) |> qe_edges("OA")),
+               '<qe-nodes label="on"></qe-nodes>', fixed = TRUE)
+})
+
+test_that("qe_nodes always / never override the network rule", {
+  expect_match(.graph_el(qe_plot(model) |> qe_nodes("always")), "<qe-nodes", fixed = TRUE)
+  expect_match(.graph_el(qe_plot(model) |> qe_nodes(TRUE)),     "<qe-nodes", fixed = TRUE)
+  expect_false(grepl("<qe-nodes",
+    .graph_el(qe_plot(model) |> qe_edges("OA") |> qe_nodes("never")), fixed = TRUE))
+  expect_error(qe_nodes(qe_plot(model), "sometimes"))
+})
+
+test_that("qe-nodes stays the first child element", {
+  g <- .graph_el(qe_plot(model) |> qe_edges("OA"))
+  expect_lt(regexpr("<qe-nodes", g, fixed = TRUE), regexpr("<qe-means", g, fixed = TRUE))
 })
 
 test_that("qe_points size emits a size attribute", {
@@ -104,7 +124,8 @@ test_that("qe_html title appears in <title> tag", {
 })
 
 test_that("qe_html graph_opts are reflected as element attributes", {
-  html <- qe_html(model, graph_opts = list("label-nodes" = "off"))
+  # <qe-nodes> is only emitted with a network, so give it one.
+  html <- qe_html(model, graph_opts = list("label-nodes" = "off", group = "OA"))
   expect_match(html, '<qe-nodes label="off">', fixed = TRUE)
 })
 

@@ -4,15 +4,15 @@
 \alias{qe_axes}
 \title{Show or hide the axes}
 \usage{
-qe_axes(p, x = TRUE, y = TRUE, show = TRUE)
+qe_axes(p, x = FALSE, y = FALSE, show = TRUE)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
 
 \item{x}{\code{TRUE} to label the x-axis with its dimension name, a string for
-custom text, or \code{FALSE} for no x-axis label.  Default \code{TRUE}.}
+custom text, or \code{FALSE} for no x-axis label.  Default \code{FALSE}.}
 
-\item{y}{Same as \code{x}, for the y-axis.  Default \code{TRUE}.}
+\item{y}{Same as \code{x}, for the y-axis.  Default \code{FALSE}.}
 
 \item{show}{Logical. \code{FALSE} suppresses the axes entirely.  Default \code{TRUE}.}
 }
@@ -20,7 +20,7 @@ custom text, or \code{FALSE} for no x-axis label.  Default \code{TRUE}.}
 The modified \code{qe_plot} object.
 }
 \description{
-Adds a \verb{<qe-axes>} layer (the x/y axis cross) to the rendered graph.  Each of
-\code{x} and \code{y} adds a per-axis label: \code{TRUE} uses the dimension name, a string
-sets custom text, and \code{FALSE} omits that axis label (the lines still show).
+Adds a \verb{<qe-axes>} layer (the x/y axis cross) to the rendered graph.  Axis
+labels are opt-in: each of \code{x} and \code{y} is \code{FALSE} (no label) by default;
+\code{TRUE} uses the dimension name (e.g. \code{"SVD1"}) and a string sets custom text.
 }

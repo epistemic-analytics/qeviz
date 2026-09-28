@@ -397,9 +397,10 @@ def _vis_block(html: str) -> str:
     return "\n".join(buf)
 
 
-def test_html_default_has_nodes_and_means():
+def test_html_default_has_means_only():
+    # No network by default, so no <qe-nodes> either.
     html = _vis_block(_make_plot()._build_html_doc())
-    assert "<qe-nodes"  in html
+    assert "<qe-nodes"  not in html
     assert "<qe-means"  in html
     assert "<qe-points" not in html
     assert "<qe-edges"  not in html
@@ -443,14 +444,35 @@ def test_means_no_fixed_size_by_default():
     assert "fixed-size" not in means_line
 
 
-def test_axes_default_labels():
+def test_nodes_only_with_network_by_default():
+    assert "<qe-nodes" not in _vis_block(_make_plot()._build_html_doc())
+    html = _vis_block(_make_plot().edges("A")._build_html_doc())
+    assert '<qe-nodes label="on"></qe-nodes>' in html
+    assert html.index("<qe-nodes") < html.index("<qe-means")
+
+
+def test_nodes_override():
+    assert "<qe-nodes" in _vis_block(_make_plot().nodes("always")._build_html_doc())
+    assert "<qe-nodes" in _vis_block(_make_plot().nodes(True)._build_html_doc())
+    assert "<qe-nodes" not in _vis_block(_make_plot().edges("A").nodes("never")._build_html_doc())
+    with pytest.raises(ValueError):
+        _make_plot().nodes("sometimes")
+
+
+def test_axes_lines_only_by_default():
+    # Axis labels are opt-in.
     html = _vis_block(_make_plot().axes()._build_html_doc())
+    assert "<qe-axes>" in html
+
+
+def test_axes_dimension_name_labels():
+    html = _vis_block(_make_plot().axes(x=True, y=True)._build_html_doc())
     assert "<qe-axes x y>" in html
 
 
-def test_axes_custom_x_default_y():
+def test_axes_custom_x_only():
     html = _vis_block(_make_plot().axes(x="Task focus")._build_html_doc())
-    assert '<qe-axes x="Task focus" y>' in html
+    assert '<qe-axes x="Task focus">' in html
 
 
 def test_axes_lines_only():

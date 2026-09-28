@@ -6,6 +6,38 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [0.4.0] - 2026-09-28
+
+Rendering fixes found by side-by-side accuracy testing against rENA's plotly
+plots (`tools/rena-compare/`), aligning qeviz defaults with rENA.
+
+### Changed (breaking)
+- **Code nodes draw only when `<qe-nodes>` is present**, like every other layer
+  element. Node positions still come from the model and anchor the plot extent,
+  so the scale does not change when nodes are hidden. The R / Python / Julia
+  wrappers emit `<qe-nodes>` only alongside an edge network (rENA draws nodes as
+  part of `ena.plot.network()`); override with `qe_nodes(p, "always" | "never")`
+  (R), `.nodes()` (Python), or `qe_nodes(p; show=...)` (Julia).
+- **Axis labels are opt-in.** `qe_axes()` / `.axes()` now draws the axis lines
+  only; `x = TRUE` / `y = TRUE` label an axis with its dimension name and a string
+  sets custom text.
+- **`qe_extract()` keeps the set's dimension names** (e.g. `SVD1` / `SVD2`) instead
+  of renaming them to `x` / `y`, so dimension-name axis labels read `SVD1` rather
+  than `x`. `x_col` / `y_col` are set accordingly, and `group_summary()` now names
+  its columns after the dimensions (`SVD1`, `SVD1.low`, `SVD1.high`, ...).
+
+### Added
+- `qe_nodes()` (R, Julia) and `.nodes()` (Python) to force code nodes on or off.
+
+### Fixed
+- **Group mean markers no longer hide small confidence intervals.** The marker's
+  half-side is capped at half the CI box's shorter half-side
+  (`MEAN_MAX_FRACTION_OF_INTERVAL`); markers keep their normal size when the CI is
+  large, and when the interval is degenerate.
+- **`qe_group(intervals = FALSE)` now hides CI boxes** when the model carries a
+  groups frame (always the case with `qe_extract()`); previously the boxes were
+  drawn regardless.
+
 ## [0.3.0] - 2026-09-23
 
 Interaction and read surface for embedding qeviz as the interactive network

@@ -2499,6 +2499,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
      */
     computeRadius() {
+      var _a;
+      const r = this.baseRadius();
+      const cap = (_a = this.__data__.meta) == null ? void 0 : _a.maxRadius;
+      return typeof cap === "number" && cap > 0 ? Math.min(r, cap) : r;
+    }
+    baseRadius() {
       var _a, _b, _c, _d;
       const extent = this.graph.__data__.extremes.x_max || 1;
       const sizeScale = ((_a = this.__data__.meta) == null ? void 0 : _a.sizeScale) ?? 1;
@@ -3100,6 +3106,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     return { halfW: t95 * seX, halfH: t95 * seY };
   }
   __name(computeCIRect, "computeCIRect");
+  const MEAN_MAX_FRACTION_OF_INTERVAL = 0.5;
+  function capMeanToInterval(meanPt, halfW, halfH) {
+    if (!meanPt) return;
+    const half = Math.min(Math.abs(halfW), Math.abs(halfH));
+    if (!(half > 0)) return;
+    meanPt.meta = { ...meanPt.meta ?? {}, maxRadius: half * MEAN_MAX_FRACTION_OF_INTERVAL };
+  }
+  __name(capMeanToInterval, "capMeanToInterval");
   function readIntervalBounds(row, dim0, dim1) {
     const get = /* @__PURE__ */ __name((col) => {
       const i = row.names.indexOf(col);
@@ -3306,12 +3320,19 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   meanPt.shape = "rect";
                   this.__data__.points.set(meanPt.ID, meanPt);
                   pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
-                  const bounds = readIntervalBounds(row, dims[0], dims[1]);
-                  if (bounds) {
+                  const bounds = config.showCI ? readIntervalBounds(row, dims[0], dims[1]) : null;
+                  if (!bounds) {
+                    const stale = this._ciRects.get(group);
+                    if (stale) {
+                      stale.remove();
+                      this._ciRects.delete(group);
+                    }
+                  } else {
                     const rect_x = bounds.x_low * pointScale;
                     const rect_y = -bounds.y_high * pointScale;
                     const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
                     const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                    capMeanToInterval(meanPt, rect_width / 2, rect_height / 2);
                     let el = this._ciRects.get(group);
                     if (!el) {
                       el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -3365,6 +3386,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                       const rect_y = -bounds.y_high * pointScale;
                       const rect_width = (bounds.x_high - bounds.x_low) * pointScale;
                       const rect_height = (bounds.y_high - bounds.y_low) * pointScale;
+                      capMeanToInterval(
+                        this.__data__.points.get(`mean-${group}`),
+                        rect_width / 2,
+                        rect_height / 2
+                      );
                       let el = this._ciRects.get(group);
                       if (!el) {
                         el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -3392,6 +3418,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                       const rawVarY = y2 / n - μy * μy;
                       const { halfW, halfH } = computeCIRect(rawVarX, rawVarY, n, pointScale);
                       const cx = μx * pointScale, cy = -μy * pointScale;
+                      capMeanToInterval(
+                        this.__data__.points.get(`mean-${group}`),
+                        halfW,
+                        halfH
+                      );
                       let el = this._ciRects.get(group);
                       if (!el) {
                         el = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -3748,7 +3779,15 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             edgeLayer.__data__.__state__.setVariable("layer_updated", edgeLayer.__data__);
             if (edgenodeLayer) edgenodeLayer.__data__.__state__.setVariable("layer_updated", edgenodeLayer.__data__);
           }
-          if (labelSvg && labelNodes !== 0) {
+          const nodesVisible = config.showNodes;
+          if (nodeLayer.svg_element) {
+            nodeLayer.svg_element.style.display = nodesVisible ? "" : "none";
+          }
+          if (!nodesVisible) {
+            this._nodeLabels.forEach((lbl) => lbl.remove());
+            this._nodeLabels.clear();
+          }
+          if (labelSvg && labelNodes !== 0 && nodesVisible) {
             this._nodeLabels.forEach((lbl, id) => {
               if (!nodeLayer.__data__.objects.get(id)) {
                 lbl.remove();
@@ -3826,11 +3865,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const axesEl = this.querySelector("qe-axes");
       const labelsShorthand = this.getAttribute("labels");
       return {
-        // Nodes — always rendered (coordinate anchors); <qe-nodes> controls labels.
+        // Nodes — always placed from the model (they anchor the coordinate
+        // space); <qe-nodes> presence draws them, like every other layer.
         labelNodes: parseLabelMode(
           (nodesEl == null ? void 0 : nodesEl.getAttribute("label")) ?? this.getAttribute("label-nodes") ?? labelsShorthand,
           Label.DISPLAY_TYPES.ON
         ),
+        showNodes: !!nodesEl,
         scalePoints: this.getAttribute("scale-points") !== "false",
         // Means — presence of <qe-means> = show; absence = hide.
         showMeans: !!meansEl,

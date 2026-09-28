@@ -135,11 +135,12 @@ Label modes: `"on"`, `"off"`, `"click"`, `"auto"`.
 ### `qe_axes` / `.axes()` parameters
 
 Axes are **opt-in**: a plot draws the x/y axis cross only when `qe_axes()` is in the
-chain (or a `<qe-axes>` element is present). Each axis label is controlled independently:
+chain (or a `<qe-axes>` element is present). Axis labels are opt-in too: `qe_axes()` alone
+draws the lines with no labels. Each label is controlled independently:
 
 | Parameter | Description |
 |---|---|
-| `x` | `TRUE` labels the x-axis with its dimension name, a string sets custom text, `FALSE` omits the x-axis label. |
+| `x` | `FALSE` (default) omits the x-axis label, `TRUE` labels it with its dimension name (e.g. `SVD1`), a string sets custom text. |
 | `y` | Same as `x`, for the y-axis. |
 | `show` / `show=false` | Suppress the axes entirely. |
 
@@ -149,7 +150,7 @@ qe_plot(set) |> qe_edges("FirstGame") |> qe_axes(x = "Task focus", y = TRUE)
 
 ## TypeScript / web component
 
-The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML page.  Layer configuration uses declarative child elements:
+The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML page.  Layer configuration uses declarative child elements; each layer draws only when its element is present. Code-node positions always come from the model and set the plot extent, but the nodes are drawn only when `<qe-nodes>` is present. The R / Python / Julia wrappers emit `<qe-nodes>` alongside an edge network by default (`qe_nodes()` / `.nodes()` override that).
 
 ```html
 <script src="qeviz.umd.js"></script>

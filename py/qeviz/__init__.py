@@ -378,19 +378,37 @@ class QEPlot:
         p._opts["point_fixed_size"] = bool(fixed_size)
         return p
 
+    def nodes(self, show: Union[bool, str] = "auto") -> "QEPlot":
+        """
+        Show or hide the code nodes.
+
+        ``"auto"`` (default) draws nodes only when an edge network is drawn,
+        matching rENA. ``"always"`` / ``True`` and ``"never"`` / ``False``
+        override that. Node positions always set the plot extent.
+        """
+        if show is True:
+            show = "always"
+        elif show is False:
+            show = "never"
+        if show not in ("auto", "always", "never"):
+            raise ValueError('nodes(): show must be "auto", "always", or "never".')
+        p = self._copy()
+        p._opts["nodes_show"] = show
+        return p
+
     def axes(
         self,
-        x: Union[bool, str] = True,
-        y: Union[bool, str] = True,
+        x: Union[bool, str] = False,
+        y: Union[bool, str] = False,
         *,
         show: bool = True,
     ) -> "QEPlot":
         """
         Show or hide the axes (a ``<qe-axes>`` layer).
 
-        ``x`` / ``y`` add a per-axis label: ``True`` uses the dimension name, a
-        string sets custom text, ``False`` omits that axis label (lines still
-        show). ``show=False`` suppresses the axes entirely.
+        Axis labels are opt-in. ``x`` / ``y`` default to ``False`` (no label);
+        ``True`` uses the dimension name (e.g. ``"SVD1"``), a string sets custom
+        text. ``show=False`` suppresses the axes entirely.
         """
         p = self._copy()
         if not show:
@@ -506,9 +524,7 @@ class QEPlot:
         opts = self._opts
         children: list[str] = []
 
-        # <qe-nodes> — always present; controls node label mode
-        node_label = opts.get("label_nodes", "on")
-        children.append(f'    <qe-nodes label="{node_label}"></qe-nodes>')
+        # <qe-nodes> is inserted here once <qe-edges> is decided (below).
 
         # <qe-means> — always present; groups/confidence control what is shown
         means_parts: list[str] = []
@@ -548,6 +564,14 @@ class QEPlot:
                     f'    <qe-edges {" ".join(edge_parts)}></qe-edges>'
                 )
 
+        # <qe-nodes> — draw code nodes (positions always come from the model).
+        # "auto" draws them only with an edge network, as rENA does.
+        node_show = opts.get("nodes_show", "auto")
+        has_network = any(c.startswith("    <qe-edges") for c in children)
+        if node_show == "always" or (node_show == "auto" and has_network):
+            node_label = opts.get("label_nodes", "on")
+            children.insert(0, f'    <qe-nodes label="{node_label}"></qe-nodes>')
+
         # <qe-trajectories> — only when explicitly shown
         if opts.get("show_trajectories", False):
             traj_parts: list[str] = []
@@ -575,7 +599,7 @@ class QEPlot:
         # <qe-axes> — axis lines + optional per-axis labels
         if opts.get("show_axes", False):
             axis_parts: list[str] = []
-            for attr, val in (("x", opts.get("axis_x", True)), ("y", opts.get("axis_y", True))):
+            for attr, val in (("x", opts.get("axis_x", False)), ("y", opts.get("axis_y", False))):
                 if val is True:
                     axis_parts.append(attr)
                 elif isinstance(val, str):

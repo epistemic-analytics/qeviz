@@ -126,13 +126,13 @@ qe_extract <- function(
   # ── Nodes ──────────────────────────────────────────────────────────────────
   nodes_raw <- as.data.frame(set$rotation$nodes)
   dims      <- find_dims(nodes_raw)
+  # Keep the set's dimension names (e.g. SVD1 / SVD2): qeviz uses x_col / y_col
+  # as the axis-label text, so renaming to x / y would label the axes "x" / "y".
   nodes_df  <- nodes_raw[, c(node_id_col, dims), drop = FALSE]
-  names(nodes_df)[2:3] <- c("x", "y")
 
   # ── Points ─────────────────────────────────────────────────────────────────
   pts_raw   <- as.data.frame(set$points)
   points_df <- pts_raw[, c(id_col, group_col, dims), drop = FALSE]
-  names(points_df)[3:4] <- c("x", "y")
 
   # ── Edges ──────────────────────────────────────────────────────────────────
   meta_df   <- as.data.frame(set$meta.data)[, c(id_col, group_col), drop = FALSE]
@@ -142,7 +142,7 @@ qe_extract <- function(
   names(edges_df) <- gsub(" & ", ".", names(edges_df), fixed = TRUE)
 
   # ── Groups (means + 95% CI) ────────────────────────────────────────────────
-  groups_df <- group_summary(points_df, "x", "y", group_col)
+  groups_df <- group_summary(points_df, dims[1], dims[2], group_col)
 
   qe_model_data(
     nodes    = nodes_df,
@@ -152,8 +152,8 @@ qe_extract <- function(
     directed = directed,
     id_col      = id_col,
     node_id_col = node_id_col,
-    x_col       = "x",
-    y_col       = "y",
+    x_col       = dims[1],
+    y_col       = dims[2],
     group_col   = group_col
   )
 }

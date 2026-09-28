@@ -17,8 +17,9 @@ group_summary(pts, x_col, y_col, group_col)
 \item{group_col}{Name of the grouping column.}
 }
 \value{
-A \code{data.frame} with columns \code{group}, \code{x}, \code{y}, \code{x.low}, \code{x.high},
-\code{y.low}, \code{y.high}.
+A \code{data.frame} with the group column, \code{x_col}, \code{y_col}, and
+\verb{<x_col>.low}, \verb{<x_col>.high}, \verb{<y_col>.low}, \verb{<y_col>.high} (the bound
+names qeviz looks up from the model's dimension names).
 }
 \description{
 For each group, computes the mean x/y position and a rectangular 95\%

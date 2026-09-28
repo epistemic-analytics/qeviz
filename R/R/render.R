@@ -38,7 +38,7 @@
 # ── Internal: build the <qe-graph> element with child layer elements ──────────
 #
 # Each declarative child element maps directly to a rendering layer:
-#   <qe-nodes>  — code-node labels (always rendered; controls label mode)
+#   <qe-nodes>  — code nodes (emitted with an edge network, or via qe_nodes())
 #   <qe-means>  — group mean markers + CI boxes  (omit to hide)
 #   <qe-points> — unit scatter dots              (omit to hide)
 #   <qe-edges>  — edge network                   (omit to hide)
@@ -53,10 +53,9 @@
   h <- opts[["height"]] %||% "440"
   children <- character(0)
 
-  # ── <qe-nodes> — always emitted; controls node label mode ────────────────
-  node_label <- opts[["label-nodes"]] %||% "on"
-  children <- c(children,
-    sprintf('    <qe-nodes label="%s"></qe-nodes>', node_label))
+  # <qe-nodes> is emitted after <qe-edges> is decided (see .nodes_element()),
+  # but placed first so DOM order is unchanged.
+  nodes_at <- length(children) + 1L
 
   # ── <qe-means> — show group means + optional CI boxes ────────────────────
   # Omit entirely only if explicitly suppressed (not currently exposed in API;
@@ -103,6 +102,7 @@
         sprintf('    <qe-edges %s></qe-edges>', paste(edge_parts, collapse = " ")))
     }
   }
+  has_network <- any(startsWith(children, "    <qe-edges"))
 
   # ── <qe-trajectories> — ordered unit trajectories ───────────────────────
   if (isTRUE(opts[["trajectories"]])) {
@@ -142,6 +142,15 @@
     children <- c(children,
       sprintf('    <qe-axes%s></qe-axes>',
               if (length(axis_parts)) paste0(" ", paste(axis_parts, collapse = " ")) else ""))
+  }
+
+  # ── <qe-nodes> — draw code nodes (positions always come from the model) ──
+  # "auto" draws them only with an edge network, as rENA does.
+  node_show <- opts[["nodes-show"]] %||% "auto"
+  if (node_show == "always" || (node_show == "auto" && has_network)) {
+    node_label <- opts[["label-nodes"]] %||% "on"
+    children <- append(children,
+      sprintf('    <qe-nodes label="%s"></qe-nodes>', node_label), after = nodes_at - 1L)
   }
 
   children_str <- paste(children, collapse = "\n")
@@ -437,20 +446,45 @@ qe_points <- function(p, show = TRUE, size = NULL, fixed_size = FALSE) {
   p
 }
 
+#' Show or hide the code nodes
+#'
+#' By default (`"auto"`) code nodes are drawn only when an edge network is
+#' drawn, matching rENA, where nodes are part of `ena.plot.network()`: the
+#' `<qe-nodes>` element is emitted only then.  Node positions always come from
+#' the model and set the plot extent, so the scale does not change.
+#'
+#' @param p    A `qe_plot` object.
+#' @param show `"auto"` (default), `"always"`, or `"never"`.  `TRUE` / `FALSE`
+#'   are accepted as `"always"` / `"never"`.
+#' @return The modified `qe_plot` object.
+#' @examples
+#' \dontrun{
+#' # Means only, but keep the code nodes for orientation
+#' qe_plot(set) |> qe_group() |> qe_nodes("always")
+#' }
+#' @export
+qe_nodes <- function(p, show = c("auto", "always", "never")) {
+  if (isTRUE(show))  show <- "always"
+  if (isFALSE(show)) show <- "never"
+  show <- match.arg(show)
+  p$graph_opts[["nodes-show"]] <- show
+  p
+}
+
 #' Show or hide the axes
 #'
-#' Adds a `<qe-axes>` layer (the x/y axis cross) to the rendered graph.  Each of
-#' `x` and `y` adds a per-axis label: `TRUE` uses the dimension name, a string
-#' sets custom text, and `FALSE` omits that axis label (the lines still show).
+#' Adds a `<qe-axes>` layer (the x/y axis cross) to the rendered graph.  Axis
+#' labels are opt-in: each of `x` and `y` is `FALSE` (no label) by default;
+#' `TRUE` uses the dimension name (e.g. `"SVD1"`) and a string sets custom text.
 #'
 #' @param p    A `qe_plot` object.
 #' @param x    `TRUE` to label the x-axis with its dimension name, a string for
-#'   custom text, or `FALSE` for no x-axis label.  Default `TRUE`.
-#' @param y    Same as `x`, for the y-axis.  Default `TRUE`.
+#'   custom text, or `FALSE` for no x-axis label.  Default `FALSE`.
+#' @param y    Same as `x`, for the y-axis.  Default `FALSE`.
 #' @param show Logical. `FALSE` suppresses the axes entirely.  Default `TRUE`.
 #' @return The modified `qe_plot` object.
 #' @export
-qe_axes <- function(p, x = TRUE, y = TRUE, show = TRUE) {
+qe_axes <- function(p, x = FALSE, y = FALSE, show = TRUE) {
   if (!show) {
     p$graph_opts$axes <- FALSE
     return(p)

@@ -33,6 +33,14 @@ export class QEPoint extends Drawable implements QEElement {
    *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
    */
   computeRadius(): number {
+    const r = this.baseRadius();
+    // Optional ceiling (user units): group means are capped to their CI box so
+    // a tight interval is never hidden under the marker.
+    const cap = (this.__data__ as any).meta?.maxRadius;
+    return typeof cap === 'number' && cap > 0 ? Math.min(r, cap) : r;
+  }
+
+  private baseRadius(): number {
     const extent = (this.graph.__data__.extremes.x_max) || 1;
     const sizeScale = (this.__data__ as any).meta?.sizeScale ?? 1;
     // Fixed-on-screen mode (webENA size decoupling): keep a constant pixel size

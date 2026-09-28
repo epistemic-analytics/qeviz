@@ -43,7 +43,7 @@ using DataFrames
 
 export QEPlot,
        qe_plot,
-       qe_group, qe_edges, qe_points, qe_trajectories, qe_axes, qe_labels,
+       qe_group, qe_edges, qe_points, qe_trajectories, qe_axes, qe_labels, qe_nodes,
        qe_groups, qe_units, qe_trajectory_units,
        qe_export_html, qe_html, qe_fragment,
        model_data
@@ -283,14 +283,30 @@ function qe_points(p::QEPlot; show::Bool = true, size::Union{Real,Nothing} = not
 end
 
 """
-    qe_axes(p; x=true, y=true, show=true)
+    qe_nodes(p; show="auto")
 
-Show or hide the axes (a `<qe-axes>` layer). `x` / `y` add a per-axis label:
-`true` uses the dimension name, a `String` sets custom text, `false` omits that
-axis label (the lines still show). `show=false` suppresses the axes entirely.
+Show or hide the code nodes. `"auto"` (default) draws nodes only when an edge
+network is drawn, matching rENA; `"always"` / `true` and `"never"` / `false`
+override that. Node positions always set the plot extent.
 """
-function qe_axes(p::QEPlot; x::Union{Bool,AbstractString} = true,
-                 y::Union{Bool,AbstractString} = true, show::Bool = true)::QEPlot
+function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto")::QEPlot
+    s = show === true ? "always" : show === false ? "never" : String(show)
+    s in ("auto", "always", "never") ||
+        throw(ArgumentError("qe_nodes(): show must be \"auto\", \"always\", or \"never\"."))
+    p = _copy(p)
+    p.opts["nodes_show"] = s
+    p
+end
+
+"""
+    qe_axes(p; x=false, y=false, show=true)
+
+Show or hide the axes (a `<qe-axes>` layer). Axis labels are opt-in: `x` / `y`
+default to `false` (no label); `true` uses the dimension name (e.g. `"SVD1"`),
+a `String` sets custom text. `show=false` suppresses the axes entirely.
+"""
+function qe_axes(p::QEPlot; x::Union{Bool,AbstractString} = false,
+                 y::Union{Bool,AbstractString} = false, show::Bool = true)::QEPlot
     p = _copy(p)
     if !show
         p.opts["show_axes"] = false
@@ -411,9 +427,7 @@ function _build_graph_element(p::QEPlot)::String
     opts = p.opts
     children = String[]
 
-    # <qe-nodes> — always present; controls node label mode
-    node_label = get(opts, "label_nodes", "on")
-    push!(children, "    <qe-nodes label=\"" * node_label * "\"></qe-nodes>")
+    # <qe-nodes> is inserted here once <qe-edges> is decided (below).
 
     # <qe-means> — always present; groups/confidence control what is shown
     means_parts = String[]
@@ -453,6 +467,15 @@ function _build_graph_element(p::QEPlot)::String
         end
     end
 
+    # <qe-nodes> — draw code nodes (positions always come from the model).
+    # "auto" draws them only with an edge network, as rENA does.
+    node_show   = get(opts, "nodes_show", "auto")
+    has_network = any(c -> startswith(c, "    <qe-edges"), children)
+    if node_show == "always" || (node_show == "auto" && has_network)
+        node_label = get(opts, "label_nodes", "on")
+        pushfirst!(children, "    <qe-nodes label=\"" * node_label * "\"></qe-nodes>")
+    end
+
     # <qe-trajectories> — only when explicitly shown
     if get(opts, "show_trajectories", false) === true
         traj_parts = String[]
@@ -475,7 +498,7 @@ function _build_graph_element(p::QEPlot)::String
     # <qe-axes> — axis lines + optional per-axis labels
     if get(opts, "show_axes", false) === true
         axis_parts = String[]
-        for (attr, val) in (("x", get(opts, "axis_x", true)), ("y", get(opts, "axis_y", true)))
+        for (attr, val) in (("x", get(opts, "axis_x", false)), ("y", get(opts, "axis_y", false)))
             if val === true
                 push!(axis_parts, attr)
             elseif val isa AbstractString

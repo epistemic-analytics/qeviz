@@ -6,9 +6,9 @@
  * configure each rendering layer.
  *
  * Presence  = the layer is rendered.
- * Absence   = the layer is hidden.  (Nodes are the exception: the node
- *             layer always renders because it anchors the coordinate space;
- *             <qe-nodes> only controls label behaviour.)
+ * Absence   = the layer is hidden.  (Code-node positions come from the
+ *             model and anchor the coordinate space whether or not
+ *             <qe-nodes> is present; the element only controls drawing.)
  *
  * HTML authoring example:
  *
@@ -21,7 +21,8 @@
  */
 
 /**
- * <qe-nodes> — controls code-node label behaviour.
+ * <qe-nodes> — renders the code nodes.
+ * Presence = draw nodes; absence = hide them (positions still set the extent).
  *
  * Attributes:
  *   label  "on" | "off" | "click" | "auto"   (default "on")
