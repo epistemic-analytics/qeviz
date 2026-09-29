@@ -8,6 +8,8 @@ versioned together.
 
 ## [0.4.0] - 2026-09-28
 
+First release since 0.2.0: it also includes the unreleased 0.3.0 changes below.
+
 Rendering changes found by side-by-side accuracy testing against rENA's and ona's
 own plots (`tools/rena-compare/`), bringing qeviz in line with rENA / ona / webENA
 conventions and making separate plots of one model comparable by eye.
@@ -83,7 +85,10 @@ conventions and making separate plots of one model comparable by eye.
   groups frame (always the case with `qe_extract()`); previously the boxes were
   drawn regardless.
 
-## [0.3.0] - 2026-09-23
+## [0.3.0] - 2026-09-23 (never released)
+
+> Never tagged or published (only the `0.3.0-dev.9000` prerelease reached npm).
+> These changes first ship in **0.4.0**.
 
 Interaction and read surface for embedding qeviz as the interactive network
 renderer in the **web ENA** tool (and rENA). All new interaction is exposed as
