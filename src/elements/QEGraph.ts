@@ -89,8 +89,10 @@ function readIntervalBounds(
   // prefix '' → CI ({dim}.low / .high); 'o' → outlier ({dim}.olow / .ohigh).
   const get = (col: string) => {
     const i = row.names.indexOf(col);
-    const v = i >= 0 ? Number(row[i]) : undefined;
-    return v != null && Number.isFinite(v) ? v : undefined;
+    const raw = i >= 0 ? row[i] : null;
+    if (raw == null || raw === '') return undefined;   // Number(null) would be 0
+    const v = Number(raw);
+    return Number.isFinite(v) ? v : undefined;
   };
   const xLow  = get(`${dim0}.${prefix}low`)  ?? get(`${dim0}_${prefix}low`);
   const xHigh = get(`${dim0}.${prefix}high`) ?? get(`${dim0}_${prefix}high`);
@@ -577,8 +579,22 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               this.__data__.points.set(meanPt.ID, meanPt);
               pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
 
+              // Per-mean overrides (explicit means, as rENA's ena.plot.group
+              // sets them per call): groups-frame `intervals` / `outlier`
+              // columns win over the <qe-means> attributes when present.
+              const cell = (name: string): any => {
+                const i = row.names.indexOf(name);
+                const v = i >= 0 ? row[i] : null;
+                return v == null || String(v) === 'NA' || String(v) === '' ? null : v;
+              };
+              const rowIv = cell('intervals');
+              const iv: 'box' | 'crosshairs' | 'none' =
+                rowIv === 'box' || rowIv === 'crosshairs' || rowIv === 'none' ? rowIv : config.intervals;
+              const rowOut = cell('outlier');
+              const showOut = rowOut == null ? config.showOutlier : (rowOut === true || String(rowOut) === 'true');
+
               // Outlier interval (qe_group(outlier = TRUE)): {dim}.olow / .ohigh.
-              const ob = config.showOutlier
+              const ob = showOut
                 ? readIntervalBounds(row, dims[0] as string, dims[1] as string, 'o')
                 : null;
               if (!ob) {
@@ -605,14 +621,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // CI (<qe-means intervals="box|crosshairs|none">, or the legacy
               // `confidence` flag = box). Gated so qe_group(intervals = "none")
               // draws nothing.
-              const bounds = config.intervals !== 'none'
+              const bounds = iv !== 'none'
                 ? readIntervalBounds(row, dims[0] as string, dims[1] as string)
                 : null;
               const crossKey = `x:${group}`;
-              if (!bounds || config.intervals !== 'crosshairs') {
+              if (!bounds || iv !== 'crosshairs') {
                 this._ciCross.get(crossKey)?.remove(); this._ciCross.delete(crossKey);
               }
-              if (bounds && config.intervals === 'crosshairs') {
+              if (bounds && iv === 'crosshairs') {
                 this._ciRects.get(group)?.remove(); this._ciRects.delete(group);
                 // Two arms through the mean: x_lo..x_hi at the mean's y, and
                 // y_lo..y_hi at the mean's x.

@@ -1,6 +1,6 @@
 # rENA plotting backend switch (qeviz)
 
-**Status:** scoped, decisions made, not started · **Repo / branch:** rENA
+**Status:** phase 1 (plumbing) and phase 2 (layer functions) implemented; phases 3–6 to do · **Repo / branch:** rENA
 `qeviz-widget` · **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
 
 rENA's existing plotting API (`ena.plot()`, `plot.ena.set()`, the
@@ -76,11 +76,18 @@ p$plot                                         # an htmlwidget on either backend
 | `node.positions`, `labels`, `show.all.nodes` | `qe_nodes(positions, labels, unconnected)` |
 | `label.font.*` | `qe_labels(font_*)`, plot-wide not per layer |
 | `thickness`, `opacity`, `saturation`, `scale.range`, `node.size`, `scale.weights` | ignored, warns once. qeviz's model-wide scaling rules replace them. |
-| `edge_type` dash / dot, `label.offset`, `legend.name`, `legend.include.edges` | ignored, warns once (non-goals; qeviz has no legends) |
-| **`ena.plot.points()`**: `points`, `colors`, `shape`, `labels` / `texts`, `point.size` | `qe_points(points, color, shape, labels, size)` |
+| `legend.name` | the layer's `name` (reported in edge events; qeviz has no legend) |
+| `edge_type` dash / dot, `label.offset`, `legend.include.edges` | ignored, warns once (non-goals) |
+| `layers`, `labels.hide` (in `...`) | `qe_nodes(show = "always" / "never")` / no edges layer; `qe_labels(nodes = "off")` |
+| `adjacency.key`, unnamed `network` | weights named from the key (or the one implied by `node.positions`), exactly as the plotly path reads them; same length check |
+| `ena.plot(multiplier)` | `magnify = multiplier / 5` (rENA's default multiplier is 5) |
+| **`ena.plot.points()`**: `points`, `colors`, `shape`, `texts`, `labels` | `qe_points(points, color, shape, labels = texts)`; `labels` (hover names) become the point ids |
+| `point.size` | `size = point.size / 2` (rENA's default 5 ↔ qeviz's 2.5) |
 | `confidence.interval.values`, `outlier.interval.values` | ignored, warns once (per-point intervals are a non-goal) |
 | `label.offset`, `show.legend`, `legend.name` | ignored, warns once |
-| **`ena.plot.group()`**: `points`, `labels`, `colors`, `shape`, `confidence.interval`, `outlier.interval` | `qe_group(points, label, color, shape, intervals, outlier)` |
+| **`ena.plot.group()`**: `points`, `labels`, `colors`, `shape`, `confidence.interval`, `outlier.interval` | `qe_group(points, label, color, shape, intervals, outlier)`, per call (each mean keeps its own intervals / outlier) |
+| per-point `colors` with several values | one mean per distinct colour, as on plotly |
+| `outlier.interval = "crosshairs"` | drawn as a box, warns once |
 | `method` other than `"mean"` | error |
 | `label.offset`, `show.legend`, `legend.name` | ignored, warns once |
 
@@ -112,6 +119,15 @@ p$plot                                         # an htmlwidget on either backend
    (qeviz `dd4353b`, rENA `f67089b`). The switch goes on rENA `qeviz-widget`
    after them.
 
-## qeviz additions needed
+## qeviz additions (made for the switch)
 
-None so far. `qe_edges(threshold = c(min, max))` was already in 0.5.0.
+- `qe_palette()`: exported default palette (phase 1).
+- `qe_labels()` changes only the arguments supplied, so a layer call setting
+  fonts doesn't reset the label modes (phase 2).
+- Models with no group column (`qe_extract(group_col = NULL)`, which the backend
+  uses) take explicit points and means; the groups frame is keyed by `group`
+  (phase 2).
+- Per-mean `intervals` / `outlier` columns in the groups frame, overriding the
+  plot-wide `<qe-means>` settings, since rENA sets them per `ena.plot.group()`
+  call (phase 2, R + TS).
+- `qe_edges(threshold = c(min, max))` was already in 0.5.0.

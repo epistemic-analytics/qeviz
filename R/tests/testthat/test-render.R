@@ -504,3 +504,38 @@ test_that("qe_palette() matches the JavaScript default palette", {
   block <- regmatches(src, regexpr("GROUP_PALETTE = \\[[^]]*\\]", src))
   expect_identical(regmatches(block, gregexpr("#[0-9A-Fa-f]{6}", block))[[1]], qe_palette())
 })
+
+test_that("qe_labels() changes only the arguments supplied", {
+  p <- qe_plot(model) |> qe_labels(nodes = "off", means = "click")
+  q <- p |> qe_labels(font_size = 12)
+  expect_identical(q$graph_opts[["label-nodes"]], "off")
+  expect_identical(q$graph_opts[["label-means"]], "click")
+  expect_identical(q$graph_opts[["label-font-size"]], 12)
+  expect_identical((q |> qe_labels(points = "on"))$graph_opts[["label-font-size"]], 12)
+  bare <- p |> qe_labels()
+  expect_identical(bare$graph_opts[["label-nodes"]], "on")
+  expect_identical(bare$graph_opts[["label-points"]], "auto")
+})
+
+test_that("explicit points and means work on a model with no group column", {
+  m0 <- qe_extract(mock_set, group_col = NULL)
+  pts <- as.data.frame(mock_set$points)[1:3, c("ENA_UNIT", "SVD1", "SVD2")]
+  p <- qe_plot(m0) |> qe_points(points = pts) |> qe_group(points = pts, label = "subset")
+  expect_length(p$model$pointsets$data, 3)
+  expect_null(p$model$pointsets$data[[1]]$group)
+  expect_identical(qe_groups(p), "subset")
+  expect_equal(p$model$groups$data[[1]]$SVD1, mean(pts$SVD1))
+})
+
+test_that("explicit means carry their own intervals and outlier setting", {
+  pts <- as.data.frame(mock_set$points)[, c("ENA_UNIT", "SVD1", "SVD2")]
+  p <- qe_plot(model) |>
+    qe_group(points = pts[1:4, ], label = "a", intervals = "box") |>
+    qe_group(points = pts[5:8, ], label = "b", intervals = "crosshairs", outlier = TRUE)
+  rows <- p$model$groups$data
+  get <- function(lbl, k) Filter(function(r) identical(r$Condition, lbl), rows)[[1]][[k]]
+  expect_identical(get("a", "intervals"), "box")
+  expect_false(get("a", "outlier"))
+  expect_identical(get("b", "intervals"), "crosshairs")
+  expect_true(get("b", "outlier"))
+})

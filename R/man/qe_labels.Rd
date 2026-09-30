@@ -36,5 +36,6 @@ rENA). Default: scales with the plot. The title is drawn at 1.35×.}
 The modified \code{qe_plot} object.
 }
 \description{
-Control label visibility
+Only the arguments you supply change; the rest keep their current setting
+(so \code{qe_labels(font_size = 12)} leaves the label modes alone).
 }

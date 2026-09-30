@@ -193,7 +193,7 @@ qe_groups <- function(x) {
   model <- if (inherits(x, "qe_plot")) x$model
            else if (inherits(x, "ena.set")) qe_extract(x)
            else x
-  gcol  <- model$group_col %||% "Condition"
+  gcol  <- .qe_group_key(model)
   vapply(model$groups$data, function(row) {
     v <- row[[gcol]]
     if (is.null(v)) NA_character_ else as.character(v)
@@ -281,3 +281,8 @@ qe_trajectory_units <- function(x) {
                  paste(utils::head(num, 6), collapse = ", ")), call. = FALSE)
   out
 }
+
+# Column naming the group in the groups frame: the model's group column, else
+# "group" (a model extracted with group_col = NULL, holding only explicit
+# means; the renderer falls back to "group" the same way).
+.qe_group_key <- function(model) model$group_col %||% "group"

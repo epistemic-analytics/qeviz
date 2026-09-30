@@ -420,12 +420,17 @@ qe_group <- function(p, ..., points = NULL, label = NULL, color = NULL, shape = 
     if (lbl %in% qe_groups(p) && !lbl %in% p$graph_opts[["groups-explicit"]])
       stop(sprintf("qe_group(): label %s is already a group in the model.", dQuote(lbl)),
            call. = FALSE)
-    df[[m$group_col]] <- lbl
-    row <- group_summary(df, m$x_col, m$y_col, m$group_col, conf_level = conf_level,
+    gkey <- .qe_group_key(m)
+    df[[gkey]] <- lbl
+    row <- group_summary(df, m$x_col, m$y_col, gkey, conf_level = conf_level,
                          outlier = outlier)
     if (!is.null(color)) row$color <- color
     if (!is.null(shape)) row$shape <- .qe_shape(shape, "qe_group")
-    p$model$groups <- .qe_upsert_rows(p$model$groups, row, m$group_col)
+    # Each explicit mean keeps its own intervals / outlier setting (rENA sets
+    # them per ena.plot.group() call); they override the plot-wide ones.
+    row$intervals <- intervals
+    row$outlier   <- isTRUE(outlier)
+    p$model$groups <- .qe_upsert_rows(p$model$groups, row, gkey)
     p$graph_opts[["groups-explicit"]] <- union(p$graph_opts[["groups-explicit"]], lbl)
   } else {
     # ── By name ─────────────────────────────────────────────────────────────
@@ -796,7 +801,8 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
   rows <- data.frame(set = rep(set, n), id = as.character(df[[m$id_col]]), stringsAsFactors = FALSE)
   rows[[m$x_col]] <- df[[m$x_col]]
   rows[[m$y_col]] <- df[[m$y_col]]
-  if (!is.null(df[[m$group_col]])) rows$group <- as.character(df[[m$group_col]])
+  if (!is.null(m$group_col) && !is.null(df[[m$group_col]]))
+    rows$group <- as.character(df[[m$group_col]])
   per_point <- function(v, arg) {
     if (is.null(v)) return(NULL)
     if (!length(v) %in% c(1L, n))
@@ -1057,6 +1063,9 @@ qe_trajectories <- function(p, units = NULL, smooth = c("none", "poly"),
 
 #' Control label visibility
 #'
+#' Only the arguments you supply change; the rest keep their current setting
+#' (so `qe_labels(font_size = 12)` leaves the label modes alone).
+#'
 #' @param p      A `qe_plot` object.
 #' @param nodes  Label mode for code nodes.  One of `"on"`, `"off"`,
 #'   `"click"`, `"auto"`. Default `"on"`.
@@ -1073,12 +1082,16 @@ qe_labels <- function(p, nodes = "on", means = "on", points = "auto",
                       font_size = NULL, font_family = NULL, font_color = NULL) {
   if (!is.null(font_size) && !(is.numeric(font_size) && length(font_size) == 1L && font_size > 0))
     stop("qe_labels(): font_size must be a positive number of pixels.", call. = FALSE)
-  p$graph_opts[["label-nodes"]]  <- nodes
-  p$graph_opts[["label-means"]]  <- means
-  p$graph_opts[["label-points"]] <- points
-  p$graph_opts[["label-font-size"]]   <- font_size
-  p$graph_opts[["label-font-family"]] <- font_family
-  p$graph_opts[["label-font-color"]]  <- font_color
+  set <- function(key, value, given) if (given) p$graph_opts[[key]] <<- value
+  # A bare qe_labels() still applies the defaults, as before.
+  bare <- missing(nodes) && missing(means) && missing(points) &&
+          missing(font_size) && missing(font_family) && missing(font_color)
+  set("label-nodes",  nodes,  bare || !missing(nodes))
+  set("label-means",  means,  bare || !missing(means))
+  set("label-points", points, bare || !missing(points))
+  set("label-font-size",   font_size,   !missing(font_size))
+  set("label-font-family", font_family, !missing(font_family))
+  set("label-font-color",  font_color,  !missing(font_color))
   p
 }
 
