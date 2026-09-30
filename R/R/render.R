@@ -6,7 +6,10 @@
   path <- system.file("htmlwidgets", "lib", "qeviz", "qeviz.umd.js", package = "qeviz")
   if (!nzchar(path) || !file.exists(path))
     stop("qeviz.umd.js not found in package inst/. Re-install the package.")
-  paste(readLines(path, warn = FALSE), collapse = "\n")
+  js <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  # Inlined into a page, the relative source-map URL would resolve against the
+  # page and 404; the map is only served with the file-based dependency.
+  sub("\n//# sourceMappingURL=[^\n]*\\s*$", "\n", js)
 }
 
 # ── Internal: accept either a raw rENA set, a pre-extracted ModelData list,

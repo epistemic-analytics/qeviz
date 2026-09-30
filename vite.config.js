@@ -19,7 +19,8 @@ export default defineConfig({
       formats: ['es', 'umd'],
     },
     outDir: 'dist',
-    minify: false,
+    // esbuild minification; keepNames (above) keeps class / function names.
+    minify: 'esbuild',
     sourcemap: true,
     rollupOptions: {
       // qeviz is fully self-contained — no external runtime dependencies

@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "postbuild": "cp dist/qeviz.umd.js py/qeviz/qeviz.umd.js && cp dist/qeviz.umd.js R/inst/htmlwidgets/lib/qeviz/qeviz.umd.js && mkdir -p julia/assets && cp dist/qeviz.umd.js julia/assets/qeviz.umd.js",
+    "postbuild": "for d in py/qeviz R/inst/htmlwidgets/lib/qeviz julia/assets; do mkdir -p $d && cp dist/qeviz.umd.js dist/qeviz.umd.js.map $d/; done",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit"
   },

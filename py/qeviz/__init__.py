@@ -60,6 +60,7 @@ import copy
 import json
 import math
 import os
+import re
 import time
 from typing import Optional, Union
 
@@ -149,7 +150,10 @@ def _bundle_script_tag() -> str:
     )
     if os.path.exists(bundle_path):
         with open(bundle_path, "r", encoding="utf-8") as fh:
-            return f"<script>{fh.read()}</script>"
+            js = fh.read()
+        # Inlined, the relative source-map URL would resolve against the page.
+        js = re.sub(r"\n//# sourceMappingURL=[^\n]*\s*$", "\n", js)
+        return f"<script>{js}</script>"
     return '<script src="qeviz.umd.js"></script>'
 
 

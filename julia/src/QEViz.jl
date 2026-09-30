@@ -437,6 +437,8 @@ function _bundle_script_tag()::String
     bundle_path = joinpath(@__DIR__, "..", "assets", "qeviz.umd.js")
     if isfile(bundle_path)
         js = read(bundle_path, String)
+        # Inlined, the relative source-map URL would resolve against the page.
+        js = replace(js, r"\n//# sourceMappingURL=[^\n]*\s*$" => "\n")
         return "<script>" * js * "</script>"
     end
     "<script src=\"qeviz.umd.js\"></script>"

@@ -21,7 +21,7 @@ where = ["."]
 include = ["qeviz*"]
 
 [tool.setuptools.package-data]
-qeviz = ["qeviz.umd.js"]
+qeviz = ["qeviz.umd.js", "qeviz.umd.js.map"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
