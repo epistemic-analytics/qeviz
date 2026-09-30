@@ -8,6 +8,7 @@ import { Label, Line, Point } from "../objects/PlottedObject";
 import { Trajectory } from "../objects/Trajectory";
 import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
+import { Extremes } from "../objects/Extremes";
 import { QELabel } from "./QELabel";
 import { DEFAULT_EDGE_WIDTH, OPACITY_RANGE, SATURATION_RANGE, UNCONNECTED_NODE_SIZE, nodeSizeForEdges, rampFor, widthPerWeight } from "../objects/Sizing";
 import "./QEChildElements.js";
@@ -244,6 +245,22 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   // "(scaled 1.5x)" label, drawn whenever <qe-edges magnify> is present.
   private _magnifyText: string | null = null;
   private _magnifyEl: SVGTextElement | null = null;
+  // <qe-graph range> / plot-title / label-font-* (qe_plot(range =, title =),
+  // qe_labels(font_*)); resolved each render.
+  private _rangeExtent: number | null = null;
+  private _plotTitle: string | null = null;
+  private _titleEl: SVGTextElement | null = null;
+  private _resizeObs: ResizeObserver | null = null;
+  _labelFont: { size: number | null; family: string | null; color: string | null } =
+    { size: null, family: null, color: null };
+
+  /** SVG user units per CSS pixel at the current size / zoom. */
+  unitsPerPixel(): number {
+    const extent = this.__data__.extremes.x_max || 1;
+    const rect = this.svg_element?.getBoundingClientRect?.();
+    const zoom = (this as any).zoom_level || 1;
+    return rect && rect.width > 0 ? (2 * extent / rect.width) / zoom : extent * 0.004;
+  }
 
   constructor() {
     super();
@@ -304,12 +321,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // ── Group color map ──────────────────────────────────────────────────────
       // Priority: (1) points groupCol, (2) groups frame row names, (3) empty.
       const groupColorMap: Record<string, string> = {};
+      // Model palette (qe_plot(palette =)) or the default Tol "bright" scheme.
+      const PALETTE: string[] = (model as any).palette?.length ? (model as any).palette : GROUP_PALETTE;
       if (groupColName && model.points?.names) {
         const groupCol = model.points.col(groupColName);
         if (groupCol) {
           const uniqueGroups: string[] = [...new Set([...groupCol].map(String))];
           uniqueGroups.forEach((g, i) => {
-            groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
+            groupColorMap[g] = PALETTE[i % PALETTE.length];
           });
         }
       }
@@ -323,7 +342,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           const c  = ci >= 0 ? row[ci] : null;
           if (c && String(c) !== 'NA') groupColorMap[g] = String(c);
           else if (!groupColorMap[g]) {
-            groupColorMap[g] = GROUP_PALETTE[Object.keys(groupColorMap).length % GROUP_PALETTE.length];
+            groupColorMap[g] = PALETTE[Object.keys(groupColorMap).length % PALETTE.length];
           }
         });
       }
@@ -371,6 +390,17 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const pointScale = (scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0)
         ? maxNodeExtent / effectivePointExtent
         : 1;
+
+      // <qe-graph range>: a symmetric axis range, as rENA's scale.to —
+      // "network" = ±max |node| × 1.2, "points" = ±max |drawn point| × 1.2, or
+      // a number. Absent → qeviz's default (1.3 × the largest drawn mark).
+      this._rangeExtent =
+        config.range === 'network' ? maxNodeExtent * 1.2
+        : config.range === 'points' ? effectivePointExtent * pointScale * 1.2
+        : typeof config.range === 'number' ? config.range
+        : null;
+      this._plotTitle = config.plotTitle;
+      this._labelFont = config.labelFont;
 
       // ── Label display modes — sourced from config (child elements or shorthand) ──
       const labelNodes  = config.labelNodes;
@@ -426,7 +456,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const group = col(row, 'group') != null && String(col(row, 'group')) !== 'NA' ? String(col(row, 'group')) : null;
             const color = col(row, 'color') && String(col(row, 'color')) !== 'NA' ? String(col(row, 'color'))
                         : group && groupColorMap[group] ? groupColorMap[group]
-                        : GROUP_PALETTE[si % GROUP_PALETTE.length];
+                        : PALETTE[si % PALETTE.length];
             const pt = rowToPoint(row, 'id', color, pointScale);
             pt.ID = `${ps.set}::${id}`;
             pt.size = ps.size ?? config.pointSize ?? 2.5;
@@ -863,7 +893,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const rawPts = unitRows[unitKey];
             if (rawPts.length === 0) return;
 
-            const colorStr = GROUP_PALETTE[uIdx % GROUP_PALETTE.length];
+            const colorStr = PALETTE[uIdx % PALETTE.length];
 
             const trajObj = new Trajectory({
               ID: `traj-${unitKey}`,
@@ -1041,7 +1071,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // Explicit network: signed weights from model.networks.
               const w = networkRow(L.network);
               if (!w) return;
-              const [pos, neg] = signColors(GROUP_PALETTE[0], GROUP_PALETTE[1]);
+              const [pos, neg] = signColors(PALETTE[0], PALETTE[1]);
               const meta = { name: L.name ?? L.network };
               edgePairs.forEach(({ col, pair }) => {
                 const v = w[col] ?? 0;
@@ -1320,6 +1350,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     labelNodes: number;
     showNodes: boolean;
     edgeWidth: number;
+    range: 'network' | 'points' | number | null;
+    plotTitle: string | null;
+    labelFont: { size: number | null; family: string | null; color: string | null };
     hideUnconnectedNodes: boolean;
     scalePoints: boolean;
     // Means
@@ -1382,6 +1415,19 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         Label.DISPLAY_TYPES.ON
       ),
       showNodes: !!nodesEl,
+      range: (() => {
+        const v = this.getAttribute('range');
+        if (v === 'network' || v === 'points') return v;
+        const n = Number(v);
+        return v != null && Number.isFinite(n) && n > 0 ? n : null;
+      })(),
+      plotTitle: this.getAttribute('plot-title') || null,
+      labelFont: {
+        size: (() => { const n = Number(this.getAttribute('label-font-size'));
+                       return Number.isFinite(n) && n > 0 ? n : null; })(),
+        family: this.getAttribute('label-font-family') || null,
+        color:  this.getAttribute('label-font-color') || null,
+      },
       edgeWidth: (() => {
         const v = Number(this.getAttribute('edge-width'));
         return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_EDGE_WIDTH;
@@ -1492,7 +1538,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
         'network', 'colors', 'threshold', 'name',
         'groups', 'confidence', 'label', 'intervals', 'outlier', 'set', 'unconnected',
-        'scale-points', 'edge-width', 'labels', 'label-nodes', 'label-means', 'label-points',
+        'scale-points', 'edge-width', 'labels', 'range', 'plot-title',
+        'label-font-size', 'label-font-family', 'label-font-color', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
         'x', 'y', 'size', 'fixed-size',
@@ -1531,6 +1578,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   disconnectedCallback(): void {
     this._childObserver?.disconnect();
     this._childObserver = null;
+    this._resizeObs?.disconnect();
+    this._resizeObs = null;
     QEGraphElement._instances.delete(this);
     // Remove the body-level tooltip node so it doesn't outlive the graph.
     this._tooltipEl?.remove();
@@ -2120,6 +2169,21 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     (this.__children__ as QELayer[]).forEach((enaLayer: QELayer) => {
       enaLayer.draw();
     });
+
+    // Pixel-sized text (label-font-size, the plot title) is converted to model
+    // units at the current width, so re-lay it out when the plot is resized.
+    if (!this._resizeObs && typeof ResizeObserver !== 'undefined' && this.svg_element) {
+      let lastW = 0;
+      this._resizeObs = new ResizeObserver(entries => {
+        const w = entries[0]?.contentRect.width ?? 0;
+        if (w > 0 && Math.abs(w - lastW) > 0.5) {
+          lastW = w;
+          this.update_labels();
+          this.update_axes();
+        }
+      });
+      this._resizeObs.observe(this.svg_element);
+    }
   }
 
   update() {
@@ -2208,6 +2272,30 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       el.setAttribute('y', (-extent + fontSize + gap).toString());
       el.setAttribute('text-anchor', 'start');
     }
+
+    // Plot title (qe_plot(title =)), top centre, drawn into the SVG so it is
+    // part of toSVG() / toPNG() exports.
+    if (!this._plotTitle) {
+      this._titleEl?.remove(); this._titleEl = null;
+    } else {
+      if (!this._titleEl) {
+        this._titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'text') as SVGTextElement;
+        this._titleEl.setAttribute('data-plot-title', '');
+        this._titleEl.setAttribute('pointer-events', 'none');
+      }
+      if (!this._titleEl.parentElement) parent.appendChild(this._titleEl);
+      const px = (this._labelFont.size ?? 12) * 1.35;
+      const ts = px * this.unitsPerPixel();
+      const t = this._titleEl;
+      t.textContent = this._plotTitle;
+      t.setAttribute('font-size', ts.toString());
+      t.setAttribute('font-family', this._labelFont.family ?? 'system-ui, sans-serif');
+      t.setAttribute('font-weight', '600');
+      t.setAttribute('fill', this._labelFont.color ?? '#223');
+      t.setAttribute('x', '0');
+      t.setAttribute('y', (-extent + ts * 1.1).toString());
+      t.setAttribute('text-anchor', 'middle');
+    }
   }
 
   update_labels(): void {
@@ -2218,6 +2306,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
   update_extremes() {
     this.__data__.update_extremes();
+    if (this._rangeExtent && this._rangeExtent > 0) {
+      (this.__data__ as Graph).extremes = new Extremes(this._rangeExtent, this._rangeExtent);
+    }
 
     const svgRect = this.svg_element?.getBoundingClientRect();
     if(this.svg_element && svgRect) {

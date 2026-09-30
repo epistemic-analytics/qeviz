@@ -31,7 +31,8 @@
     const means = layer
       ? [...layer.__data__.objects.values()]
           .filter(o => o.meta && o.meta.kind === 'mean')
-          .map(o => ({ group: o.meta.group, x: o.x, y: -o.y }))
+          .map(o => ({ group: o.meta.group, x: o.x, y: -o.y,
+                       color: String(o.color?.base ?? o.color ?? '') }))
       : [];
 
     // Drawn mean-marker half-side (model units), for the marker-vs-CI check.
@@ -124,7 +125,15 @@
     // Plot half-width in model units: edge-width is a fraction of the plot
     // width, so widths are compared across plots in plot-width units.
     const extent = g.__data__?.extremes?.x_max ?? null;
-    return { nodes, points, means, edges, self, extent };
+    // Title and node-label font as drawn (font size converted to CSS px).
+    const pxPerUnit = 1 / g.unitsPerPixel();
+    const titleEl = g.svg_element.querySelector('text[data-plot-title]');
+    const nodeText = [...g.svg_element.querySelectorAll('text')]
+      .find(t => allNodes.some(n => n.name === t.textContent));
+    const font = nodeText ? { size: +nodeText.getAttribute('font-size') * pxPerUnit,
+                              family: nodeText.getAttribute('font-family') } : null;
+    return { nodes, points, means, edges, self, extent, range: extent,
+             title: titleEl ? titleEl.textContent : null, font };
   }
 
   function ready(g) {

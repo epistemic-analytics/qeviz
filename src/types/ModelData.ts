@@ -63,6 +63,8 @@ export interface QEFrame {
  * ── Other options ────────────────────────────────────────────────────────────
  *
  *   directed  — true = directed edges (arrows); false = undirected (default)
+ *   palette   — group colours in order of appearance (default: Paul Tol's
+ *               colour-blind-safe "bright" scheme)
  *   updated   — millisecond timestamp; changing it forces a re-render
  */
 export interface ModelData {
@@ -78,6 +80,7 @@ export interface ModelData {
   /** @deprecated use groups with bound columns instead */
   outlier?:     QEFrame;
   directed?:    boolean;
+  palette?:     string[];
   updated?:     number;
   // column name overrides (auto-detected if omitted)
   id_col?:      string;

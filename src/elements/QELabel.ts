@@ -110,7 +110,10 @@ export class QELabel {
     const extent = this.graph.__data__.extremes.x_max;
     if (extent <= 0) return; // graph not initialised yet
 
-    const fontSize   = extent * 0.06;
+    // qe_labels(font_size =) is in CSS pixels (constant on screen); default
+    // scales with the plot extent.
+    const font       = (this.graph as any)._labelFont ?? {};
+    const fontSize   = font.size ? font.size * (this.graph as any).unitsPerPixel() : extent * 0.06;
     const offset     = fontSize * 1.2;
 
     let x: number, y: number, anchor: string;
@@ -168,10 +171,10 @@ export class QELabel {
       this.svg_element.setAttribute('transform', `translate(${this._offsetX}, ${this._offsetY})`);
     }
     this.svg_element.setAttribute('font-size',   fontSize.toString());
-    this.svg_element.setAttribute('font-family', 'system-ui, sans-serif');
+    this.svg_element.setAttribute('font-family', font.family ?? 'system-ui, sans-serif');
     this.svg_element.setAttribute('font-weight', '500');
     this.svg_element.setAttribute('text-anchor', anchor);
-    this.svg_element.setAttribute('fill',        this.point.color?.toString() ?? '#333333');
+    this.svg_element.setAttribute('fill',        font.color ?? this.point.color?.toString() ?? '#333333');
   }
 
   /** Make the label visible and position it immediately. */

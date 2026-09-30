@@ -1,6 +1,6 @@
 # qeviz 0.5.0 — spec: explicit-data inputs for rENA integration
 
-**Status:** decisions made · §1–§4 implemented (`qe_edges`, `qe_points`, `qe_group`, `qe_nodes`; R + TS, verified in `tools/rena-compare`); §5 deferred; §6–§7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
+**Status:** decisions made · §1–§4 and §6 implemented (`qe_edges`, `qe_points`, `qe_group`, `qe_nodes`, `qe_plot(dims, range, title, scale_points, palette)`, `qe_colors`, `qe_labels(font_*)`; R + TS, verified in `tools/rena-compare`); §5 deferred; §7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
 
 ## Why
 
@@ -265,6 +265,17 @@ qe_trajectories(p, units = NULL,
 | Point scaling | none | `scale-points` (HTML only) | `qe_plot(scale_points =)` |
 | Palette | rENA's 7 colours; per-call `colors` | Paul Tol, fixed | `qe_plot(palette =)`; `qe_colors(p, FirstGame = "#…")` group → colour map |
 | Fonts | `font.size`, `font.family`, `font.color` | fixed | `qe_labels(font_size =, font_family =, font_color =)` |
+
+**§6 decisions**
+- `range` is symmetric only: `"network"`, `"points"` or a number; the rENA
+  `list(x =, y =)` form is an error (the renderer assumes a symmetric extent).
+- `font_size` is in **pixels** (constant on-screen size, like rENA).
+- The title is drawn only when `title` is given (the HTML `<title>` still
+  defaults to "qeviz"); the graph attribute is `plot-title`, not `title`,
+  to avoid the browser's hover tooltip.
+- The default palette stays Paul Tol's colour-blind-safe "bright" scheme, for
+  qeviz and for the rENA backend alike (rENA's ColorBrewer "Accent" palette is
+  not carried over); `palette =` / `qe_colors()` override it.
 
 ---
 

@@ -32,7 +32,7 @@
 # ── Internal: resolve title ───────────────────────────────────────────────────
 .resolve_title <- function(x, title) {
   if (!is.null(title)) return(title)
-  if (inherits(x, "qe_plot")) x$title else "qeviz"
+  if (inherits(x, "qe_plot")) x$title %||% "qeviz" else "qeviz"
 }
 
 # ── Internal: build the <qe-graph> element with child layer elements ──────────
@@ -181,8 +181,14 @@
   }
 
   children_str <- paste(children, collapse = "\n")
-  ew <- if (is.null(opts[["edge-width"]])) "" else sprintf(' edge-width="%s"', opts[["edge-width"]])
-  sprintf('<qe-graph width="%s" height="%s"%s>\n%s\n  </qe-graph>', w, h, ew, children_str)
+  # Plot-wide attributes on <qe-graph> (values HTML-escaped).
+  esc <- function(v) gsub('"', "&quot;", gsub("<", "&lt;", gsub("&", "&amp;", as.character(v), fixed = TRUE),
+                                          fixed = TRUE), fixed = TRUE)
+  gattr <- c("edge-width", "plot-title", "range", "scale-points",
+             "label-font-size", "label-font-family", "label-font-color")
+  ga <- paste0(vapply(gattr, function(k)
+    if (is.null(opts[[k]])) "" else sprintf(' %s="%s"', k, esc(opts[[k]])), ""), collapse = "")
+  sprintf('<qe-graph width="%s" height="%s"%s>\n%s\n  </qe-graph>', w, h, ga, children_str)
 }
 
 # ── Internal: build the full HTML document string ─────────────────────────────
@@ -233,12 +239,23 @@ document.getElementById("vis").setModelData(model);
 #'
 #' @param x       Either a raw rENA / tma / ona set object **or** a `ModelData`
 #'   list from [qe_model_data()] / [qe_extract()].
-#' @param title   Window / tab title used when the plot is saved or opened.
+#' @param title   Plot title. When given it is drawn at the top of the plot
+#'   (and included in SVG / PNG exports) and used as the page title; when
+#'   `NULL` (default) nothing is drawn and the page title is "qeviz".
 #' @param width   CSS width string. Default `"100%"`.
 #' @param height  Plot height in pixels (numeric) or any CSS string. Default `440`.
+#' @param range   Symmetric axis range, as rENA's `scale.to`: `"network"`
+#'   (±max |node| × 1.2), `"points"` (±max |point| × 1.2) or a positive number.
+#'   `NULL` (default) uses qeviz's fit (1.3 × the largest mark). Asymmetric
+#'   ranges (rENA's `list(x =, y =)`) are not supported.
+#' @param scale_points Rescale unit points and means so the outermost point
+#'   meets the outermost code node (default `TRUE`); `FALSE` plots raw
+#'   coordinates, as rENA does.
+#' @param palette Group colours, assigned in order of appearance. Default:
+#'   Paul Tol's colour-blind-safe "bright" scheme. See also [qe_colors()].
 #' @param ...     Additional arguments forwarded to [qe_extract()] when `x` is a
-#'   raw set (e.g. `group_col = "Condition"`).  Directionality is detected
-#'   automatically from the set class and rarely needs to be overridden.
+#'   raw set (e.g. `group_col = "Condition"`, `dims = c("SVD1", "SVD3")`).
+#'   Directionality is detected automatically from the set class.
 #'
 #' @return An object of class `qe_plot`.
 #'
@@ -249,17 +266,61 @@ document.getElementById("vis").setModelData(model);
 #' }
 #'
 #' @export
-qe_plot <- function(x, title = "qeviz", width = "100%", height = 440, ...) {
+qe_plot <- function(x, title = NULL, width = "100%", height = 440,
+                    range = NULL, scale_points = TRUE, palette = NULL, ...) {
+  if (is.list(range))
+    stop("qe_plot(): only symmetric ranges are supported: \"network\", \"points\" or a number.",
+         call. = FALSE)
+  if (!is.null(range) && !(identical(range, "network") || identical(range, "points") ||
+                           (is.numeric(range) && length(range) == 1L && is.finite(range) && range > 0)))
+    stop("qe_plot(): range must be \"network\", \"points\" or a positive number.", call. = FALSE)
+  if (!is.null(palette) && !(is.character(palette) && length(palette) >= 1L))
+    stop("qe_plot(): palette must be a character vector of colours.", call. = FALSE)
   p <- structure(
     list(
       model      = .to_model(x, ...),
-      title      = title,
+      title      = title %||% "qeviz",
       graph_opts = list()
     ),
     class = "qe_plot"
   )
   p$graph_opts$width  <- width
   p$graph_opts$height <- as.character(height)
+  p$graph_opts[["plot-title"]] <- title
+  p$graph_opts[["range"]] <- range
+  if (isFALSE(scale_points)) p$graph_opts[["scale-points"]] <- "false"
+  if (!is.null(palette)) p$model$palette <- as.list(palette)
+  p
+}
+
+#' Set group colours
+#'
+#' Pins groups to colours; each group's mean, unit points and networks use
+#' it. Unlisted groups keep the palette colour.
+#'
+#' @param p   A `qe_plot` object.
+#' @param ... Named colours: `FirstGame = "#E69F00"`, …
+#' @return The modified `qe_plot` object.
+#' @examples
+#' \dontrun{
+#' qe_plot(set) |> qe_colors(FirstGame = "#E69F00", SecondGame = "#56B4E9") |>
+#'   qe_edges("FirstGame", compare = "SecondGame")
+#' }
+#' @export
+qe_colors <- function(p, ...) {
+  cols <- unlist(list(...))
+  if (!length(cols) || is.null(names(cols)) || any(!nzchar(names(cols))))
+    stop("qe_colors(): give named colours, e.g. qe_colors(p, FirstGame = \"#E69F00\").",
+         call. = FALSE)
+  bad <- setdiff(names(cols), qe_groups(p))
+  if (length(bad))
+    stop(sprintf("qe_colors(): group(s) not found in model: %s", paste(dQuote(bad), collapse = ", ")),
+         call. = FALSE)
+  g <- .qe_frame_df(p$model$groups)
+  if (is.null(g$color)) g$color <- NA_character_
+  gcol <- p$model$group_col
+  g$color[match(names(cols), g[[gcol]])] <- unname(cols)
+  p$model$groups <- qe_frame(g)
   p
 }
 
@@ -1003,12 +1064,23 @@ qe_trajectories <- function(p, units = NULL, smooth = c("none", "poly"),
 #'   `"click"`, `"auto"`. Default `"on"`.
 #' @param means  Label mode for group means. Default `"on"`.
 #' @param points Label mode for unit points. Default `"auto"`.
+#' @param font_size   Label font size in **pixels** (constant on screen, as in
+#'   rENA). Default: scales with the plot. The title is drawn at 1.35×.
+#' @param font_family Label (and title) font family, e.g. `"Georgia"`.
+#' @param font_color  Label (and title) colour. Default: each label's own colour
+#'   (group colours for means).
 #' @return The modified `qe_plot` object.
 #' @export
-qe_labels <- function(p, nodes = "on", means = "on", points = "auto") {
+qe_labels <- function(p, nodes = "on", means = "on", points = "auto",
+                      font_size = NULL, font_family = NULL, font_color = NULL) {
+  if (!is.null(font_size) && !(is.numeric(font_size) && length(font_size) == 1L && font_size > 0))
+    stop("qe_labels(): font_size must be a positive number of pixels.", call. = FALSE)
   p$graph_opts[["label-nodes"]]  <- nodes
   p$graph_opts[["label-means"]]  <- means
   p$graph_opts[["label-points"]] <- points
+  p$graph_opts[["label-font-size"]]   <- font_size
+  p$graph_opts[["label-font-family"]] <- font_family
+  p$graph_opts[["label-font-color"]]  <- font_color
   p
 }
 

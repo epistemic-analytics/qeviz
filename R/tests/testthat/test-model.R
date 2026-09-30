@@ -85,6 +85,19 @@ test_that("qe_extract normalises ' & ' to '.' in edge column names", {
   expect_true( any(grepl(".",   cols, fixed = TRUE)))
 })
 
+test_that("qe_extract dims = picks the plotted dimensions by name or index", {
+  set <- mock_set
+  set$rotation$nodes$SVD3 <- -set$rotation$nodes$SVD1
+  set$points$SVD3         <- -set$points$SVD1
+  by_name <- qe_extract(set, dims = c("SVD1", "SVD3"))
+  expect_equal(names(by_name$nodes$data[[1]]), c("code", "SVD1", "SVD3"))
+  expect_equal(by_name$nodes$data[[1]]$SVD3, -set$rotation$nodes$SVD1[1])
+  by_index <- qe_extract(set, dims = c(1, 3))
+  expect_equal(by_index$nodes, by_name$nodes)
+  expect_error(qe_extract(set, dims = "SVD1"), "exactly two")
+  expect_error(qe_extract(set, dims = c("SVD1", "SVD9")), "not found")
+})
+
 test_that("qe_extract nodes row count matches source", {
   m <- qe_extract(mock_set)
   expect_length(m$nodes$data, nrow(mock_set$rotation$nodes))

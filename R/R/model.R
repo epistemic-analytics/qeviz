@@ -92,6 +92,8 @@ qe_model_data <- function(
 #' @param id_col      Unit-ID column name in the set's meta/points frames.
 #' @param node_id_col Code-ID column name in the nodes frame.
 #' @param group_col   Group column name.
+#' @param dims        The two dimensions to plot: names (`c("SVD1", "SVD3")`) or
+#'   indices among the numeric node columns. Default: the first two.
 #'
 #' @return A `ModelData` list (see [qe_model_data()]).
 #'
@@ -112,7 +114,8 @@ qe_extract <- function(
     directed    = NULL,
     id_col      = "ENA_UNIT",
     node_id_col = "code",
-    group_col   = "Condition"
+    group_col   = "Condition",
+    dims        = NULL
 ) {
   # ── Directionality ─────────────────────────────────────────────────────────
   # Ordered (ONA) sets carry class "ena.ordered.set", which means the
@@ -125,7 +128,7 @@ qe_extract <- function(
 
   # ── Nodes ──────────────────────────────────────────────────────────────────
   nodes_raw <- as.data.frame(set$rotation$nodes)
-  dims      <- find_dims(nodes_raw)
+  dims      <- .qe_pick_dims(nodes_raw, dims)
   # Keep the set's dimension names (e.g. SVD1 / SVD2): qeviz uses x_col / y_col
   # as the axis-label text, so renaming to x / y would label the axes "x" / "y".
   nodes_df  <- nodes_raw[, c(node_id_col, dims), drop = FALSE]
@@ -260,4 +263,19 @@ qe_trajectory_units <- function(x) {
     v <- row[[id_col]]
     if (is.null(v)) NA_character_ else as.character(v)
   }, character(1L)))
+}
+
+# Two dimension columns: `dims` as names or indices among the numeric columns,
+# else the first two numeric columns.
+.qe_pick_dims <- function(df, dims = NULL) {
+  num <- names(df)[vapply(df, is.numeric, logical(1L))]
+  if (is.null(dims)) return(find_dims(df))
+  if (length(dims) != 2L) stop("dims must name or index exactly two dimensions.", call. = FALSE)
+  out <- if (is.numeric(dims)) num[dims] else as.character(dims)
+  bad <- setdiff(out, num)
+  if (anyNA(out) || length(bad))
+    stop(sprintf("dims not found among the dimensions: %s\nAvailable: %s",
+                 paste(dQuote(if (anyNA(out)) dims else bad), collapse = ", "),
+                 paste(head(num, 6), collapse = ", ")), call. = FALSE)
+  out
 }

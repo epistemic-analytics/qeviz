@@ -147,6 +147,26 @@
         TOL, missing ? 'outlier interval not drawn' : ''));
     }
 
+    if (truth.range != null) {
+      out.push(row('axis range (±)', got.range == null ? null : Math.abs(got.range - truth.range) / truth.range,
+        1e-6, `expected ±${truth.range.toFixed(4)}, drawn ±${(got.range ?? NaN).toFixed(4)}`));
+    }
+    if (truth.title != null) {
+      out.push(row('title text', got.title === truth.title ? 0 : 1, 0, got.title ?? 'none'));
+    }
+    if (truth.font) {
+      out.push(row('label font size (px)', got.font ? Math.abs(got.font.size - truth.font.size) : null, 0.5,
+        `expected ${truth.font.size} px, drawn ${got.font ? got.font.size.toFixed(2) : 'none'}`));
+      out.push(row('label font family', got.font && got.font.family === truth.font.family ? 0 : 1, 0,
+        got.font ? got.font.family : 'none'));
+    }
+    if (truth.mean_colors) {
+      const exp = Object.entries(truth.mean_colors);
+      const wrong = exp.filter(([g, c]) => (got.means.find(m => m.group === g)?.color || '').toUpperCase()
+                                           !== String(c).toUpperCase()).length;
+      out.push(row('group mean colours', wrong, 0, `${wrong} of ${exp.length} differ`));
+    }
+
     if (truth.points) {
       const ps = truth.points.map(t => [t, got.points.find(p => p.id === t.id)]);
       const missing = ps.filter(([, g]) => !g).length;

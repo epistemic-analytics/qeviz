@@ -44,6 +44,8 @@ export class Model implements ModelSpec {
   group_col:   string | null = null;
   /** Directed network mode — true renders arrowheads; false (default) undirected */
   directed:    boolean = false;
+  /** Group palette override (ModelData.palette); empty = qeviz default. */
+  palette:     string[] = [];
 
   constructor(o: Partial<ModelSpec> = {}) {
     this._points     = o.points     ?? new DataFrame();

@@ -306,6 +306,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.node_id_col = "id";
       this.group_col = null;
       this.directed = false;
+      this.palette = [];
       this._points = o.points ?? new DataFrame();
       this._nodes = o.nodes ?? new DataFrame();
       this._edges = o.edges ?? new DataFrame();
@@ -514,6 +515,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       });
       if (data.updated !== void 0) this._model.setByKey("updated", data.updated);
       if (data.directed !== void 0) this._model.directed = data.directed;
+      if (Array.isArray(data.palette)) this._model.palette = data.palette.map(String);
       const nodesDF = this._model.nodes;
       this._model.node_id_col = data.node_id_col ?? ((_a = nodesDF == null ? void 0 : nodesDF.names) == null ? void 0 : _a.find((n) => {
         var _a2;
@@ -3062,7 +3064,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (!this._visible) return;
       const extent = this.graph.__data__.extremes.x_max;
       if (extent <= 0) return;
-      const fontSize = extent * 0.06;
+      const font = this.graph._labelFont ?? {};
+      const fontSize = font.size ? font.size * this.graph.unitsPerPixel() : extent * 0.06;
       const offset = fontSize * 1.2;
       let x, y, anchor;
       switch (this.position) {
@@ -3105,10 +3108,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         this.svg_element.setAttribute("transform", `translate(${this._offsetX}, ${this._offsetY})`);
       }
       this.svg_element.setAttribute("font-size", fontSize.toString());
-      this.svg_element.setAttribute("font-family", "system-ui, sans-serif");
+      this.svg_element.setAttribute("font-family", font.family ?? "system-ui, sans-serif");
       this.svg_element.setAttribute("font-weight", "500");
       this.svg_element.setAttribute("text-anchor", anchor);
-      this.svg_element.setAttribute("fill", ((_a = this.point.color) == null ? void 0 : _a.toString()) ?? "#333333");
+      this.svg_element.setAttribute("fill", font.color ?? ((_a = this.point.color) == null ? void 0 : _a.toString()) ?? "#333333");
     }
     /** Make the label visible and position it immediately. */
     show() {
@@ -3287,6 +3290,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._axisLabelEls = /* @__PURE__ */ new Map();
       this._magnifyText = null;
       this._magnifyEl = null;
+      this._rangeExtent = null;
+      this._plotTitle = null;
+      this._titleEl = null;
+      this._resizeObs = null;
+      this._labelFont = { size: null, family: null, color: null };
       this._animateMs = 0;
       this._tweenRaf = null;
       this._highlight = { edges: /* @__PURE__ */ new Set(), nodes: /* @__PURE__ */ new Set() };
@@ -3299,7 +3307,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.svg_element = this.create();
       console.log("Created ena-graph svg element: ", this.svg_element);
       document.addEventListener("model-updated", (e) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
         if (this._vizena && e.target !== this._vizena) return;
         const model = e.detail;
         if (!model) return;
@@ -3316,23 +3324,24 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         this._magnifyText = config.edgeMagnify == null ? null : `(scaled ${config.edgeMagnify.toFixed(1)}x)`;
         this._axisYText = config.axisYLabel === null ? null : config.axisYLabel || String((dims == null ? void 0 : dims[1]) ?? "y");
         const groupColorMap = {};
-        if (groupColName && ((_a = model.points) == null ? void 0 : _a.names)) {
+        const PALETTE = ((_a = model.palette) == null ? void 0 : _a.length) ? model.palette : GROUP_PALETTE;
+        if (groupColName && ((_b = model.points) == null ? void 0 : _b.names)) {
           const groupCol = model.points.col(groupColName);
           if (groupCol) {
             const uniqueGroups = [...new Set([...groupCol].map(String))];
             uniqueGroups.forEach((g, i) => {
-              groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
+              groupColorMap[g] = PALETTE[i % PALETTE.length];
             });
           }
         }
-        if (((_b = model.groups) == null ? void 0 : _b.rows) && model.groups.rows().length > 0) {
+        if (((_c = model.groups) == null ? void 0 : _c.rows) && model.groups.rows().length > 0) {
           model.groups.rows().forEach((row) => {
             const g = row.rowName ?? String(row[0]);
             const ci = row.names.indexOf("color");
             const c = ci >= 0 ? row[ci] : null;
             if (c && String(c) !== "NA") groupColorMap[g] = String(c);
             else if (!groupColorMap[g]) {
-              groupColorMap[g] = GROUP_PALETTE[Object.keys(groupColorMap).length % GROUP_PALETTE.length];
+              groupColorMap[g] = PALETTE[Object.keys(groupColorMap).length % PALETTE.length];
             }
           });
         }
@@ -3352,11 +3361,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           });
           return max;
         }, "getExtent");
-        const maxNodeExtent = ((_c = model.nodes) == null ? void 0 : _c.rows) ? getExtent(model.nodes.rows()) : 0;
-        const maxPointExtent = ((_d = model.points) == null ? void 0 : _d.rows) ? getExtent(model.points.rows()) : 0;
-        const maxTrajExtent = ((_e = model.trajectories) == null ? void 0 : _e.rows) ? getExtent(model.trajectories.rows()) : 0;
+        const maxNodeExtent = ((_d = model.nodes) == null ? void 0 : _d.rows) ? getExtent(model.nodes.rows()) : 0;
+        const maxPointExtent = ((_e = model.points) == null ? void 0 : _e.rows) ? getExtent(model.points.rows()) : 0;
+        const maxTrajExtent = ((_f = model.trajectories) == null ? void 0 : _f.rows) ? getExtent(model.trajectories.rows()) : 0;
         const effectivePointExtent = maxPointExtent > 0 ? maxPointExtent : maxTrajExtent;
         const pointScale = scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0 ? maxNodeExtent / effectivePointExtent : 1;
+        this._rangeExtent = config.range === "network" ? maxNodeExtent * 1.2 : config.range === "points" ? effectivePointExtent * pointScale * 1.2 : typeof config.range === "number" ? config.range : null;
+        this._plotTitle = config.plotTitle;
+        this._labelFont = config.labelFont;
         const labelNodes = config.labelNodes;
         const labelMeans = config.labelMeans;
         const labelPoints = config.labelPoints;
@@ -3391,7 +3403,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               if (String(col(row, "set")) !== ps.set) return;
               const id = String(col(row, "id"));
               const group = col(row, "group") != null && String(col(row, "group")) !== "NA" ? String(col(row, "group")) : null;
-              const color = col(row, "color") && String(col(row, "color")) !== "NA" ? String(col(row, "color")) : group && groupColorMap[group] ? groupColorMap[group] : GROUP_PALETTE[si % GROUP_PALETTE.length];
+              const color = col(row, "color") && String(col(row, "color")) !== "NA" ? String(col(row, "color")) : group && groupColorMap[group] ? groupColorMap[group] : PALETTE[si % PALETTE.length];
               const pt = rowToPoint(row, "id", color, pointScale);
               pt.ID = `${ps.set}::${id}`;
               pt.size = ps.size ?? config.pointSize ?? 2.5;
@@ -3412,7 +3424,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             });
           });
         }
-        if ((_f = model.points) == null ? void 0 : _f.rows) {
+        if ((_g = model.points) == null ? void 0 : _g.rows) {
           const pointsLayer = this.__children__.search("__children__", "points");
           if (pointsLayer) {
             model.points.rows().forEach((row) => {
@@ -3448,7 +3460,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 groupSums[group].n += 1;
               }
             });
-            const hasGroupsFrame = !!(((_g = model.groups) == null ? void 0 : _g.rows) && model.groups.rows().length > 0);
+            const hasGroupsFrame = !!(((_h = model.groups) == null ? void 0 : _h.rows) && model.groups.rows().length > 0);
             const activeGroupRows = config.showMeans && hasGroupsFrame ? model.groups.rows().filter((r) => {
               const g = r.rowName ?? String(r[0]);
               return activeMeanGroups.size === 0 || activeMeanGroups.has(g);
@@ -3596,7 +3608,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                       this._ciRects.delete(g);
                     }
                   });
-                  if ((_h = model.confidence) == null ? void 0 : _h.rows) {
+                  if ((_i = model.confidence) == null ? void 0 : _i.rows) {
                     model.confidence.rows().forEach((row) => {
                       const groupIdx = row.names.indexOf(groupColName ?? "group");
                       const group = groupIdx >= 0 ? String(row[groupIdx]) : row.rowName ?? null;
@@ -3666,7 +3678,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                     });
                   }
                 }
-                if ((_i = model.outlier) == null ? void 0 : _i.rows) {
+                if ((_j = model.outlier) == null ? void 0 : _j.rows) {
                   this._outlierRects.forEach((el, g) => {
                     if (!groupColorMap[g]) {
                       el.remove();
@@ -3760,7 +3772,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         if (trajectoriesEnabled && trajectoriesLayer) {
           trajectoriesLayer.__data__.objects.clear();
           this.__data__.trajectories.clear();
-          const trajSource = ((_j = model.trajectories) == null ? void 0 : _j.rows) ? model.trajectories : model.points;
+          const trajSource = ((_k = model.trajectories) == null ? void 0 : _k.rows) ? model.trajectories : model.points;
           if (trajSource == null ? void 0 : trajSource.rows) {
             const unitRows = {};
             const selectedUnits = config.trajectoryUnits ? config.trajectoryUnits.split(",").map((s) => s.trim()) : null;
@@ -3785,7 +3797,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             unitKeys.forEach((unitKey, uIdx) => {
               const rawPts = unitRows[unitKey];
               if (rawPts.length === 0) return;
-              const colorStr = GROUP_PALETTE[uIdx % GROUP_PALETTE.length];
+              const colorStr = PALETTE[uIdx % PALETTE.length];
               const trajObj = new Trajectory({
                 ID: `traj-${unitKey}`,
                 unitId: unitKey,
@@ -3813,7 +3825,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         const nodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "nodes");
         const edgenodeLayer = networkLayer == null ? void 0 : networkLayer.__children__.search("__children__", "edgenodes");
         const edgesEnabled = config.showEdges;
-        if (((_k = model.nodes) == null ? void 0 : _k.rows) && nodeLayer) {
+        if (((_l = model.nodes) == null ? void 0 : _l.rows) && nodeLayer) {
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
             pt.size = 2;
@@ -3826,9 +3838,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             };
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
-          if (edgesEnabled && edgeLayer && ((_l = model.edges) == null ? void 0 : _l.rows)) {
+          if (edgesEnabled && edgeLayer && ((_m = model.edges) == null ? void 0 : _m.rows)) {
             const unitGroupMap = {};
-            if (groupColName && ((_m = model.points) == null ? void 0 : _m.rows)) {
+            if (groupColName && ((_n = model.points) == null ? void 0 : _n.rows)) {
               model.points.rows().forEach((row) => {
                 const qIdx = row.names.indexOf(unitIdCol);
                 const gIdx = row.names.indexOf(groupColName);
@@ -3924,7 +3936,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               if (L.network) {
                 const w = networkRow(L.network);
                 if (!w) return;
-                const [pos2, neg2] = signColors(GROUP_PALETTE[0], GROUP_PALETTE[1]);
+                const [pos2, neg2] = signColors(PALETTE[0], PALETTE[1]);
                 const meta2 = { name: L.name ?? L.network };
                 edgePairs.forEach(({ col, pair }) => {
                   const v = w[col] ?? 0;
@@ -4136,6 +4148,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     get vizena() {
       return this._vizena;
     }
+    /** SVG user units per CSS pixel at the current size / zoom. */
+    unitsPerPixel() {
+      var _a, _b;
+      const extent = this.__data__.extremes.x_max || 1;
+      const rect = (_b = (_a = this.svg_element) == null ? void 0 : _a.getBoundingClientRect) == null ? void 0 : _b.call(_a);
+      const zoom = this.zoom_level || 1;
+      return rect && rect.width > 0 ? 2 * extent / rect.width / zoom : extent * 4e-3;
+    }
     // ── Shared re-render scheduler ───────────────────────────────────────────────
     // Batches synchronous attribute / child-list changes into a single microtask
     // so that e.g. adding <qe-edges> and setting its attributes in the same tick
@@ -4182,6 +4202,21 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           Label.DISPLAY_TYPES.ON
         ),
         showNodes: !!nodesEl,
+        range: (() => {
+          const v = this.getAttribute("range");
+          if (v === "network" || v === "points") return v;
+          const n = Number(v);
+          return v != null && Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        plotTitle: this.getAttribute("plot-title") || null,
+        labelFont: {
+          size: (() => {
+            const n = Number(this.getAttribute("label-font-size"));
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })(),
+          family: this.getAttribute("label-font-family") || null,
+          color: this.getAttribute("label-font-color") || null
+        },
         edgeWidth: (() => {
           const v = Number(this.getAttribute("edge-width"));
           return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_EDGE_WIDTH;
@@ -4295,6 +4330,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "scale-points",
           "edge-width",
           "labels",
+          "range",
+          "plot-title",
+          "label-font-size",
+          "label-font-family",
+          "label-font-color",
           "label-nodes",
           "label-means",
           "label-points",
@@ -4331,11 +4371,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       }
     }
     disconnectedCallback() {
-      var _a, _b;
+      var _a, _b, _c;
       (_a = this._childObserver) == null ? void 0 : _a.disconnect();
       this._childObserver = null;
+      (_b = this._resizeObs) == null ? void 0 : _b.disconnect();
+      this._resizeObs = null;
       _QEGraphElement._instances.delete(this);
-      (_b = this._tooltipEl) == null ? void 0 : _b.remove();
+      (_c = this._tooltipEl) == null ? void 0 : _c.remove();
       this._tooltipEl = null;
     }
     /** All connected <qe-graph> instances (newest membership order). */
@@ -4866,6 +4908,19 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this.__children__.forEach((enaLayer) => {
         enaLayer.draw();
       });
+      if (!this._resizeObs && typeof ResizeObserver !== "undefined" && this.svg_element) {
+        let lastW = 0;
+        this._resizeObs = new ResizeObserver((entries) => {
+          var _a2;
+          const w = ((_a2 = entries[0]) == null ? void 0 : _a2.contentRect.width) ?? 0;
+          if (w > 0 && Math.abs(w - lastW) > 0.5) {
+            lastW = w;
+            this.update_labels();
+            this.update_axes();
+          }
+        });
+        this._resizeObs.observe(this.svg_element);
+      }
     }
     update() {
       this.update_extremes();
@@ -4881,7 +4936,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      * cached SVG <text> nodes in the labels group; null text removes them.
      */
     update_axes() {
-      var _a;
+      var _a, _b;
       const axesLayer = this.__children__.search("__children__", "axes");
       if (axesLayer == null ? void 0 : axesLayer.svg_element) {
         axesLayer.svg_element.style.display = this._showAxes ? "" : "none";
@@ -4944,6 +4999,28 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         el.setAttribute("y", (-extent + fontSize + gap).toString());
         el.setAttribute("text-anchor", "start");
       }
+      if (!this._plotTitle) {
+        (_b = this._titleEl) == null ? void 0 : _b.remove();
+        this._titleEl = null;
+      } else {
+        if (!this._titleEl) {
+          this._titleEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          this._titleEl.setAttribute("data-plot-title", "");
+          this._titleEl.setAttribute("pointer-events", "none");
+        }
+        if (!this._titleEl.parentElement) parent.appendChild(this._titleEl);
+        const px = (this._labelFont.size ?? 12) * 1.35;
+        const ts = px * this.unitsPerPixel();
+        const t = this._titleEl;
+        t.textContent = this._plotTitle;
+        t.setAttribute("font-size", ts.toString());
+        t.setAttribute("font-family", this._labelFont.family ?? "system-ui, sans-serif");
+        t.setAttribute("font-weight", "600");
+        t.setAttribute("fill", this._labelFont.color ?? "#223");
+        t.setAttribute("x", "0");
+        t.setAttribute("y", (-extent + ts * 1.1).toString());
+        t.setAttribute("text-anchor", "middle");
+      }
     }
     update_labels() {
       this._nodeLabels.forEach((lbl) => lbl.update());
@@ -4953,6 +5030,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     update_extremes() {
       var _a;
       this.__data__.update_extremes();
+      if (this._rangeExtent && this._rangeExtent > 0) {
+        this.__data__.extremes = new Extremes(this._rangeExtent, this._rangeExtent);
+      }
       const svgRect = (_a = this.svg_element) == null ? void 0 : _a.getBoundingClientRect();
       if (this.svg_element && svgRect) {
         console.log("SVG rect: ", svgRect);

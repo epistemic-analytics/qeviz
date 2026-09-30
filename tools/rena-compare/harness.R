@@ -40,15 +40,21 @@ QEC_PALETTE <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
 #   mean_sets:  explicit means (qeviz 0.5): list of list(expr, label, color)
 #   node_positions: R expr giving a nodes table (code + dims) to draw on (0.5)
 #   node_labels:    named character, code -> display text (0.5)
+#   dims:           two dimension names to plot, e.g. c("SVD1", "SVD3") (0.5)
+#   range:          "network" | "points" | number (rENA scale.to) (0.5)
+#   group_colors:   named colours overriding the palette (qe_colors) (0.5)
+#   font:           list(size = px, family =) for labels + title (0.5)
 
 qec_view <- function(name, title, network = NULL, means = character(0),
                      ci = TRUE, points = FALSE, outlier = FALSE,
                      point_set = NULL, mean_sets = NULL,
-                     node_positions = NULL, node_labels = NULL) {
+                     node_positions = NULL, node_labels = NULL,
+                     dims = NULL, range = NULL, group_colors = NULL, font = NULL) {
   list(name = name, title = title, network = network,
        means = means, ci = ci, points = points, outlier = outlier,
        point_set = point_set, mean_sets = mean_sets,
-       node_positions = node_positions, node_labels = node_labels)
+       node_positions = node_positions, node_labels = node_labels,
+       dims = dims, range = range, group_colors = group_colors, font = font)
 }
 
 .qec_ci <- function(view) {
@@ -104,7 +110,18 @@ qec_default_views <- function(groups) {
              network = list(group = a),
              node_labels = c(Technical.Constraints = "Tech. constraints",
                              Client.and.Consultant.Requests = "Client requests",
-                             Design.Reasoning = "Design reasoning"))
+                             Design.Reasoning = "Design reasoning")),
+    # ── Plot-level settings (qeviz 0.5 §6) ──────────────────────────────────
+    qec_view("d_dims", sprintf("%s network + mean on SVD1 vs SVD3 (dims)", a),
+             network = list(group = a), means = a, dims = c("SVD1", "SVD3")),
+    qec_view("d_range", "Unit points + means, range from points (scale.to)",
+             means = c(a, b), points = TRUE, range = "points"),
+    qec_view("d_colors", sprintf("Custom group colours: %s − %s + means", a, b),
+             network = list(group = a, compare = b), means = c(a, b),
+             group_colors = stats::setNames(c("#E69F00", "#009E73"), c(a, b))),
+    qec_view("d_title", sprintf("Title + 14 px Times New Roman labels: %s", a),
+             network = list(group = a), means = a,
+             font = list(size = 14, family = "Times New Roman"))
   )
 }
 
@@ -186,7 +203,7 @@ qec_group_colors <- function(set, group_col) {
 # ── Truth: computed straight from the ena.set ─────────────────────────────────
 
 qec_truth <- function(set, view, group_col) {
-  dims  <- .qec_dims(set)
+  dims  <- view$dims %||% .qec_dims(set)
   nodes <- as.data.frame(set$rotation$nodes)
   pts   <- as.data.frame(set$points)
 
@@ -243,6 +260,11 @@ qec_truth <- function(set, view, group_col) {
     })))
 
   out$ci <- .qec_ci(view) != "none"
+  if (identical(view$range, "points")) out$range <- 1.2 * max(abs(as.matrix(pts[, dims])))
+  if (identical(view$range, "network")) out$range <- 1.2 * max(abs(as.matrix(nodes[, dims])))
+  if (!is.null(view$font)) out$font <- view$font
+  if (!is.null(view$font)) out$title <- view$title
+  if (!is.null(view$group_colors)) out$mean_colors <- as.list(view$group_colors[view$means])
   out$outlier <- isTRUE(view$outlier)
 
   if (!is.null(ps <- view$point_set)) {
@@ -277,8 +299,13 @@ qec_truth <- function(set, view, group_col) {
 # but add_group() collapses to colMeans() first and so can never draw a CI.
 qec_code_rena <- function(view, group_col, colors) {
   gc  <- .qec_sym(group_col)
-  rows_of <- function(frame, g) sprintf("as.matrix(set$%s[%s == %s])", frame, gc, .qec_q(g))
-  L   <- sprintf("p <- ena.plot(set, title = %s)", .qec_q(view$title))
+  rows_of <- function(frame, g) sprintf("as.matrix(set$%s[%s == %s])%s", frame, gc, .qec_q(g),
+                                       if (frame == "points") dsub else "")
+  L   <- sprintf("p <- ena.plot(set, title = %s%s%s)", .qec_q(view$title),
+                 if (!is.null(view$font)) sprintf(", font.size = %s, font.family = %s",
+                                                   view$font$size, .qec_q(view$font$family)) else "",
+                 if (!is.null(view$range)) sprintf(", scale.to = %s", .qec_q(view$range)) else "")
+  dsub <- if (is.null(view$dims)) "" else sprintf("[, %s]", paste(deparse(view$dims), collapse = ""))
 
   if (!is.null(net <- view$network) && !is.null(net$weights)) {
     nc <- .qec_net_colors(net, colors)
@@ -292,6 +319,8 @@ qec_code_rena <- function(view, group_col, colors) {
     a <- sprintf("colMeans(%s)", rows_of("line.weights", net$group))
     node_args <- c(
       if (!is.null(view$node_positions)) sprintf("  node.positions = %s,", view$node_positions),
+      if (!is.null(view$dims)) sprintf("  node.positions = set$rotation$nodes[, %s],",
+                                       paste(deparse(c("code", view$dims)), collapse = "")),
       if (!is.null(view$node_label_vec))
         sprintf("  labels = %s,", paste(deparse(unname(view$node_label_vec), width.cutoff = 500L), collapse = "")))
     if (is.null(net$compare)) {
@@ -301,7 +330,7 @@ qec_code_rena <- function(view, group_col, colors) {
     } else {
       L <- c(L, "p <- ena.plot.network(p,",
              sprintf("  network = %s -", a),
-             sprintf("            colMeans(%s),", rows_of("line.weights", net$compare)),
+             sprintf("            colMeans(%s),", rows_of("line.weights", net$compare)), node_args,
              sprintf("  colors  = c(%s, %s))", .qec_q(colors[[net$group]]),
                      .qec_q(colors[[net$compare]])))
     }
@@ -408,7 +437,8 @@ qec_render_ref <- function(ref, set, view, group_col, colors) {
 .qec_hue_dist <- function(h1, h2) { d <- abs(h1 - h2); min(d, 1 - d) }
 
 qec_extract_rena <- function(p, view, colors) {
-  tr    <- plotly::plotly_build(p$plot)$x$data
+  bx    <- plotly::plotly_build(p$plot)$x
+  tr    <- bx$data
   mult  <- p$get("multiplier")
   num   <- function(v) suppressWarnings(as.numeric(unlist(v)))
   txt   <- function(t) as.character(unlist(t$text %||% character(0)))
@@ -424,7 +454,12 @@ qec_extract_rena <- function(p, view, colors) {
     code <- ifelse(shown %in% names(inv), inv[shown], shown)
     out$nodes <- data.frame(code = unname(code), x = num(t$x), y = num(t$y),
                             d = num(t$marker$size), label = shown, stringsAsFactors = FALSE)
+    out$font <- list(size = t$textfont$size %||% NA, family = t$textfont$family %||% NA)
   }
+  xr <- unlist(bx$layout$xaxis$range)
+  if (length(xr)) out$range <- max(abs(as.numeric(xr)))
+  ttl <- bx$layout$title
+  out$title <- if (is.list(ttl)) ttl$text %||% NA else ttl %||% NA
 
   # Edges: 2-point line traces whose endpoints sit on nodes.
   # Default ena.plot.network (scale.weights = FALSE): width = |w| * multiplier.
@@ -462,6 +497,7 @@ qec_extract_rena <- function(p, view, colors) {
     i <- i[length(i)]
     mx <- num(tr[[i]]$x); my <- num(tr[[i]]$y)
     row <- data.frame(group = g, x = mx, y = my,
+                      color = as.character(unlist(tr[[i]]$marker$color)[1] %||% NA),
                       x_lo = NA_real_, x_hi = NA_real_, y_lo = NA_real_, y_hi = NA_real_,
                       o_x_lo = NA_real_, o_x_hi = NA_real_, o_y_lo = NA_real_, o_y_hi = NA_real_,
                       stringsAsFactors = FALSE)
@@ -736,6 +772,32 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
     }
   }
 
+  # Plot-level checks apply only to renderers (the adapter has no axes/title/fonts).
+  if (!is.null(truth$range) && !is.null(got$range)) {
+    d <- if (is.null(got$range)) NA else abs(got$range - truth$range) / truth$range
+    res$range <- .qec_row("axis range (±)", d, 1e-6,
+                          sprintf("expected ±%.4f, drawn ±%.4f", truth$range, got$range %||% NA),
+                          level = "warn")
+  }
+  if (!is.null(truth$title) && !is.null(got$title)) {
+    ok <- identical(as.character(got$title), as.character(truth$title))
+    res$title <- .qec_row("title text", if (ok) 0 else 1, 0, as.character(got$title %||% "none"))
+  }
+  if (!is.null(truth$font) && !is.null(got$font)) {
+    fs <- suppressWarnings(as.numeric(got$font$size)[1])
+    res$font_size <- .qec_row("label font size (px)", abs(fs - truth$font$size), 0.5,
+                              sprintf("expected %s px, drawn %s", truth$font$size, fs))
+    res$font_family <- .qec_row("label font family",
+                                if (identical(got$font$family, truth$font$family)) 0 else 1, 0,
+                                as.character(got$font$family %||% "none"))
+  }
+  if (!is.null(truth$mean_colors) && !is.null(got$means$color)) {
+    exp <- toupper(unlist(truth$mean_colors)); m <- match(names(truth$mean_colors), got$means$group)
+    wrong <- sum(is.na(m) | toupper(got$means$color[m]) != exp)
+    res$mean_colors <- .qec_row("group mean colours", wrong, 0,
+                                sprintf("%d of %d differ", wrong, length(exp)))
+  }
+
   if (!is.null(truth$points)) {
     tp <- truth$points; gp <- got$points
     if (is.null(gp) || !nrow(gp)) {
@@ -760,8 +822,14 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
 # ── qeviz: build the panel HTML for a view ────────────────────────────────────
 
 qec_code_qe <- function(view, group_col) {
-  L <- sprintf("qe_plot(set, title = %s, height = 460, group_col = %s) |>",
-               .qec_q(view$title), .qec_q(group_col))
+  L <- sprintf("qe_plot(set, title = %s, height = 460, group_col = %s,\n        scale_points = FALSE%s%s) |>",
+               .qec_q(view$title), .qec_q(group_col),
+               if (!is.null(view$dims)) sprintf(", dims = %s", paste(deparse(view$dims), collapse = "")) else "",
+               if (!is.null(view$range)) sprintf(", range = %s", .qec_q(view$range)) else "")
+  if (!is.null(view$group_colors))
+    L <- c(L, sprintf("  qe_colors(%s) |>", paste(sprintf("%s = %s", names(view$group_colors),
+                                                          vapply(view$group_colors, .qec_q, "")),
+                                                  collapse = ", ")))
   ci <- .qec_ci(view)
   extra <- c(if (ci != "box") sprintf("intervals = %s", .qec_q(ci)),
              if (isTRUE(view$outlier)) "outlier = TRUE")
@@ -797,14 +865,15 @@ qec_code_qe <- function(view, group_col) {
       if (!is.null(view$node_labels)) sprintf("labels = %s", paste(deparse(view$node_labels), collapse = ""))),
       collapse = ",\n           ")))
   }
-  paste(c(L, "  qe_axes() |>", '  qe_labels(nodes = "on")'), collapse = "\n")
+  lab <- if (is.null(view$font)) '  qe_labels(nodes = "on")'
+         else sprintf('  qe_labels(nodes = "on", font_size = %s, font_family = %s)',
+                      view$font$size, .qec_q(view$font$family))
+  paste(c(L, "  qe_axes() |>", lab), collapse = "\n")
 }
 
-# The page-level override has no R-API equivalent yet, so it is applied to the
-# rendered HTML and noted beneath the code in the report.
-QEC_QE_NOTE <- paste('Rendered with <qe-graph scale-points="false"> (added to the HTML by the harness;',
-                     "not yet exposed in the R API) so unit points and means are not rescaled to",
-                     "the node extent, matching the reference renderer.")
+# qeviz is drawn with qe_plot(scale_points = FALSE) (in the code shown) so unit
+# points and means are not rescaled to the node extent, matching the reference.
+QEC_QE_NOTE <- NULL
 
 qec_render_qe <- function(set, view, group_col, probe_js) {
   code <- qec_code_qe(view, group_col)
@@ -812,7 +881,6 @@ qec_render_qe <- function(set, view, group_col, probe_js) {
   p    <- eval(parse(text = code), envir = env)
 
   html <- qeviz::qe_html(p)
-  html <- .qec_fill(html, "<qe-graph ", '<qe-graph scale-points="false" ')
   # The R wrapper always emits <qe-means>; drop it when the view shows no
   # means, so both panels draw the same layers.
   if (!length(view$means) && !length(view$mean_sets)) {
@@ -853,11 +921,13 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
     message("• ", v$name, ": ", v$title)
     truth <- qec_truth(set, v, group_col)
 
-    rp <- qec_render_ref(ref, set, v, group_col, colors)
+    vcol <- if (is.null(v$group_colors)) colors else utils::modifyList(as.list(colors), as.list(v$group_colors))
+    vcol <- unlist(vcol)
+    rp <- qec_render_ref(ref, set, v, group_col, vcol)
     htmlwidgets::saveWidget(ref$widget(rp$plot), normalizePath(file.path(out_dir, "panels",
                             paste0("ref_", v$name, ".html")), mustWork = FALSE),
                             selfcontained = FALSE, libdir = "lib", title = v$title)
-    rena <- ref$extract(rp$plot, v, colors, set)
+    rena <- ref$extract(rp$plot, v, vcol, set)
 
     qe <- qec_render_qe(set, v, group_col, probe_js)
     writeLines(qe$html, file.path(out_dir, "panels", paste0("qe_", v$name, ".html")))
@@ -868,7 +938,7 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
     rena_k <- if (!is.null(rena$edges) && nrow(rena$edges))
       sum(rena$edges$width) / sum(abs(rena$edges$w)) else NULL
 
-    list(view = v, truth = truth, code = list(rena = rp$code, qe = qe$code), rena_k = rena_k,
+    list(view = v, truth = truth, colors = vcol, code = list(rena = rp$code, qe = qe$code), rena_k = rena_k,
          checks = list(rena = qec_check(truth, rena, tol),
                        adapter = qec_check(truth, adapter, tol, edge_key = "col")))
   })
@@ -884,7 +954,7 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
     views = lapply(results, function(r) list(
       name = r$view$name, title = r$view$title,
       network = if (is.null(r$view$network)) NULL
-                else c(r$view$network, list(colors = as.list(.qec_net_colors(r$view$network, colors)))),
+                else c(r$view$network, list(colors = as.list(.qec_net_colors(r$view$network, r$colors)))),
       code = r$code, truth = r$truth, rena_k = r$rena_k,
       rena = r$checks$rena, adapter = r$checks$adapter))
   )

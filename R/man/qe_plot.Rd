@@ -4,21 +4,44 @@
 \alias{qe_plot}
 \title{Create a qeviz plot object}
 \usage{
-qe_plot(x, title = "qeviz", width = "100\%", height = 440, ...)
+qe_plot(
+  x,
+  title = NULL,
+  width = "100\%",
+  height = 440,
+  range = NULL,
+  scale_points = TRUE,
+  palette = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{Either a raw rENA / tma / ona set object \strong{or} a \code{ModelData}
 list from \code{\link[=qe_model_data]{qe_model_data()}} / \code{\link[=qe_extract]{qe_extract()}}.}
 
-\item{title}{Window / tab title used when the plot is saved or opened.}
+\item{title}{Plot title. When given it is drawn at the top of the plot
+(and included in SVG / PNG exports) and used as the page title; when
+\code{NULL} (default) nothing is drawn and the page title is "qeviz".}
 
 \item{width}{CSS width string. Default \code{"100\%"}.}
 
 \item{height}{Plot height in pixels (numeric) or any CSS string. Default \code{440}.}
 
+\item{range}{Symmetric axis range, as rENA's \code{scale.to}: \code{"network"}
+(±max |node| × 1.2), \code{"points"} (±max |point| × 1.2) or a positive number.
+\code{NULL} (default) uses qeviz's fit (1.3 × the largest mark). Asymmetric
+ranges (rENA's \code{list(x =, y =)}) are not supported.}
+
+\item{scale_points}{Rescale unit points and means so the outermost point
+meets the outermost code node (default \code{TRUE}); \code{FALSE} plots raw
+coordinates, as rENA does.}
+
+\item{palette}{Group colours, assigned in order of appearance. Default:
+Paul Tol's colour-blind-safe "bright" scheme. See also \code{\link[=qe_colors]{qe_colors()}}.}
+
 \item{...}{Additional arguments forwarded to \code{\link[=qe_extract]{qe_extract()}} when \code{x} is a
-raw set (e.g. \code{group_col = "Condition"}).  Directionality is detected
-automatically from the set class and rarely needs to be overridden.}
+raw set (e.g. \code{group_col = "Condition"}, \code{dims = c("SVD1", "SVD3")}).
+Directionality is detected automatically from the set class.}
 }
 \value{
 An object of class \code{qe_plot}.

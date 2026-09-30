@@ -9,7 +9,8 @@ qe_extract(
   directed = NULL,
   id_col = "ENA_UNIT",
   node_id_col = "code",
-  group_col = "Condition"
+  group_col = "Condition",
+  dims = NULL
 )
 }
 \arguments{
@@ -25,6 +26,9 @@ treated as directed; standard ENA sets are treated as undirected.  Pass
 \item{node_id_col}{Code-ID column name in the nodes frame.}
 
 \item{group_col}{Group column name.}
+
+\item{dims}{The two dimensions to plot: names (\code{c("SVD1", "SVD3")}) or
+indices among the numeric node columns. Default: the first two.}
 }
 \value{
 A \code{ModelData} list (see \code{\link[=qe_model_data]{qe_model_data()}}).

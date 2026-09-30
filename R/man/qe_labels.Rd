@@ -4,7 +4,15 @@
 \alias{qe_labels}
 \title{Control label visibility}
 \usage{
-qe_labels(p, nodes = "on", means = "on", points = "auto")
+qe_labels(
+  p,
+  nodes = "on",
+  means = "on",
+  points = "auto",
+  font_size = NULL,
+  font_family = NULL,
+  font_color = NULL
+)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
@@ -15,6 +23,14 @@ qe_labels(p, nodes = "on", means = "on", points = "auto")
 \item{means}{Label mode for group means. Default \code{"on"}.}
 
 \item{points}{Label mode for unit points. Default \code{"auto"}.}
+
+\item{font_size}{Label font size in \strong{pixels} (constant on screen, as in
+rENA). Default: scales with the plot. The title is drawn at 1.35×.}
+
+\item{font_family}{Label (and title) font family, e.g. \code{"Georgia"}.}
+
+\item{font_color}{Label (and title) colour. Default: each label's own colour
+(group colours for means).}
 }
 \value{
 The modified \code{qe_plot} object.

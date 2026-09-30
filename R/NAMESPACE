@@ -2,6 +2,7 @@
 
 S3method(print,qe_plot)
 export(qe_axes)
+export(qe_colors)
 export(qe_edges)
 export(qe_export_html)
 export(qe_extract)

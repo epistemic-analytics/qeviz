@@ -257,6 +257,42 @@ test_that("qe_nodes(labels =) sets display text without changing the code", {
   expect_error(qe_nodes(qe_plot(model), labels = "unnamed"), "named character")
 })
 
+# ── §6 plot-level settings ────────────────────────────────────────────────────
+
+test_that("qe_plot(title =) is drawn only when given", {
+  expect_false(grepl("plot-title", .graph_el(qe_plot(model)), fixed = TRUE))
+  g <- .graph_el(qe_plot(model, title = 'A "quoted" <title>'))
+  expect_match(g, 'plot-title="A &quot;quoted&quot; &lt;title>"', fixed = TRUE)
+  expect_match(qe_html(qe_plot(model)), "<title>qeviz</title>", fixed = TRUE)
+})
+
+test_that("qe_plot(range =, scale_points =, palette =)", {
+  expect_match(.graph_el(qe_plot(model, range = "points")), 'range="points"', fixed = TRUE)
+  expect_match(.graph_el(qe_plot(model, range = 2.5)), 'range="2.5"', fixed = TRUE)
+  expect_error(qe_plot(model, range = list(x = c(-1, 2))), "symmetric")
+  expect_error(qe_plot(model, range = "wide"))
+  expect_match(.graph_el(qe_plot(model, scale_points = FALSE)), 'scale-points="false"', fixed = TRUE)
+  expect_false(grepl("scale-points", .graph_el(qe_plot(model)), fixed = TRUE))
+  expect_equal(unlist(qe_plot(model, palette = c("#111111", "#222222"))$model$palette),
+               c("#111111", "#222222"))
+})
+
+test_that("qe_colors pins group colours in the groups frame", {
+  p <- qe_plot(model) |> qe_colors(OB = "#E69F00")
+  g <- qeviz:::.qe_frame_df(p$model$groups)
+  expect_equal(g$color[g$Condition == "OB"], "#E69F00")
+  expect_true(is.na(g$color[g$Condition == "OA"]))
+  expect_error(qe_colors(qe_plot(model), Nope = "#000"), "not found")
+  expect_error(qe_colors(qe_plot(model), "#000"), "named colours")
+})
+
+test_that("qe_labels font arguments reach <qe-graph>", {
+  g <- .graph_el(qe_plot(model) |> qe_labels(font_size = 14, font_family = "Georgia",
+                                             font_color = "#333"))
+  expect_match(g, 'label-font-size="14" label-font-family="Georgia" label-font-color="#333"', fixed = TRUE)
+  expect_error(qe_labels(qe_plot(model), font_size = -1))
+})
+
 test_that("qe_points size emits a size attribute", {
   expect_match(.graph_el(qe_plot(model) |> qe_points(size = 5)),
                'size="5"', fixed = TRUE)
