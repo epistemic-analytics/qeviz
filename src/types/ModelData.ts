@@ -41,9 +41,15 @@ export interface QEFrame {
  *             edge columns named as in `edges`. Signed weights; drawn by
  *             <qe-edges network="name">.
  *
+ *   pointsets — explicit point sets: rows of `set`, `id`, the x / y columns,
+ *             optional `group`, `color`, `shape`, `label`; drawn by
+ *             <qe-points set="name">.
+ *
  *   groups  — pre-computed group summaries (means, CI bounds, outlier bounds).
  *             One row per group. Bounds use {x_col}.low / {x_col}.high
- *             (dot or underscore suffix both accepted).
+ *             (dot or underscore suffix both accepted); outlier bounds
+ *             {x_col}.olow / {x_col}.ohigh. Optional `color` / `shape` columns
+ *             style the mean marker (rows need not be groups of the points).
  *
  * ── Column name overrides ────────────────────────────────────────────────────
  *
@@ -66,6 +72,7 @@ export interface ModelData {
   trajectories?: QEFrame;
   groups?:      QEFrame;
   networks?:    QEFrame;
+  pointsets?:   QEFrame;
   /** @deprecated use groups with bound columns instead */
   confidence?:  QEFrame;
   /** @deprecated use groups with bound columns instead */

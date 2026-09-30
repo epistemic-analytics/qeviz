@@ -33,14 +33,26 @@ QEC_PALETTE <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
 #                   threshold = min, name = "…")   — explicit data (qeviz 0.5):
 #            the same expression is drawn by both renderers and used for truth.
 #   means:   character vector of groups whose mean (+ CI) to show
-#   ci:      draw 95% CI boxes around the means
+#   ci:      CI around the means: TRUE / "box", "crosshairs", FALSE / "none"
+#   outlier: also draw outlier intervals (Tukey fences)
 #   points:  draw every unit point
+#   point_set:  explicit points (qeviz 0.5): list(expr | units, color, shape, name)
+#   mean_sets:  explicit means (qeviz 0.5): list of list(expr, label, color)
 
 qec_view <- function(name, title, network = NULL, means = character(0),
-                     ci = TRUE, points = FALSE) {
+                     ci = TRUE, points = FALSE, outlier = FALSE,
+                     point_set = NULL, mean_sets = NULL) {
   list(name = name, title = title, network = network,
-       means = means, ci = ci, points = points)
+       means = means, ci = ci, points = points, outlier = outlier,
+       point_set = point_set, mean_sets = mean_sets)
 }
+
+.qec_ci <- function(view) {
+  if (isTRUE(view$ci)) "box" else if (isFALSE(view$ci)) "none" else view$ci
+}
+
+# Rows of set$points selected by an expression (the subset both renderers draw).
+QEC_POINTS_EXPR <- "set$points[as.data.frame(set$points)$SVD1 > 0]"
 
 qec_default_views <- function(groups) {
   a <- groups[1]; b <- groups[2]
@@ -67,7 +79,19 @@ qec_default_views <- function(groups) {
                             colors = c("#386CB0", "#F0027F")), means = c(a, b)),
     qec_view("w_subset", "Non-group subset (units with SVD1 > 0), threshold 0.05",
              network = list(weights = QEC_SUBSET_EXPR, colors = "#228833",
-                            threshold = 0.05, name = "SVD1 > 0"))
+                            threshold = 0.05, name = "SVD1 > 0")),
+    # ── Explicit points / means (qeviz 0.5 qe_points / qe_group) ────────────
+    qec_view("p_set", "Point set from data: units with SVD1 > 0, triangles",
+             point_set = list(expr = QEC_POINTS_EXPR, color = "#228833",
+                              shape = "triangle", name = "SVD1 > 0")),
+    qec_view("p_units", sprintf("Point set by unit ID: %s units", a),
+             point_set = list(units = sprintf("set$points[Condition == %s]$ENA_UNIT", deparse(a)),
+                              color = QEC_PALETTE[1], name = a)),
+    qec_view("m_subset", "Mean of a non-group subset (SVD1 > 0) + CI",
+             mean_sets = list(list(expr = QEC_POINTS_EXPR, label = "SVD1 > 0", color = "#228833"))),
+    qec_view("m_cross", "Group means with crosshair CIs", means = c(a, b), ci = "crosshairs"),
+    qec_view("m_outlier", "Group means with CI + outlier intervals", means = c(a, b),
+             outlier = TRUE)
   )
 }
 
@@ -177,16 +201,36 @@ qec_truth <- function(set, view, group_col) {
     out$edges <- e[!self, , drop = FALSE]
   }
 
-  out$means <- do.call(rbind, lapply(view$means, function(g) {
-    sub <- pts[pts[[group_col]] == g, dims, drop = FALSE]
+  env <- list2env(list(set = set), parent = globalenv())
+  summarise <- function(g, sub) {
     cx <- stats::t.test(sub[[1]])$conf.int
     cy <- stats::t.test(sub[[2]])$conf.int
+    fence <- function(v) { q <- stats::quantile(v, c(.25, .75), names = FALSE)
+                           c(q[1] - 1.5 * diff(q), q[2] + 1.5 * diff(q)) }
+    fx <- fence(sub[[1]]); fy <- fence(sub[[2]])
     data.frame(group = g, x = mean(sub[[1]]), y = mean(sub[[2]]),
                x_lo = cx[1], x_hi = cx[2], y_lo = cy[1], y_hi = cy[2],
+               o_x_lo = fx[1], o_x_hi = fx[2], o_y_lo = fy[1], o_y_hi = fy[2],
                stringsAsFactors = FALSE)
-  }))
+  }
+  out$means <- do.call(rbind, c(
+    lapply(view$means, function(g) summarise(g, pts[pts[[group_col]] == g, dims, drop = FALSE])),
+    lapply(view$mean_sets, function(ms) {
+      sub <- as.data.frame(eval(parse(text = ms$expr), envir = env))
+      summarise(ms$label, sub[, dims, drop = FALSE])
+    })))
 
-  out$ci <- isTRUE(view$ci)
+  out$ci <- .qec_ci(view) != "none"
+  out$outlier <- isTRUE(view$outlier)
+
+  if (!is.null(ps <- view$point_set)) {
+    rows <- if (!is.null(ps$units)) {
+      ids <- eval(parse(text = ps$units), envir = env)
+      pts[match(ids, pts$ENA_UNIT), , drop = FALSE]
+    } else as.data.frame(eval(parse(text = ps$expr), envir = env))
+    out$points <- data.frame(id = as.character(rows$ENA_UNIT),
+                             x = rows[[dims[1]]], y = rows[[dims[2]]], stringsAsFactors = FALSE)
+  }
 
   if (isTRUE(view$points)) {
     out$points <- data.frame(id = as.character(pts$ENA_UNIT),
@@ -243,11 +287,24 @@ qec_code_rena <- function(view, group_col, colors) {
                         rows_of("points", g), .qec_q(colors[[g]])))
   }
 
+  if (!is.null(ps <- view$point_set)) {
+    src <- if (!is.null(ps$units)) sprintf("set$points[ENA_UNIT %%in%% %s]", ps$units) else ps$expr
+    L <- c(L, sprintf("p <- ena.plot.points(p, points = as.matrix(%s),", src),
+           sprintf("  colors = %s%s)", .qec_q(ps$color),
+                   if (identical(ps$shape, "triangle")) ', shape = "triangle-up"'
+                   else if (!is.null(ps$shape)) sprintf(", shape = %s", .qec_q(ps$shape)) else ""))
+  }
+  ci <- .qec_ci(view)
+  oi <- if (isTRUE(view$outlier)) ', outlier.interval = "box"' else ""
   for (g in view$means) {
     L <- c(L, sprintf("p <- ena.plot.group(p, %s,", rows_of("points", g)),
-           sprintf("  labels = %s, colors = %s, confidence.interval = %s)",
-                   .qec_q(g), .qec_q(colors[[g]]),
-                   .qec_q(if (isTRUE(view$ci)) "box" else "none")))
+           sprintf("  labels = %s, colors = %s, confidence.interval = %s%s)",
+                   .qec_q(g), .qec_q(colors[[g]]), .qec_q(ci), oi))
+  }
+  for (ms in view$mean_sets) {
+    L <- c(L, sprintf("p <- ena.plot.group(p, as.matrix(%s),", ms$expr),
+           sprintf("  labels = %s, colors = %s, confidence.interval = %s%s)",
+                   .qec_q(ms$label), .qec_q(ms$color), .qec_q(ci), oi))
   }
   paste(c(L, "p$plot"), collapse = "\n")
 }
@@ -361,23 +418,33 @@ qec_extract_rena <- function(p, view, colors) {
 
   # Means: single-point trace named after the group; the CI box is the
   # 5-point "Conf. Int." line trace that immediately follows it.
-  means <- lapply(view$means, function(g) {
+  labels <- c(view$means, vapply(view$mean_sets, `[[`, "", "label"))
+  means <- lapply(labels, function(g) {
     i <- which(vapply(tr, function(t) identical(t$name, g) && length(t$x) == 1, logical(1)))
     if (!length(i)) return(NULL)
     i <- i[length(i)]
-    row <- data.frame(group = g, x = num(tr[[i]]$x), y = num(tr[[i]]$y),
+    mx <- num(tr[[i]]$x); my <- num(tr[[i]]$y)
+    row <- data.frame(group = g, x = mx, y = my,
                       x_lo = NA_real_, x_hi = NA_real_, y_lo = NA_real_, y_hi = NA_real_,
+                      o_x_lo = NA_real_, o_x_hi = NA_real_, o_y_lo = NA_real_, o_y_hi = NA_real_,
                       stringsAsFactors = FALSE)
-    if (i < length(tr) && identical(tr[[i + 1]]$name, "Conf. Int.")) {
-      bx <- num(tr[[i + 1]]$x); by <- num(tr[[i + 1]]$y)
-      row$x_lo <- min(bx); row$x_hi <- max(bx); row$y_lo <- min(by); row$y_hi <- max(by)
+    box <- function(t) { bx <- num(t$x); by <- num(t$y); c(min(bx), max(bx), min(by), max(by)) }
+    for (k in (i + 1):min(i + 2, length(tr))) {
+      if (k > length(tr)) break
+      if (identical(tr[[k]]$name, "Conf. Int."))    row[c("x_lo", "x_hi", "y_lo", "y_hi")] <- box(tr[[k]])
+      if (identical(tr[[k]]$name, "Outlier Int.")) row[c("o_x_lo", "o_x_hi", "o_y_lo", "o_y_hi")] <- box(tr[[k]])
+    }
+    # Crosshairs: plotly error bars on the mean trace (symmetric `array`).
+    ex <- num(tr[[i]]$error_x$array); ey <- num(tr[[i]]$error_y$array)
+    if (.qec_ci(view) == "crosshairs" && length(ex) && length(ey)) {
+      row[c("x_lo", "x_hi", "y_lo", "y_hi")] <- c(mx - ex[1], mx + ex[1], my - ey[1], my + ey[1])
     }
     row
   })
   out$means <- do.call(rbind, means)
 
   # Unit points: unnamed single-marker traces (ena.plot.points draws one per unit).
-  if (isTRUE(view$points)) {
+  if (isTRUE(view$points) || !is.null(view$point_set)) {
     pt <- Filter(function(t) length(t$x) == 1 && !nzchar(t$name %||% "") &&
                    is.numeric(unlist(t$x)) && !identical(t$mode, "lines"), tr)
     out$points <- data.frame(x = vapply(pt, function(t) num(t$x), 0),
@@ -474,16 +541,22 @@ qec_extract_adapter <- function(model, view) {
     }
     out$edges <- data.frame(col = ecols, w = unname(net), stringsAsFactors = FALSE)
   }
-  g <- grps[grps[[gcol]] %in% view$means, , drop = FALSE]
-  b <- function(col, side) g[[paste0(col, ".", side)]]
+  labels <- c(view$means, vapply(view$mean_sets, `[[`, "", "label"))
+  g <- grps[grps[[gcol]] %in% labels, , drop = FALSE]
+  b <- function(col, side) { v <- g[[paste0(col, ".", side)]]; if (is.null(v)) rep(NA_real_, nrow(g)) else v }
   out$means <- data.frame(group = g[[gcol]], x = g[[xc]], y = g[[yc]],
                           x_lo = b(xc, "low"), x_hi = b(xc, "high"),
                           y_lo = b(yc, "low"), y_hi = b(yc, "high"),
+                          o_x_lo = b(xc, "olow"), o_x_hi = b(xc, "ohigh"),
+                          o_y_lo = b(yc, "olow"), o_y_hi = b(yc, "ohigh"),
                           stringsAsFactors = FALSE)
   # The groups frame always carries bounds; whether to draw them is the
   # renderer's decision, so there is nothing to check here when intervals are off.
-  if (!isTRUE(view$ci)) out$means[, c("x_lo", "x_hi", "y_lo", "y_hi")] <- NA_real_
-  if (isTRUE(view$points))
+  if (.qec_ci(view) == "none") out$means[, c("x_lo", "x_hi", "y_lo", "y_hi")] <- NA_real_
+  if (!is.null(view$point_set)) {
+    ps <- rows(model$pointsets)
+    out$points <- data.frame(id = ps$id, x = ps[[xc]], y = ps[[yc]], stringsAsFactors = FALSE)
+  } else if (isTRUE(view$points))
     out$points <- data.frame(id = pts[[model$id_col]], x = pts[[xc]], y = pts[[yc]],
                              stringsAsFactors = FALSE)
   out
@@ -606,8 +679,14 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
                            sprintf("%d box(es) drawn", drawn))
       } else {
         d <- max(abs(as.matrix(tm[, b]) - as.matrix(gm[m, b])))
-        res$ci <- .qec_row("95% CI box bounds", d, tol,
-                           if (is.na(d)) "CI box not drawn" else "")
+        res$ci <- .qec_row("95% CI bounds", d, tol,
+                           if (is.na(d)) "CI not drawn" else "")
+      }
+      if (isTRUE(truth$outlier)) {
+        ob <- c("o_x_lo", "o_x_hi", "o_y_lo", "o_y_hi")
+        d <- if (is.null(gm$o_x_lo)) NA else max(abs(as.matrix(tm[, ob]) - as.matrix(gm[m, ob])))
+        res$outlier <- .qec_row("outlier interval (Q1 − 1.5·IQR … Q3 + 1.5·IQR)", d, tol,
+                                if (is.na(d)) "outlier interval not drawn" else "")
       }
     }
   }
@@ -638,10 +717,22 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
 qec_code_qe <- function(view, group_col) {
   L <- sprintf("qe_plot(set, title = %s, height = 460, group_col = %s) |>",
                .qec_q(view$title), .qec_q(group_col))
+  ci <- .qec_ci(view)
+  extra <- c(if (ci != "box") sprintf("intervals = %s", .qec_q(ci)),
+             if (isTRUE(view$outlier)) "outlier = TRUE")
   if (length(view$means)) {
-    means <- paste(c(vapply(view$means, .qec_q, ""),
-                     sprintf("intervals = %s", isTRUE(view$ci))), collapse = ", ")
-    L <- c(L, sprintf("  qe_group(%s) |>", means))
+    L <- c(L, sprintf("  qe_group(%s) |>", paste(c(vapply(view$means, .qec_q, ""), extra), collapse = ", ")))
+  }
+  for (ms in view$mean_sets) {
+    L <- c(L, sprintf("  qe_group(points = %s,\n           label = %s, color = %s%s) |>",
+                      ms$expr, .qec_q(ms$label), .qec_q(ms$color),
+                      if (length(extra)) paste0(", ", paste(extra, collapse = ", ")) else ""))
+  }
+  if (!is.null(ps <- view$point_set)) {
+    L <- c(L, sprintf("  qe_points(%s,\n            color = %s%s, name = %s) |>",
+                      if (!is.null(ps$units)) sprintf("units = %s", ps$units) else sprintf("points = %s", ps$expr),
+                      .qec_q(ps$color), if (!is.null(ps$shape)) sprintf(", shape = %s", .qec_q(ps$shape)) else "",
+                      .qec_q(ps$name)))
   }
   net <- view$network
   arg <- function(k, v) if (is.null(v)) NULL else sprintf("%s = %s", k, v)
@@ -673,7 +764,7 @@ qec_render_qe <- function(set, view, group_col, probe_js) {
   html <- .qec_fill(html, "<qe-graph ", '<qe-graph scale-points="false" ')
   # The R wrapper always emits <qe-means>; drop it when the view shows no
   # means, so both panels draw the same layers.
-  if (!length(view$means)) {
+  if (!length(view$means) && !length(view$mean_sets)) {
     g0 <- regexpr("<qe-graph ", html, fixed = TRUE)
     rest <- substring(html, g0)
     m0 <- regexpr("<qe-means[^>]*></qe-means>\n?", rest)

@@ -65,6 +65,10 @@
     means_parts <- c(means_parts, sprintf('groups="%s"', opts[["groups"]]))
   if (!isFALSE(opts[["confidence"]]))
     means_parts <- c(means_parts, "confidence")
+  if (!is.null(opts[["intervals"]]) && opts[["intervals"]] != "box")
+    means_parts <- c(means_parts, sprintf('intervals="%s"', opts[["intervals"]]))
+  if (isTRUE(opts[["mean-outlier"]]))
+    means_parts <- c(means_parts, "outlier")
   means_label <- opts[["label-means"]] %||% "on"
   means_parts <- c(means_parts, sprintf('label="%s"', means_label))
   if (isTRUE(opts[["mean-fixed-size"]]))
@@ -80,6 +84,15 @@
       pt_parts <- c(pt_parts, sprintf('size="%s"', opts[["point-size"]]))
     if (isTRUE(opts[["point-fixed-size"]]))
       pt_parts <- c(pt_parts, "fixed-size")
+    children <- c(children,
+      sprintf('    <qe-points %s></qe-points>', paste(pt_parts, collapse = " ")))
+  }
+  # Explicit point sets (qe_points(units =, points =)).
+  for (ps in opts[["point-sets"]] %||% list()) {
+    pt_parts <- c(sprintf('set="%s"', ps$set),
+                  sprintf('label="%s"', opts[["label-points"]] %||% "auto"),
+                  if (!is.null(ps$size)) sprintf('size="%s"', ps$size),
+                  if (isTRUE(ps$fixed)) "fixed-size")
     children <- c(children,
       sprintf('    <qe-points %s></qe-points>', paste(pt_parts, collapse = " ")))
   }
@@ -278,11 +291,22 @@ print.qe_plot <- function(x, ...) {
 #' @param ...       Group names to show means for.  Supply one or more strings,
 #'   each matching a value in the model's group column.  Omit entirely to show
 #'   means for **all** groups in the model (the default).
+#' @param points    An arbitrary subset to average — a matrix, data frame or
+#'   `ena.points` rows (as rENA's `ena.plot.group()` accepts). Its mean, t CI
+#'   and (with `outlier`) fences are computed here and added as a group named
+#'   `label`. Cannot be combined with group names.
+#' @param label     Name for an explicit mean. Default `"mean 1"`, `"mean 2"`, ….
+#' @param color     Colour of an explicit mean. Default: next palette colour.
+#' @param shape     Marker shape for an explicit mean: `"square"` (default),
+#'   `"circle"`, `"triangle"` or `"diamond"`.
 #' @param by        The metadata column used for grouping (e.g. `"Condition"`).
 #'   Optional — used to validate against the column baked into the model at
 #'   extraction time.  An error is raised if the column name does not match.
-#' @param intervals Logical.  Show 95% CI box(es) around group mean(s).
-#'   Default `TRUE`.
+#' @param intervals `"box"` (default), `"crosshairs"` or `"none"`; `TRUE` /
+#'   `FALSE` are accepted as `"box"` / `"none"`. rENA's default is `"none"`.
+#' @param conf_level Confidence level of the t interval. Default 0.95.
+#' @param outlier   Also draw the outlier interval (Q1 − 1.5·IQR … Q3 + 1.5·IQR
+#'   per dimension). Default `FALSE`.
 #' @param fixed_size Logical. When `TRUE`, group mean markers keep a constant
 #'   on-screen pixel size regardless of data extent, container size, or zoom.
 #'   Default `FALSE` (markers scale with the coordinate space).
@@ -302,7 +326,9 @@ print.qe_plot <- function(x, ...) {
 #' }
 #'
 #' @export
-qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
+qe_group <- function(p, ..., points = NULL, label = NULL, color = NULL, shape = NULL,
+                     by = NULL, intervals = c("box", "crosshairs", "none"),
+                     conf_level = 0.95, outlier = FALSE, fixed_size = FALSE) {
   requested <- c(...)   # character vector of group names, or length-0
 
   # Validate `by` against the model's group_col
@@ -315,27 +341,67 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
       ), call. = FALSE)
     }
   }
+  if (is.logical(intervals)) intervals <- if (isTRUE(intervals)) "box" else "none"
+  intervals <- match.arg(intervals)
+  if (!(is.numeric(conf_level) && length(conf_level) == 1L && conf_level > 0 && conf_level < 1))
+    stop("qe_group(): conf_level must be a number in (0, 1).", call. = FALSE)
+  if (!is.null(points) && length(requested))
+    stop("qe_group(): supply group names or 'points', not both.", call. = FALSE)
 
-  # Validate requested group names against model
-  if (length(requested) > 0) {
-    available <- qe_groups(p)
-    bad <- requested[!requested %in% available]
-    if (length(bad) > 0) {
-      stop(sprintf(
-        "qe_group(): group(s) not found in model: %s\nAvailable: %s",
-        paste(dQuote(bad), collapse = ", "),
-        paste(dQuote(available), collapse = ", ")
-      ), call. = FALSE)
-    }
-    # Comma-separated list → `groups` attribute (means filter)
-    p$graph_opts$groups <- paste(requested, collapse = ",")
+  p$graph_opts$intervals <- intervals
+  p$graph_opts$confidence <- intervals != "none"
+  p$graph_opts[["mean-outlier"]] <- isTRUE(outlier) || isTRUE(p$graph_opts[["mean-outlier"]])
+  p$graph_opts[["mean-fixed-size"]] <- isTRUE(fixed_size)
+
+  if (!is.null(points)) {
+    # ── Explicit: the mean (+ t CI, outlier fences) of an arbitrary subset ───
+    m   <- p$model
+    df  <- .qe_point_frame(points, m)
+    lbl <- label %||% sprintf("mean %d", length(p$graph_opts[["groups-explicit"]]) + 1L)
+    if (lbl %in% qe_groups(p) && !lbl %in% p$graph_opts[["groups-explicit"]])
+      stop(sprintf("qe_group(): label %s is already a group in the model.", dQuote(lbl)),
+           call. = FALSE)
+    df[[m$group_col]] <- lbl
+    row <- group_summary(df, m$x_col, m$y_col, m$group_col, conf_level = conf_level,
+                         outlier = outlier)
+    if (!is.null(color)) row$color <- color
+    if (!is.null(shape)) row$shape <- .qe_shape(shape, "qe_group")
+    p$model$groups <- .qe_upsert_rows(p$model$groups, row, m$group_col)
+    p$graph_opts[["groups-explicit"]] <- union(p$graph_opts[["groups-explicit"]], lbl)
   } else {
-    # No names → show all groups; remove any previous filter
-    p$graph_opts$groups <- NULL
+    # ── By name ─────────────────────────────────────────────────────────────
+    if (length(requested) > 0) {
+      available <- qe_groups(p)
+      bad <- requested[!requested %in% available]
+      if (length(bad) > 0) {
+        stop(sprintf(
+          "qe_group(): group(s) not found in model: %s\nAvailable: %s",
+          paste(dQuote(bad), collapse = ", "),
+          paste(dQuote(available), collapse = ", ")
+        ), call. = FALSE)
+      }
+    }
+    p$graph_opts[["groups-named"]] <- as.character(requested)   # character(0) = all
+    # Non-default CI level / outlier fences: recompute the named groups' rows
+    # from the unit points (explicit rows keep what they were computed with).
+    m <- p$model
+    if ((conf_level != 0.95 || isTRUE(outlier)) && !is.null(m$points)) {
+      pts <- .qe_frame_df(m$points)
+      rows <- group_summary(pts, m$x_col, m$y_col, m$group_col,
+                            conf_level = conf_level, outlier = outlier)
+      p$model$groups <- .qe_upsert_rows(p$model$groups, rows, m$group_col)
+    }
   }
 
-  p$graph_opts$confidence <- intervals
-  p$graph_opts[["mean-fixed-size"]] <- isTRUE(fixed_size)
+  # `groups` filter: named selection (all / some) plus explicit means. With
+  # only explicit means, show just those (as rENA's ena.plot.group does).
+  named <- p$graph_opts[["groups-named"]]
+  expl  <- p$graph_opts[["groups-explicit"]]
+  p$graph_opts$groups <-
+    if (!length(expl)) { if (length(named)) paste(named, collapse = ",") else NULL }
+    else if (is.null(named)) paste(expl, collapse = ",")
+    else if (!length(named)) NULL
+    else paste(c(named, expl), collapse = ",")
   p
 }
 
@@ -617,7 +683,19 @@ qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
 #' Show or hide unit points
 #'
 #' @param p    A `qe_plot` object.
-#' @param show Logical. Default `TRUE`.
+#' @param show Logical. Default `TRUE`; `FALSE` clears all points and point sets.
+#' @param units  Unit IDs to draw as a point set (a subset of the model's units).
+#' @param points An arbitrary points matrix / data frame / `ena.points` rows
+#'   (as rENA's `ena.plot.points()` accepts). IDs come from the model's id
+#'   column when present; dimensions from the model's x / y columns, else the
+#'   first two numeric columns.
+#' @param color  One colour, or one per point. Default: each point's group
+#'   colour, else a palette colour per set.
+#' @param shape  `"circle"` (default), `"square"`, `"triangle"` or `"diamond"`;
+#'   one or one per point. rENA's `"triangle-up"` is accepted.
+#' @param labels Per-point label text (shown per the point label mode).
+#' @param name   Point-set name; calls with `units` / `points` add a set, and a
+#'   repeated name replaces it. Default `"points 1"`, `"points 2"`, ….
 #' @param size Optional numeric dot size. Omit for the default (2.5).  Larger
 #'   values draw bigger dots; the size is relative to the code-node size.
 #' @param fixed_size Logical. When `TRUE`, unit dots keep a constant on-screen
@@ -625,11 +703,114 @@ qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
 #'   `FALSE` (dots scale with the coordinate space, like nodes and edges).
 #' @return The modified `qe_plot` object.
 #' @export
-qe_points <- function(p, show = TRUE, size = NULL, fixed_size = FALSE) {
-  p$graph_opts$points <- show
-  p$graph_opts[["point-size"]] <- size
-  p$graph_opts[["point-fixed-size"]] <- isTRUE(fixed_size)
+qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
+                      color = NULL, shape = NULL, labels = NULL, name = NULL,
+                      size = NULL, fixed_size = FALSE) {
+  if (!show) {
+    p$graph_opts$points <- FALSE
+    p$graph_opts[["point-sets"]] <- NULL
+    p$model$pointsets <- NULL
+    return(p)
+  }
+  if (is.null(units) && is.null(points)) {
+    # All unit points, coloured by group (0.4 behaviour).
+    p$graph_opts$points <- TRUE
+    p$graph_opts[["point-size"]] <- size
+    p$graph_opts[["point-fixed-size"]] <- isTRUE(fixed_size)
+    return(p)
+  }
+  if (!is.null(units) && !is.null(points))
+    stop("qe_points(): supply 'units' or 'points', not both.", call. = FALSE)
+
+  m <- p$model
+  df <- if (!is.null(units)) {
+    all <- .qe_frame_df(m$points)
+    bad <- setdiff(units, all[[m$id_col]])
+    if (length(bad))
+      stop(sprintf("qe_points(): unit(s) not in model: %s", paste(dQuote(head(bad, 3)), collapse = ", ")),
+           call. = FALSE)
+    all[match(units, all[[m$id_col]]), , drop = FALSE]
+  } else .qe_point_frame(points, m)
+
+  n   <- nrow(df)
+  set <- name %||% sprintf("points %d", length(p$graph_opts[["point-sets"]]) + 1L)
+  rows <- data.frame(set = rep(set, n), id = as.character(df[[m$id_col]]), stringsAsFactors = FALSE)
+  rows[[m$x_col]] <- df[[m$x_col]]
+  rows[[m$y_col]] <- df[[m$y_col]]
+  if (!is.null(df[[m$group_col]])) rows$group <- as.character(df[[m$group_col]])
+  per_point <- function(v, arg) {
+    if (is.null(v)) return(NULL)
+    if (!length(v) %in% c(1L, n))
+      stop(sprintf("qe_points(): '%s' must have length 1 or %d.", arg, n), call. = FALSE)
+    rep_len(as.character(v), n)
+  }
+  rows$color <- per_point(color, "color")
+  rows$shape <- per_point(if (is.null(shape)) NULL else .qe_shape(shape, "qe_points"), "shape")
+  rows$label <- per_point(labels, "labels")
+
+  p$model$pointsets <- .qe_upsert_rows(p$model$pointsets,
+    rows, key = NULL, drop = function(r) identical(r$set, set))
+  p$graph_opts[["point-sets"]] <- c(Filter(function(s) !identical(s$set, set),
+                                           p$graph_opts[["point-sets"]]),
+    list(list(set = set, size = size, fixed = isTRUE(fixed_size))))
   p
+}
+
+# ── Explicit point / group helpers ─────────────────────────────────────────
+
+# A QEFrame back to a data.frame (rows may lack some columns).
+.qe_frame_df <- function(frame) {
+  if (is.null(frame) || !length(frame$data)) return(data.frame())
+  cols <- names(frame$types)
+  do.call(rbind, lapply(frame$data, function(r) {
+    r <- lapply(cols, function(k) if (is.null(r[[k]])) NA else r[[k]])
+    as.data.frame(stats::setNames(r, cols), stringsAsFactors = FALSE, check.names = FALSE)
+  }))
+}
+
+# Append rows to a QEFrame; rows whose `key` value (or `drop(row)`) matches
+# are replaced. Columns are unioned (missing values → NA).
+.qe_upsert_rows <- function(frame, rows, key, drop = NULL) {
+  old <- .qe_frame_df(frame)
+  if (nrow(old)) {
+    keep <- if (!is.null(drop)) !vapply(seq_len(nrow(old)), function(i) drop(as.list(old[i, ])), TRUE)
+            else !(old[[key]] %in% rows[[key]])
+    old <- old[keep, , drop = FALSE]
+  }
+  all_cols <- union(names(old), names(rows))
+  pad <- function(d) { for (k in setdiff(all_cols, names(d))) d[[k]] <- rep(NA, nrow(d)); d[all_cols] }
+  qe_frame(rbind(if (nrow(old)) pad(old), pad(rows)))
+}
+
+# Any rENA-style points input → data.frame with the model's id / x / y (and
+# group, when present) columns. Dimensions: the model's x_col / y_col when the
+# input has them, else its first two numeric columns (rENA's convention).
+.qe_point_frame <- function(x, model) {
+  df <- as.data.frame(x, check.names = FALSE)
+  df <- df[, !duplicated(names(df)), drop = FALSE]
+  num <- names(df)[vapply(df, is.numeric, logical(1))]
+  dims <- if (all(c(model$x_col, model$y_col) %in% num)) c(model$x_col, model$y_col) else num[1:2]
+  if (length(num) < 2 || anyNA(dims))
+    stop("need at least two numeric (dimension) columns in 'points'.", call. = FALSE)
+  out <- data.frame(id = if (model$id_col %in% names(df)) as.character(df[[model$id_col]])
+                         else if (!is.null(rownames(x))) rownames(x) else as.character(seq_len(nrow(df))),
+                    stringsAsFactors = FALSE)
+  names(out) <- model$id_col
+  out[[model$x_col]] <- df[[dims[1]]]
+  out[[model$y_col]] <- df[[dims[2]]]
+  if (!is.null(model$group_col) && model$group_col %in% names(df))
+    out[[model$group_col]] <- as.character(df[[model$group_col]])
+  out
+}
+
+.qe_shape <- function(shape, fn) {
+  alias <- c(circle = "circle", square = "rect", rect = "rect", triangle = "triangle",
+             `triangle-up` = "triangle", diamond = "diamond")
+  bad <- setdiff(shape, names(alias))
+  if (length(bad))
+    stop(sprintf('%s(): shape must be "circle", "square", "triangle" or "diamond".', fn),
+         call. = FALSE)
+  unname(alias[shape])
 }
 
 #' Show or hide the code nodes

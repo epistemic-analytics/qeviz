@@ -3,7 +3,7 @@ import { DataFrame, DataFrameRow } from "../types/DataFrame";
 /** Internal key union for Model.setByKey */
 export type ModelKey =
   | "updated" | "points" | "nodes" | "edges"
-  | "dimensions" | "confidence" | "outlier" | "groups" | "trajectories" | "networks";
+  | "dimensions" | "confidence" | "outlier" | "groups" | "trajectories" | "networks" | "pointsets";
 
 /** Internal shape of the Model class — used by setByKey */
 export interface ModelSpec {
@@ -17,6 +17,7 @@ export interface ModelSpec {
   groups?:     DataFrame;
   trajectories?: DataFrame;
   networks?:   DataFrame;
+  pointsets?:  DataFrame;
 }
 
 export class Model implements ModelSpec {
@@ -31,6 +32,7 @@ export class Model implements ModelSpec {
   private _groups:     DataFrame | undefined;
   private _trajectories: DataFrame | undefined;
   private _networks:   DataFrame | undefined;
+  private _pointsets:  DataFrame | undefined;
 
   // Resolved column names — set by QEVisual.setModelData() via auto-detection
   // or caller-supplied overrides. Renderers read these instead of hardcoding.
@@ -81,6 +83,11 @@ export class Model implements ModelSpec {
    *  drawn by <qe-edges network="name">. */
   get networks(): DataFrame | undefined { return this._networks; }
   set networks(v: DataFrame | undefined) { this._networks = v; }
+
+  /** Explicit point sets (rows: set, id, x, y, group?, color?, shape?, label?),
+   *  drawn by <qe-points set="name">. */
+  get pointsets(): DataFrame | undefined { return this._pointsets; }
+  set pointsets(v: DataFrame | undefined) { this._pointsets = v; }
 
   get dimensions(): (string | number)[] { return this._dimensions; }
   set dimensions(v: (string | number)[]) { this._dimensions = v; }

@@ -55,16 +55,20 @@ find_dims <- function(df) {
 #' @param x_col Name of the x-coordinate column.
 #' @param y_col Name of the y-coordinate column.
 #' @param group_col Name of the grouping column.
+#' @param conf_level Confidence level for the t interval. Default 0.95.
+#' @param outlier   Also add `<dim>.olow` / `<dim>.ohigh` outlier bounds
+#'   (Q1 − 1.5·IQR, Q3 + 1.5·IQR). Default `FALSE`.
 #' @return A `data.frame` with the group column, `x_col`, `y_col`, and
 #'   `<x_col>.low`, `<x_col>.high`, `<y_col>.low`, `<y_col>.high` (the bound
 #'   names qeviz looks up from the model's dimension names).
 #' @keywords internal
-group_summary <- function(pts, x_col, y_col, group_col) {
+group_summary <- function(pts, x_col, y_col, group_col, conf_level = 0.95,
+                          outlier = FALSE) {
   groups <- sort(unique(pts[[group_col]]))
   do.call(rbind, lapply(groups, function(g) {
     sub  <- pts[pts[[group_col]] == g, ]
     n    <- nrow(sub)
-    t_v  <- stats::qt(0.975, df = max(1L, n - 1L))
+    t_v  <- stats::qt((1 + conf_level) / 2, df = max(1L, n - 1L))
     x    <- sub[[x_col]];  y <- sub[[y_col]]
     mx   <- mean(x, na.rm = TRUE);  my <- mean(y, na.rm = TRUE)
     se_x <- stats::sd(x,  na.rm = TRUE) / sqrt(n)
@@ -77,6 +81,14 @@ group_summary <- function(pts, x_col, y_col, group_col) {
       c(group_col, x_col, y_col,
         paste0(x_col, c(".low", ".high")), paste0(y_col, c(".low", ".high")))
     )
+    if (isTRUE(outlier)) {
+      # Q1 − 1.5·IQR … Q3 + 1.5·IQR per dimension.
+      fence <- function(v) { q <- stats::quantile(v, c(.25, .75), na.rm = TRUE, names = FALSE)
+                             c(q[1] - 1.5 * diff(q), q[2] + 1.5 * diff(q)) }
+      fx <- fence(x); fy <- fence(y)
+      row[[paste0(x_col, ".olow")]] <- fx[1]; row[[paste0(x_col, ".ohigh")]] <- fx[2]
+      row[[paste0(y_col, ".olow")]] <- fy[1]; row[[paste0(y_col, ".ohigh")]] <- fy[2]
+    }
     row
   }))
 }

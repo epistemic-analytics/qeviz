@@ -1,6 +1,6 @@
 # qeviz 0.5.0 — spec: explicit-data inputs for rENA integration
 
-**Status:** decisions made · §1 `qe_edges()` implemented (R + TS, verified in `tools/rena-compare`); §2–§7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
+**Status:** decisions made · §1–§3 implemented (`qe_edges`, `qe_points`, `qe_group`; R + TS, verified in `tools/rena-compare`); §4–§7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
 
 ## Why
 
@@ -304,6 +304,23 @@ Colour ramps for explicit networks use the **model-wide** range computed from
   `ena.plot.trajectory(points, by, …)` → `qe_trajectories(points =, by =, …)`;
   `ena.plotter` subtraction multiplier → `magnify` with `magnify = 1` on side plots.
 - `ena.plot.movie` and `with_trajectory` stay on plotly.
+
+## rENA plotting bugs found (noted, not fixed)
+
+Found by the harness (`tools/rena-compare`, views `m_cross` / `m_outlier`) in
+rENA 0.4.8's plotly code. The qeviz backend does not reproduce them.
+
+1. **Crosshair CIs are wrong** — `ena.plot.group(confidence.interval =
+   "crosshairs")` passes the CI's *absolute* bounds as plotly's symmetric
+   error-bar `array`, so the arms are sized by a bound, not a half-width
+   (≈ 0.18 off on RS.data). `R/ena.plot.points.R` crosshair branch.
+2. **Outlier box is centred on the origin** — `ena.plot.group` builds the
+   outlier interval as ±1.5·IQR offsets (`R/ena.plot.group.R:116-117`) but
+   draws them as absolute coordinates, never adding the mean. The intended
+   interval (webENA / `libqe::outlier_ci`) is Q1 − 1.5·IQR … Q3 + 1.5·IQR.
+3. **CI box dropped when the outlier interval is also a box** — with
+   `confidence.interval = "box", outlier.interval = "box"` only the "Outlier
+   Int." trace is drawn; the "Conf. Int." box is lost.
 
 ## Non-goals (0.5.0)
 

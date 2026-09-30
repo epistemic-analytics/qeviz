@@ -159,6 +159,75 @@ test_that("a named network and explicit layers coexist", {
   expect_match(g, '<qe-edges network="network 1"></qe-edges>', fixed = TRUE)
 })
 
+# ── qe_points(units =, points =) — explicit point sets (0.5) ──────────────────
+
+test_that("qe_points(units =) adds a point set from the model's points", {
+  ids <- points_df$ENA_UNIT[1:3]
+  p <- qe_plot(model) |> qe_points(units = ids, color = "red", shape = "triangle-up",
+                                   labels = c("a", "b", "c"), name = "three")
+  ps <- qeviz:::.qe_frame_df(p$model$pointsets)
+  expect_equal(ps$id, ids)
+  expect_equal(ps$x, points_df$x[1:3])
+  expect_equal(unique(ps$set), "three")
+  expect_equal(unique(ps$color), "red")
+  expect_equal(unique(ps$shape), "triangle")
+  expect_equal(ps$label, c("a", "b", "c"))
+  g <- .graph_el(p)
+  expect_match(g, '<qe-points set="three" label="auto"></qe-points>', fixed = TRUE)
+  expect_false(grepl('<qe-points label=', g, fixed = TRUE))   # no all-units layer
+  expect_error(qe_points(qe_plot(model), units = "nobody"), "not in model")
+})
+
+test_that("qe_points(points =) takes arbitrary positions; sets append / replace by name", {
+  m <- data.frame(ENA_UNIT = c("u1", "u2"), a = c(0.1, 0.2), b = c(-0.1, 0.3))
+  p <- qe_plot(model) |> qe_points(points = m) |> qe_points(points = m, name = "B")
+  ps <- qeviz:::.qe_frame_df(p$model$pointsets)
+  expect_equal(sort(unique(ps$set)), c("B", "points 1"))
+  expect_equal(ps$x[ps$set == "B"], c(0.1, 0.2))           # first two numeric columns
+  p2 <- p |> qe_points(points = m[1, ], name = "B")          # same name replaces
+  expect_equal(sum(qeviz:::.qe_frame_df(p2$model$pointsets)$set == "B"), 1)
+  expect_null(qe_points(p2, show = FALSE)$model$pointsets)
+  expect_error(qe_points(qe_plot(model), points = m, color = c("a", "b", "c")), "length 1 or 2")
+  expect_error(qe_points(qe_plot(model), points = m, shape = "star"), "shape must be")
+})
+
+# ── qe_group(points =), intervals, conf_level, outlier (0.5) ──────────────────
+
+test_that("qe_group(points =) adds the subset's mean and t CI as a group row", {
+  sub <- points_df[points_df$x > 0, ]
+  p <- qe_plot(model) |> qe_group(points = sub, label = "right", color = "#123456", shape = "diamond")
+  g <- qeviz:::.qe_frame_df(p$model$groups)
+  r <- g[g$Condition == "right", ]
+  expect_equal(r$x, mean(sub$x))
+  expect_equal(c(r$x.low, r$x.high), as.numeric(stats::t.test(sub$x)$conf.int))
+  expect_equal(r$color, "#123456")
+  expect_equal(r$shape, "diamond")
+  expect_match(.graph_el(p), 'groups="right"', fixed = TRUE)   # only the explicit mean
+  # with a named selection, the explicit mean joins it
+  p2 <- qe_plot(model) |> qe_group("OA") |> qe_group(points = sub, label = "right")
+  expect_match(.graph_el(p2), 'groups="OA,right"', fixed = TRUE)
+  expect_error(qe_group(qe_plot(model), points = sub, label = "OA"), "already a group")
+  expect_error(qe_group(qe_plot(model), "OA", points = sub), "not both")
+})
+
+test_that("qe_group intervals / conf_level / outlier", {
+  expect_match(.graph_el(qe_plot(model) |> qe_group(intervals = "crosshairs")),
+               'intervals="crosshairs"', fixed = TRUE)
+  expect_false(grepl("confidence", .graph_el(qe_plot(model) |> qe_group(intervals = "none")),
+                     fixed = TRUE))
+  expect_false(grepl("confidence", .graph_el(qe_plot(model) |> qe_group(intervals = FALSE)),
+                     fixed = TRUE))
+  p <- qe_plot(model) |> qe_group(conf_level = 0.8, outlier = TRUE)
+  g <- qeviz:::.qe_frame_df(p$model$groups)
+  oa <- points_df$x[points_df$Condition == "OA"]
+  expect_equal(c(g$x.low[g$Condition == "OA"], g$x.high[g$Condition == "OA"]),
+               as.numeric(stats::t.test(oa, conf.level = 0.8)$conf.int))
+  q <- stats::quantile(oa, c(.25, .75), names = FALSE)
+  expect_equal(g$x.olow[g$Condition == "OA"], q[1] - 1.5 * diff(q))
+  expect_match(.graph_el(p), "outlier", fixed = TRUE)
+  expect_error(qe_group(qe_plot(model), conf_level = 2))
+})
+
 test_that("qe_points size emits a size attribute", {
   expect_match(.graph_el(qe_plot(model) |> qe_points(size = 5)),
                'size="5"', fixed = TRUE)

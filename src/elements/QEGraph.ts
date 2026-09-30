@@ -83,16 +83,18 @@ function capMeanToInterval(meanPt: Point | undefined, halfW: number, halfH: numb
 }
 
 function readIntervalBounds(
-  row: DataFrameRow, dim0: string, dim1: string
+  row: DataFrameRow, dim0: string, dim1: string, prefix = ''
 ): { x_low: number; x_high: number; y_low: number; y_high: number } | null {
+  // prefix '' → CI ({dim}.low / .high); 'o' → outlier ({dim}.olow / .ohigh).
   const get = (col: string) => {
     const i = row.names.indexOf(col);
-    return i >= 0 ? Number(row[i]) : undefined;
+    const v = i >= 0 ? Number(row[i]) : undefined;
+    return v != null && Number.isFinite(v) ? v : undefined;
   };
-  const xLow  = get(`${dim0}.low`)  ?? get(`${dim0}_low`);
-  const xHigh = get(`${dim0}.high`) ?? get(`${dim0}_high`);
-  const yLow  = get(`${dim1}.low`)  ?? get(`${dim1}_low`);
-  const yHigh = get(`${dim1}.high`) ?? get(`${dim1}_high`);
+  const xLow  = get(`${dim0}.${prefix}low`)  ?? get(`${dim0}_${prefix}low`);
+  const xHigh = get(`${dim0}.${prefix}high`) ?? get(`${dim0}_${prefix}high`);
+  const yLow  = get(`${dim1}.${prefix}low`)  ?? get(`${dim1}_${prefix}low`);
+  const yHigh = get(`${dim1}.${prefix}high`) ?? get(`${dim1}_${prefix}high`);
   if (xLow == null || xHigh == null || yLow == null || yHigh == null) return null;
   return { x_low: xLow, x_high: xHigh, y_low: yLow, y_high: yHigh };
 }
@@ -221,6 +223,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   // Managed directly (not via QELayer) so they render behind unit points.
   private _ciRects: Map<string, SVGRectElement> = new Map();
   private _outlierRects: Map<string, SVGRectElement> = new Map();
+  private _ciCross: Map<string, SVGPathElement> = new Map();
 
   // Cached reference to the labels <g> layer — set once in connectedCallback()
   // after draw() so it is guaranteed to be in the SVG DOM.
@@ -309,11 +312,19 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
           });
         }
-      } else if (model.groups?.rows && model.groups.rows().length > 0) {
-        // No points-based groups — assign colors from the groups frame directly.
-        model.groups.rows().forEach((row: DataFrameRow, i: number) => {
+      }
+      // Groups-frame rows: a `color` column overrides the palette, and rows that
+      // are not groups of the points (e.g. the mean of an arbitrary subset,
+      // qe_group(points =)) still get a colour so they count as known groups.
+      if (model.groups?.rows && model.groups.rows().length > 0) {
+        model.groups.rows().forEach((row: DataFrameRow) => {
           const g = row.rowName ?? String(row[0]);
-          if (!groupColorMap[g]) groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
+          const ci = row.names.indexOf('color');
+          const c  = ci >= 0 ? row[ci] : null;
+          if (c && String(c) !== 'NA') groupColorMap[g] = String(c);
+          else if (!groupColorMap[g]) {
+            groupColorMap[g] = GROUP_PALETTE[Object.keys(groupColorMap).length % GROUP_PALETTE.length];
+          }
         });
       }
 
@@ -400,6 +411,40 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // <qe-points> presence controls unit-dot visibility.
       // <qe-means> presence controls mean markers and CI boxes.
       const showUnitPoints = config.showPoints;
+
+      // ── Explicit point sets (qe_points(units =, points =)) ─────────────────
+      // Each <qe-points set="…"> draws that set's rows of model.pointsets, on
+      // the same point scale as the unit points.
+      const pointSetFrame = (model as any).pointsets;
+      if (config.pointSets.length && pointSetFrame?.rows) {
+        const psLayer = this.__children__.search('__children__', 'points') as QELayer;
+        const col = (r: DataFrameRow, k: string) => { const i = r.names.indexOf(k); return i >= 0 ? r[i] : null; };
+        config.pointSets.forEach((ps, si) => {
+          pointSetFrame.rows().forEach((row: DataFrameRow) => {
+            if (String(col(row, 'set')) !== ps.set) return;
+            const id    = String(col(row, 'id'));
+            const group = col(row, 'group') != null && String(col(row, 'group')) !== 'NA' ? String(col(row, 'group')) : null;
+            const color = col(row, 'color') && String(col(row, 'color')) !== 'NA' ? String(col(row, 'color'))
+                        : group && groupColorMap[group] ? groupColorMap[group]
+                        : GROUP_PALETTE[si % GROUP_PALETTE.length];
+            const pt = rowToPoint(row, 'id', color, pointScale);
+            pt.ID = `${ps.set}::${id}`;
+            pt.size = ps.size ?? config.pointSize ?? 2.5;
+            const shape = col(row, 'shape');
+            if (shape && String(shape) !== 'NA') pt.shape = String(shape);
+            const label = col(row, 'label');
+            (pt as any).meta = {
+              stroke: '#ffffff', kind: 'point',
+              name: label != null && String(label) !== 'NA' ? String(label) : id,
+              group: group ?? undefined, unit: id, set: ps.set,
+              fixedSize: ps.fixedSize,
+            };
+            this.__data__.points.set(pt.ID, pt);
+            psLayer?.__data__.objects.set(pt.ID, pt);
+          });
+        });
+      }
+
       if (model.points?.rows) {
         const pointsLayer = this.__children__.search('__children__', 'points') as QELayer;
         if (pointsLayer) {
@@ -478,6 +523,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const activeNames = new Set(activeGroupRows.map((r: DataFrameRow) => r.rowName ?? String(r[0])));
             this._ciRects.forEach((el, g) => { if (!activeNames.has(g)) { el.remove(); this._ciRects.delete(g); } });
             this._outlierRects.forEach((el, g) => { if (!activeNames.has(g)) { el.remove(); this._outlierRects.delete(g); } });
+            this._ciCross.forEach((el, k) => { if (!activeNames.has(k.slice(2))) { el.remove(); this._ciCross.delete(k); } });
 
             activeGroupRows.forEach((row: DataFrameRow) => {
               const group = row.rowName ?? String(row[0]);
@@ -495,17 +541,68 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               });
               meanPt.color = new Color(color);
               meanPt.size  = 4;   // radius = extent × 0.006 × 4 ≈ 0.024 for a unit extent
-              meanPt.shape = 'rect';
+              const shapeIdx = row.names.indexOf('shape');
+              const rowShape = shapeIdx >= 0 ? row[shapeIdx] : null;
+              meanPt.shape = rowShape && String(rowShape) !== 'NA' ? String(rowShape) : 'rect';
               this.__data__.points.set(meanPt.ID, meanPt);
               pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
 
-              // Bounds rect (CI, IQR, or any interval) — rendered behind points.
-              // Gated on <qe-means confidence> like Path B; without the gate
-              // qe_group(intervals = FALSE) still drew boxes.
-              const bounds = config.showCI
+              // Outlier interval (qe_group(outlier = TRUE)): {dim}.olow / .ohigh.
+              const ob = config.showOutlier
+                ? readIntervalBounds(row, dims[0] as string, dims[1] as string, 'o')
+                : null;
+              if (!ob) {
+                this._outlierRects.get(group)?.remove(); this._outlierRects.delete(group);
+              } else {
+                let oel = this._outlierRects.get(group);
+                if (!oel) {
+                  oel = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement;
+                  oel.setAttribute('data-outlier-group', group);
+                  this._outlierRects.set(group, oel);
+                }
+                oel.setAttribute('x', (ob.x_low * pointScale).toString());
+                oel.setAttribute('y', (-ob.y_high * pointScale).toString());
+                oel.setAttribute('width',  ((ob.x_high - ob.x_low) * pointScale).toString());
+                oel.setAttribute('height', ((ob.y_high - ob.y_low) * pointScale).toString());
+                oel.setAttribute('fill', 'none');
+                oel.setAttribute('stroke', color);
+                oel.setAttribute('stroke-width', sw.toString());
+                oel.setAttribute('stroke-opacity', '0.5');
+                oel.setAttribute('stroke-dasharray', `${sw * 2} ${sw * 2}`);
+                if (pointsLayerSvg && !oel.parentElement) pointsLayerSvg.insertBefore(oel, pointsLayerSvg.firstChild);
+              }
+
+              // CI (<qe-means intervals="box|crosshairs|none">, or the legacy
+              // `confidence` flag = box). Gated so qe_group(intervals = "none")
+              // draws nothing.
+              const bounds = config.intervals !== 'none'
                 ? readIntervalBounds(row, dims[0] as string, dims[1] as string)
                 : null;
-              if (!bounds) {
+              const crossKey = `x:${group}`;
+              if (!bounds || config.intervals !== 'crosshairs') {
+                this._ciCross.get(crossKey)?.remove(); this._ciCross.delete(crossKey);
+              }
+              if (bounds && config.intervals === 'crosshairs') {
+                this._ciRects.get(group)?.remove(); this._ciRects.delete(group);
+                // Two arms through the mean: x_lo..x_hi at the mean's y, and
+                // y_lo..y_hi at the mean's x.
+                const x0 = bounds.x_low * pointScale, x1 = bounds.x_high * pointScale;
+                const y0 = -bounds.y_high * pointScale, y1 = -bounds.y_low * pointScale;
+                capMeanToInterval(meanPt, (x1 - x0) / 2, (y1 - y0) / 2);
+                let cel = this._ciCross.get(crossKey);
+                if (!cel) {
+                  cel = document.createElementNS('http://www.w3.org/2000/svg', 'path') as SVGPathElement;
+                  cel.setAttribute('data-ci-group', group);
+                  cel.setAttribute('data-ci-kind', 'crosshairs');
+                  this._ciCross.set(crossKey, cel);
+                }
+                cel.setAttribute('d', `M${x0} ${my} L${x1} ${my} M${mx} ${y0} L${mx} ${y1}`);
+                cel.setAttribute('fill', 'none');
+                cel.setAttribute('stroke', color);
+                cel.setAttribute('stroke-width', (sw * 1.25).toString());
+                cel.setAttribute('stroke-opacity', '0.8');
+                if (pointsLayerSvg && !cel.parentElement) pointsLayerSvg.insertBefore(cel, pointsLayerSvg.firstChild);
+              } else if (!bounds) {
                 const stale = this._ciRects.get(group);
                 if (stale) { stale.remove(); this._ciRects.delete(group); }
               } else {
@@ -1222,10 +1319,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     showMeans: boolean;
     activeMeanGroups: string | null;
     showCI: boolean;
+    intervals: 'box' | 'crosshairs' | 'none';
+    showOutlier: boolean;
     labelMeans: number;
     meanFixedSize: boolean;
     // Points
     showPoints: boolean;
+    pointSets: Array<{ set: string; size: number | null; fixedSize: boolean }>;
     labelPoints: number;
     pointSize: number | null;
     pointFixedSize: boolean;
@@ -1254,7 +1354,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   } {
     const nodesEl  = this.querySelector('qe-nodes');
     const meansEl  = this.querySelector('qe-means');
-    const pointsEl = this.querySelector('qe-points');
+    // <qe-points> without `set` = all unit points; with `set` = an explicit set.
+    const allPointsEls = [...this.querySelectorAll('qe-points')];
+    const pointsEl = allPointsEls.find(e => !e.hasAttribute('set')) ?? null;
+    const setEls   = allPointsEls.filter(e => e.hasAttribute('set'));
     // Every <qe-edges> child is one layer (0.5): a named network (group / unit
     // / compare / also) or an explicit one (network="name" → model.networks).
     const edgeEls  = [...this.querySelectorAll('qe-edges')];
@@ -1283,6 +1386,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       showMeans:        !!meansEl,
       activeMeanGroups: meansEl?.getAttribute('groups') ?? null,
       showCI:           !!meansEl && meansEl.hasAttribute('confidence'),
+      // intervals="box|crosshairs|none"; absent → the legacy `confidence` flag.
+      intervals: (() => {
+        const v = meansEl?.getAttribute('intervals');
+        if (v === 'box' || v === 'crosshairs' || v === 'none') return v;
+        return meansEl?.hasAttribute('confidence') ? 'box' : 'none';
+      })() as 'box' | 'crosshairs' | 'none',
+      showOutlier:      !!meansEl && meansEl.hasAttribute('outlier'),
       labelMeans: parseLabelMode(
         meansEl?.getAttribute('label') ?? this.getAttribute('label-means') ?? labelsShorthand,
         Label.DISPLAY_TYPES.ON
@@ -1292,6 +1402,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       // Points — presence of <qe-points> = show unit dots.
       showPoints: !!pointsEl,
+      pointSets: setEls.map(e => ({
+        set: e.getAttribute('set')!,
+        size: e.getAttribute('size') ? parseFloat(e.getAttribute('size')!) : null,
+        fixedSize: e.hasAttribute('fixed-size'),
+      })),
       labelPoints: parseLabelMode(
         pointsEl?.getAttribute('label') ?? this.getAttribute('label-points') ?? labelsShorthand,
         Label.DISPLAY_TYPES.OFF
@@ -1369,7 +1484,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       attributeFilter: [
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
         'network', 'colors', 'threshold', 'name',
-        'groups', 'confidence', 'label', 'unconnected',
+        'groups', 'confidence', 'label', 'intervals', 'outlier', 'set', 'unconnected',
         'scale-points', 'edge-width', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
@@ -1575,12 +1690,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   /** Unit points with their current graph-space coordinates. */
-  getPoints(): Array<{ id: string; group?: string; x: number; y: number }> {
+  getPoints(): Array<{ id: string; group?: string; set?: string; x: number; y: number }> {
     const layer = this.__children__.search('__children__', 'points') as QELayer | undefined;
     if (!layer) return [];
     return [...layer.__data__.objects.values()]
       .filter((o: any) => o.meta?.kind === 'point')
-      .map((o: any) => ({ id: o.ID, group: o.meta?.group, x: o.x, y: o.y }));
+      .map((o: any) => ({ id: o.meta?.unit ?? o.ID, group: o.meta?.group, set: o.meta?.set,
+                          x: o.x, y: o.y }));
   }
 
   /** Ids of unit points inside a graph-space rectangle (for drag/lasso select). */

@@ -4,12 +4,41 @@
 \alias{qe_points}
 \title{Show or hide unit points}
 \usage{
-qe_points(p, show = TRUE, size = NULL, fixed_size = FALSE)
+qe_points(
+  p,
+  show = TRUE,
+  units = NULL,
+  points = NULL,
+  color = NULL,
+  shape = NULL,
+  labels = NULL,
+  name = NULL,
+  size = NULL,
+  fixed_size = FALSE
+)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
 
-\item{show}{Logical. Default \code{TRUE}.}
+\item{show}{Logical. Default \code{TRUE}; \code{FALSE} clears all points and point sets.}
+
+\item{units}{Unit IDs to draw as a point set (a subset of the model's units).}
+
+\item{points}{An arbitrary points matrix / data frame / \code{ena.points} rows
+(as rENA's \code{ena.plot.points()} accepts). IDs come from the model's id
+column when present; dimensions from the model's x / y columns, else the
+first two numeric columns.}
+
+\item{color}{One colour, or one per point. Default: each point's group
+colour, else a palette colour per set.}
+
+\item{shape}{\code{"circle"} (default), \code{"square"}, \code{"triangle"} or \code{"diamond"};
+one or one per point. rENA's \code{"triangle-up"} is accepted.}
+
+\item{labels}{Per-point label text (shown per the point label mode).}
+
+\item{name}{Point-set name; calls with \code{units} / \code{points} add a set, and a
+repeated name replaces it. Default \code{"points 1"}, \code{"points 2"}, ….}
 
 \item{size}{Optional numeric dot size. Omit for the default (2.5).  Larger
 values draw bigger dots; the size is relative to the code-node size.}

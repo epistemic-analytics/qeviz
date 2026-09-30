@@ -4,7 +4,7 @@
 \alias{group_summary}
 \title{Compute per-group means and 95\% CI bounds}
 \usage{
-group_summary(pts, x_col, y_col, group_col)
+group_summary(pts, x_col, y_col, group_col, conf_level = 0.95, outlier = FALSE)
 }
 \arguments{
 \item{pts}{A \code{data.frame} with at least the columns named by \code{x_col},
@@ -15,6 +15,11 @@ group_summary(pts, x_col, y_col, group_col)
 \item{y_col}{Name of the y-coordinate column.}
 
 \item{group_col}{Name of the grouping column.}
+
+\item{conf_level}{Confidence level for the t interval. Default 0.95.}
+
+\item{outlier}{Also add \verb{<dim>.olow} / \verb{<dim>.ohigh} outlier bounds
+(Q1 − 1.5·IQR, Q3 + 1.5·IQR). Default \code{FALSE}.}
 }
 \value{
 A \code{data.frame} with the group column, \code{x_col}, \code{y_col}, and

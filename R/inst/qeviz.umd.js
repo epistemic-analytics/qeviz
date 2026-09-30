@@ -370,6 +370,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     set networks(v) {
       this._networks = v;
     }
+    /** Explicit point sets (rows: set, id, x, y, group?, color?, shape?, label?),
+     *  drawn by <qe-points set="name">. */
+    get pointsets() {
+      return this._pointsets;
+    }
+    set pointsets(v) {
+      this._pointsets = v;
+    }
     get dimensions() {
       return this._dimensions;
     }
@@ -482,7 +490,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      */
     setModelData(data) {
       var _a, _b, _c, _d;
-      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier", "trajectories", "networks"];
+      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier", "trajectories", "networks", "pointsets"];
       frameKeys.forEach((name) => {
         var _a2;
         const raw = data[name];
@@ -491,6 +499,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         let idCol;
         if (name === "networks") {
           idCol = "name";
+        } else if (name === "pointsets") {
+          idCol = "id";
         } else if (name === "nodes") {
           idCol = data.node_id_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
         } else if (name === "edges" || name === "points" || name === "trajectories") {
@@ -2565,6 +2575,40 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     get isSquare() {
       return this.__data__.shape === "rect";
     }
+    /** "circle" (default) | "rect" | "triangle" | "diamond". */
+    get shapeKind() {
+      const s = this.__data__.shape;
+      return s === "rect" || s === "square" ? "rect" : s === "triangle" || s === "diamond" ? s : "circle";
+    }
+    /** SVG tag for the current shape. */
+    get tag() {
+      const k = this.shapeKind;
+      return k === "circle" ? "circle" : k === "rect" ? "rect" : "path";
+    }
+    /** Position / size the element for its shape (r = half-size). */
+    setGeometry(el, r) {
+      const x = this.x, y = this.y;
+      switch (this.shapeKind) {
+        case "rect":
+          el.setAttribute("x", (x - r).toString());
+          el.setAttribute("y", (y - r).toString());
+          el.setAttribute("width", (r * 2).toString());
+          el.setAttribute("height", (r * 2).toString());
+          break;
+        case "triangle": {
+          const h = r * 1.15;
+          el.setAttribute("d", `M${x} ${y - h} L${x + h * 0.866} ${y + h * 0.5} L${x - h * 0.866} ${y + h * 0.5}Z`);
+          break;
+        }
+        case "diamond":
+          el.setAttribute("d", `M${x} ${y - r * 1.2} L${x + r} ${y} L${x} ${y + r * 1.2} L${x - r} ${y}Z`);
+          break;
+        default:
+          el.setAttribute("cx", x.toString());
+          el.setAttribute("cy", y.toString());
+          el.setAttribute("r", r.toString());
+      }
+    }
     /** Half-side length for squares / radius for circles, in SVG user units.
      *  Factor 0.006 keeps code-node diameters in the same visual range as rENA
      *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
@@ -2599,8 +2643,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       el.setAttribute("stroke-width", (this.computeRadius() * 0.22).toString());
     }
     create() {
-      const tag = this.isSquare ? "rect" : "circle";
-      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      const el = document.createElementNS("http://www.w3.org/2000/svg", this.tag);
       el.setAttribute("data-point-id", this.__data__.ID);
       const meta = this.__data__.meta ?? {};
       if (meta.kind) el.setAttribute("data-kind", meta.kind);
@@ -2609,17 +2652,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (meta.unit != null) el.setAttribute("data-unit", String(meta.unit));
       el.setAttribute("fill", this.__data__.color.toString());
       this.applyStroke(el);
-      const r = this.computeRadius();
-      if (this.isSquare) {
-        el.setAttribute("x", (this.x - r).toString());
-        el.setAttribute("y", (this.y - r).toString());
-        el.setAttribute("width", (r * 2).toString());
-        el.setAttribute("height", (r * 2).toString());
-      } else {
-        el.setAttribute("cx", this.x.toString());
-        el.setAttribute("cy", this.y.toString());
-        el.setAttribute("r", r.toString());
-      }
+      this.setGeometry(el, this.computeRadius());
       this.svg_element = el;
       el.addEventListener("click", () => {
         this.__data__.active = !this.__data__.active;
@@ -2642,19 +2675,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       if (!this.svg_element.parentElement) {
         this.parent.appendChild(this.svg_element);
       }
-      const r = this.computeRadius();
       this.svg_element.setAttribute("fill", this.__data__.color.toString());
       this.applyStroke(this.svg_element);
-      if (this.isSquare) {
-        this.svg_element.setAttribute("x", (this.x - r).toString());
-        this.svg_element.setAttribute("y", (this.y - r).toString());
-        this.svg_element.setAttribute("width", (r * 2).toString());
-        this.svg_element.setAttribute("height", (r * 2).toString());
-      } else {
-        this.svg_element.setAttribute("cx", this.x.toString());
-        this.svg_element.setAttribute("cy", this.y.toString());
-        this.svg_element.setAttribute("r", r.toString());
-      }
+      this.setGeometry(this.svg_element, this.computeRadius());
     }
     draw() {
       var _a;
@@ -3185,15 +3208,16 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     meanPt.meta = { ...meanPt.meta ?? {}, maxRadius: half * MEAN_MAX_FRACTION_OF_INTERVAL };
   }
   __name(capMeanToInterval, "capMeanToInterval");
-  function readIntervalBounds(row, dim0, dim1) {
+  function readIntervalBounds(row, dim0, dim1, prefix = "") {
     const get = /* @__PURE__ */ __name((col) => {
       const i = row.names.indexOf(col);
-      return i >= 0 ? Number(row[i]) : void 0;
+      const v = i >= 0 ? Number(row[i]) : void 0;
+      return v != null && Number.isFinite(v) ? v : void 0;
     }, "get");
-    const xLow = get(`${dim0}.low`) ?? get(`${dim0}_low`);
-    const xHigh = get(`${dim0}.high`) ?? get(`${dim0}_high`);
-    const yLow = get(`${dim1}.low`) ?? get(`${dim1}_low`);
-    const yHigh = get(`${dim1}.high`) ?? get(`${dim1}_high`);
+    const xLow = get(`${dim0}.${prefix}low`) ?? get(`${dim0}_${prefix}low`);
+    const xHigh = get(`${dim0}.${prefix}high`) ?? get(`${dim0}_${prefix}high`);
+    const yLow = get(`${dim1}.${prefix}low`) ?? get(`${dim1}_${prefix}low`);
+    const yHigh = get(`${dim1}.${prefix}high`) ?? get(`${dim1}_${prefix}high`);
     if (xLow == null || xHigh == null || yLow == null || yHigh == null) return null;
     return { x_low: xLow, x_high: xHigh, y_low: yLow, y_high: yHigh };
   }
@@ -3252,6 +3276,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       this._childObserver = null;
       this._ciRects = /* @__PURE__ */ new Map();
       this._outlierRects = /* @__PURE__ */ new Map();
+      this._ciCross = /* @__PURE__ */ new Map();
       this._labelsGroup = null;
       this._nodeLabels = /* @__PURE__ */ new Map();
       this._meanLabels = /* @__PURE__ */ new Map();
@@ -3299,10 +3324,16 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
             });
           }
-        } else if (((_b = model.groups) == null ? void 0 : _b.rows) && model.groups.rows().length > 0) {
-          model.groups.rows().forEach((row, i) => {
+        }
+        if (((_b = model.groups) == null ? void 0 : _b.rows) && model.groups.rows().length > 0) {
+          model.groups.rows().forEach((row) => {
             const g = row.rowName ?? String(row[0]);
-            if (!groupColorMap[g]) groupColorMap[g] = GROUP_PALETTE[i % GROUP_PALETTE.length];
+            const ci = row.names.indexOf("color");
+            const c = ci >= 0 ? row[ci] : null;
+            if (c && String(c) !== "NA") groupColorMap[g] = String(c);
+            else if (!groupColorMap[g]) {
+              groupColorMap[g] = GROUP_PALETTE[Object.keys(groupColorMap).length % GROUP_PALETTE.length];
+            }
           });
         }
         const _allGroupNames_ = Object.keys(groupColorMap);
@@ -3348,6 +3379,39 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         }, "rowToPoint");
         const groupSums = {};
         const showUnitPoints = config.showPoints;
+        const pointSetFrame = model.pointsets;
+        if (config.pointSets.length && (pointSetFrame == null ? void 0 : pointSetFrame.rows)) {
+          const psLayer = this.__children__.search("__children__", "points");
+          const col = /* @__PURE__ */ __name((r, k) => {
+            const i = r.names.indexOf(k);
+            return i >= 0 ? r[i] : null;
+          }, "col");
+          config.pointSets.forEach((ps, si) => {
+            pointSetFrame.rows().forEach((row) => {
+              if (String(col(row, "set")) !== ps.set) return;
+              const id = String(col(row, "id"));
+              const group = col(row, "group") != null && String(col(row, "group")) !== "NA" ? String(col(row, "group")) : null;
+              const color = col(row, "color") && String(col(row, "color")) !== "NA" ? String(col(row, "color")) : group && groupColorMap[group] ? groupColorMap[group] : GROUP_PALETTE[si % GROUP_PALETTE.length];
+              const pt = rowToPoint(row, "id", color, pointScale);
+              pt.ID = `${ps.set}::${id}`;
+              pt.size = ps.size ?? config.pointSize ?? 2.5;
+              const shape = col(row, "shape");
+              if (shape && String(shape) !== "NA") pt.shape = String(shape);
+              const label = col(row, "label");
+              pt.meta = {
+                stroke: "#ffffff",
+                kind: "point",
+                name: label != null && String(label) !== "NA" ? String(label) : id,
+                group: group ?? void 0,
+                unit: id,
+                set: ps.set,
+                fixedSize: ps.fixedSize
+              };
+              this.__data__.points.set(pt.ID, pt);
+              psLayer == null ? void 0 : psLayer.__data__.objects.set(pt.ID, pt);
+            });
+          });
+        }
         if ((_f = model.points) == null ? void 0 : _f.rows) {
           const pointsLayer = this.__children__.search("__children__", "points");
           if (pointsLayer) {
@@ -3406,7 +3470,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                     this._outlierRects.delete(g);
                   }
                 });
+                this._ciCross.forEach((el, k) => {
+                  if (!activeNames.has(k.slice(2))) {
+                    el.remove();
+                    this._ciCross.delete(k);
+                  }
+                });
                 activeGroupRows.forEach((row) => {
+                  var _a2, _b2, _c2;
                   const group = row.rowName ?? String(row[0]);
                   const color = groupColorMap[group] ?? "#888888";
                   const xIdx = row.names.indexOf(dims[0]);
@@ -3420,11 +3491,59 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                   });
                   meanPt.color = new Color(color);
                   meanPt.size = 4;
-                  meanPt.shape = "rect";
+                  const shapeIdx = row.names.indexOf("shape");
+                  const rowShape = shapeIdx >= 0 ? row[shapeIdx] : null;
+                  meanPt.shape = rowShape && String(rowShape) !== "NA" ? String(rowShape) : "rect";
                   this.__data__.points.set(meanPt.ID, meanPt);
                   pointsLayer.__data__.objects.set(meanPt.ID, meanPt);
-                  const bounds = config.showCI ? readIntervalBounds(row, dims[0], dims[1]) : null;
-                  if (!bounds) {
+                  const ob = config.showOutlier ? readIntervalBounds(row, dims[0], dims[1], "o") : null;
+                  if (!ob) {
+                    (_a2 = this._outlierRects.get(group)) == null ? void 0 : _a2.remove();
+                    this._outlierRects.delete(group);
+                  } else {
+                    let oel = this._outlierRects.get(group);
+                    if (!oel) {
+                      oel = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                      oel.setAttribute("data-outlier-group", group);
+                      this._outlierRects.set(group, oel);
+                    }
+                    oel.setAttribute("x", (ob.x_low * pointScale).toString());
+                    oel.setAttribute("y", (-ob.y_high * pointScale).toString());
+                    oel.setAttribute("width", ((ob.x_high - ob.x_low) * pointScale).toString());
+                    oel.setAttribute("height", ((ob.y_high - ob.y_low) * pointScale).toString());
+                    oel.setAttribute("fill", "none");
+                    oel.setAttribute("stroke", color);
+                    oel.setAttribute("stroke-width", sw.toString());
+                    oel.setAttribute("stroke-opacity", "0.5");
+                    oel.setAttribute("stroke-dasharray", `${sw * 2} ${sw * 2}`);
+                    if (pointsLayerSvg && !oel.parentElement) pointsLayerSvg.insertBefore(oel, pointsLayerSvg.firstChild);
+                  }
+                  const bounds = config.intervals !== "none" ? readIntervalBounds(row, dims[0], dims[1]) : null;
+                  const crossKey = `x:${group}`;
+                  if (!bounds || config.intervals !== "crosshairs") {
+                    (_b2 = this._ciCross.get(crossKey)) == null ? void 0 : _b2.remove();
+                    this._ciCross.delete(crossKey);
+                  }
+                  if (bounds && config.intervals === "crosshairs") {
+                    (_c2 = this._ciRects.get(group)) == null ? void 0 : _c2.remove();
+                    this._ciRects.delete(group);
+                    const x0 = bounds.x_low * pointScale, x1 = bounds.x_high * pointScale;
+                    const y0 = -bounds.y_high * pointScale, y1 = -bounds.y_low * pointScale;
+                    capMeanToInterval(meanPt, (x1 - x0) / 2, (y1 - y0) / 2);
+                    let cel = this._ciCross.get(crossKey);
+                    if (!cel) {
+                      cel = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                      cel.setAttribute("data-ci-group", group);
+                      cel.setAttribute("data-ci-kind", "crosshairs");
+                      this._ciCross.set(crossKey, cel);
+                    }
+                    cel.setAttribute("d", `M${x0} ${my} L${x1} ${my} M${mx} ${y0} L${mx} ${y1}`);
+                    cel.setAttribute("fill", "none");
+                    cel.setAttribute("stroke", color);
+                    cel.setAttribute("stroke-width", (sw * 1.25).toString());
+                    cel.setAttribute("stroke-opacity", "0.8");
+                    if (pointsLayerSvg && !cel.parentElement) pointsLayerSvg.insertBefore(cel, pointsLayerSvg.firstChild);
+                  } else if (!bounds) {
                     const stale = this._ciRects.get(group);
                     if (stale) {
                       stale.remove();
@@ -4031,7 +4150,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       var _a;
       const nodesEl = this.querySelector("qe-nodes");
       const meansEl = this.querySelector("qe-means");
-      const pointsEl = this.querySelector("qe-points");
+      const allPointsEls = [...this.querySelectorAll("qe-points")];
+      const pointsEl = allPointsEls.find((e) => !e.hasAttribute("set")) ?? null;
+      const setEls = allPointsEls.filter((e) => e.hasAttribute("set"));
       const edgeEls = [...this.querySelectorAll("qe-edges")];
       const firstAttr = /* @__PURE__ */ __name((a) => {
         var _a2;
@@ -4059,6 +4180,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         showMeans: !!meansEl,
         activeMeanGroups: (meansEl == null ? void 0 : meansEl.getAttribute("groups")) ?? null,
         showCI: !!meansEl && meansEl.hasAttribute("confidence"),
+        // intervals="box|crosshairs|none"; absent → the legacy `confidence` flag.
+        intervals: (() => {
+          const v = meansEl == null ? void 0 : meansEl.getAttribute("intervals");
+          if (v === "box" || v === "crosshairs" || v === "none") return v;
+          return (meansEl == null ? void 0 : meansEl.hasAttribute("confidence")) ? "box" : "none";
+        })(),
+        showOutlier: !!meansEl && meansEl.hasAttribute("outlier"),
         labelMeans: parseLabelMode(
           (meansEl == null ? void 0 : meansEl.getAttribute("label")) ?? this.getAttribute("label-means") ?? labelsShorthand,
           Label.DISPLAY_TYPES.ON
@@ -4067,6 +4195,11 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         meanFixedSize: !!meansEl && meansEl.hasAttribute("fixed-size"),
         // Points — presence of <qe-points> = show unit dots.
         showPoints: !!pointsEl,
+        pointSets: setEls.map((e) => ({
+          set: e.getAttribute("set"),
+          size: e.getAttribute("size") ? parseFloat(e.getAttribute("size")) : null,
+          fixedSize: e.hasAttribute("fixed-size")
+        })),
         labelPoints: parseLabelMode(
           (pointsEl == null ? void 0 : pointsEl.getAttribute("label")) ?? this.getAttribute("label-points") ?? labelsShorthand,
           Label.DISPLAY_TYPES.OFF
@@ -4143,6 +4276,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "groups",
           "confidence",
           "label",
+          "intervals",
+          "outlier",
+          "set",
           "unconnected",
           "scale-points",
           "edge-width",
@@ -4365,8 +4501,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         var _a;
         return ((_a = o.meta) == null ? void 0 : _a.kind) === "point";
       }).map((o) => {
-        var _a;
-        return { id: o.ID, group: (_a = o.meta) == null ? void 0 : _a.group, x: o.x, y: o.y };
+        var _a, _b, _c;
+        return {
+          id: ((_a = o.meta) == null ? void 0 : _a.unit) ?? o.ID,
+          group: (_b = o.meta) == null ? void 0 : _b.group,
+          set: (_c = o.meta) == null ? void 0 : _c.set,
+          x: o.x,
+          y: o.y
+        };
       });
     }
     /** Ids of unit points inside a graph-space rectangle (for drag/lasso select). */

@@ -120,9 +120,9 @@
       } else if (!missing) {
         const b = ['x_lo', 'x_hi', 'y_lo', 'y_hi'];
         const noCI = ms.some(([, g]) => g.x_lo == null);
-        out.push(row('95% CI box bounds',
+        out.push(row('95% CI bounds',
           noCI ? null : maxAbs(ms.flatMap(([t, g]) => b.map(k => t[k] - g[k]))),
-          TOL, noCI ? 'CI box not drawn' : ''));
+          TOL, noCI ? 'CI not drawn' : (ms[0][1].ci_kind || '')));
         if (!noCI && ms.every(([, g]) => g.marker_half != null)) {
           // Encoding: marker half-side ≤ 0.5 × the CI box's shorter half-side
           // (MEAN_MAX_FRACTION_OF_INTERVAL in QEGraph.ts).
@@ -132,6 +132,15 @@
             `marker half-side = ${ratio.toFixed(2)} × CI half-side (max 0.50)`, 'warn'));
         }
       }
+    }
+
+    if (truth.means && truth.outlier) {
+      const ms = truth.means.map(t => [t, got.means.find(m => m.group === t.group)]);
+      const ob = ['o_x_lo', 'o_x_hi', 'o_y_lo', 'o_y_hi'];
+      const missing = ms.some(([, g]) => !g || g.o_x_lo == null);
+      out.push(row('outlier interval (Q1 − 1.5·IQR … Q3 + 1.5·IQR)',
+        missing ? null : maxAbs(ms.flatMap(([t, g]) => ob.map(k => t[k] - g[k]))),
+        TOL, missing ? 'outlier interval not drawn' : ''));
     }
 
     if (truth.points) {

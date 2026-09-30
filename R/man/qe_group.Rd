@@ -4,7 +4,19 @@
 \alias{qe_group}
 \title{Select which group means to display}
 \usage{
-qe_group(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE)
+qe_group(
+  p,
+  ...,
+  points = NULL,
+  label = NULL,
+  color = NULL,
+  shape = NULL,
+  by = NULL,
+  intervals = c("box", "crosshairs", "none"),
+  conf_level = 0.95,
+  outlier = FALSE,
+  fixed_size = FALSE
+)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
@@ -13,12 +25,29 @@ qe_group(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE)
 each matching a value in the model's group column.  Omit entirely to show
 means for \strong{all} groups in the model (the default).}
 
+\item{points}{An arbitrary subset to average — a matrix, data frame or
+\code{ena.points} rows (as rENA's \code{ena.plot.group()} accepts). Its mean, t CI
+and (with \code{outlier}) fences are computed here and added as a group named
+\code{label}. Cannot be combined with group names.}
+
+\item{label}{Name for an explicit mean. Default \code{"mean 1"}, \code{"mean 2"}, ….}
+
+\item{color}{Colour of an explicit mean. Default: next palette colour.}
+
+\item{shape}{Marker shape for an explicit mean: \code{"square"} (default),
+\code{"circle"}, \code{"triangle"} or \code{"diamond"}.}
+
 \item{by}{The metadata column used for grouping (e.g. \code{"Condition"}).
 Optional — used to validate against the column baked into the model at
 extraction time.  An error is raised if the column name does not match.}
 
-\item{intervals}{Logical.  Show 95\% CI box(es) around group mean(s).
-Default \code{TRUE}.}
+\item{intervals}{\code{"box"} (default), \code{"crosshairs"} or \code{"none"}; \code{TRUE} /
+\code{FALSE} are accepted as \code{"box"} / \code{"none"}. rENA's default is \code{"none"}.}
+
+\item{conf_level}{Confidence level of the t interval. Default 0.95.}
+
+\item{outlier}{Also draw the outlier interval (Q1 − 1.5·IQR … Q3 + 1.5·IQR
+per dimension). Default \code{FALSE}.}
 
 \item{fixed_size}{Logical. When \code{TRUE}, group mean markers keep a constant
 on-screen pixel size regardless of data extent, container size, or zoom.

@@ -37,12 +37,30 @@
     });
 
     // SVG rect: x = x_lo, y = -y_hi, width/height in model units.
+    const rectBounds = (r) => {
+      const x = +r.getAttribute('x'), y = +r.getAttribute('y');
+      const w = +r.getAttribute('width'), h = +r.getAttribute('height');
+      return { lo: x, hi: x + w, ylo: -(y + h), yhi: -y };
+    };
     g.svg_element.querySelectorAll('rect[data-ci-group]').forEach(r => {
       const m = means.find(mm => mm.group === r.getAttribute('data-ci-group'));
       if (!m) return;
-      const x = +r.getAttribute('x'), y = +r.getAttribute('y');
-      const w = +r.getAttribute('width'), h = +r.getAttribute('height');
-      Object.assign(m, { x_lo: x, x_hi: x + w, y_lo: -(y + h), y_hi: -y });
+      const b = rectBounds(r);
+      Object.assign(m, { x_lo: b.lo, x_hi: b.hi, y_lo: b.ylo, y_hi: b.yhi, ci_kind: 'box' });
+    });
+    // Crosshairs: "M x0 my L x1 my M mx y0 L mx y1".
+    g.svg_element.querySelectorAll('path[data-ci-group]').forEach(pth => {
+      const m = means.find(mm => mm.group === pth.getAttribute('data-ci-group'));
+      const n = ((pth.getAttribute('d') || '').match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []).map(Number);
+      if (!m || n.length < 8) return;
+      Object.assign(m, { x_lo: Math.min(n[0], n[2]), x_hi: Math.max(n[0], n[2]),
+                         y_lo: -Math.max(n[5], n[7]), y_hi: -Math.min(n[5], n[7]), ci_kind: 'crosshairs' });
+    });
+    g.svg_element.querySelectorAll('rect[data-outlier-group]').forEach(r => {
+      const m = means.find(mm => mm.group === r.getAttribute('data-outlier-group'));
+      if (!m) return;
+      const b = rectBounds(r);
+      Object.assign(m, { o_x_lo: b.lo, o_x_hi: b.hi, o_y_lo: b.ylo, o_y_hi: b.yhi });
     });
 
     // Sign comes from each edge's *base* group colour. The rendered stroke fades

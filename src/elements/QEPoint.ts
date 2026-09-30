@@ -29,6 +29,42 @@ export class QEPoint extends Drawable implements QEElement {
     return (this.__data__ as any).shape === 'rect';
   }
 
+  /** "circle" (default) | "rect" | "triangle" | "diamond". */
+  get shapeKind(): 'circle' | 'rect' | 'triangle' | 'diamond' {
+    const s = (this.__data__ as any).shape;
+    return s === 'rect' || s === 'square' ? 'rect'
+         : s === 'triangle' || s === 'diamond' ? s : 'circle';
+  }
+
+  /** SVG tag for the current shape. */
+  private get tag(): string {
+    const k = this.shapeKind;
+    return k === 'circle' ? 'circle' : k === 'rect' ? 'rect' : 'path';
+  }
+
+  /** Position / size the element for its shape (r = half-size). */
+  private setGeometry(el: SVGElement, r: number): void {
+    const x = this.x, y = this.y;
+    switch (this.shapeKind) {
+      case 'rect':
+        el.setAttribute('x', (x - r).toString()); el.setAttribute('y', (y - r).toString());
+        el.setAttribute('width', (r * 2).toString()); el.setAttribute('height', (r * 2).toString());
+        break;
+      case 'triangle': {
+        // Equilateral, pointing up (SVG y-down), centred on the point.
+        const h = r * 1.15;
+        el.setAttribute('d', `M${x} ${y - h} L${x + h * 0.866} ${y + h * 0.5} L${x - h * 0.866} ${y + h * 0.5}Z`);
+        break;
+      }
+      case 'diamond':
+        el.setAttribute('d', `M${x} ${y - r * 1.2} L${x + r} ${y} L${x} ${y + r * 1.2} L${x - r} ${y}Z`);
+        break;
+      default:
+        el.setAttribute('cx', x.toString()); el.setAttribute('cy', y.toString());
+        el.setAttribute('r', r.toString());
+    }
+  }
+
   /** Half-side length for squares / radius for circles, in SVG user units.
    *  Factor 0.006 keeps code-node diameters in the same visual range as rENA
    *  (≈ 1–2 % of the coordinate half-extent for a typical ENA network).
@@ -69,8 +105,7 @@ export class QEPoint extends Drawable implements QEElement {
   }
 
   create() {
-    const tag = this.isSquare ? 'rect' : 'circle';
-    const el = document.createElementNS('http://www.w3.org/2000/svg', tag) as SVGElement;
+    const el = document.createElementNS('http://www.w3.org/2000/svg', this.tag) as SVGElement;
 
     el.setAttribute('data-point-id', this.__data__.ID);
     // Identity for <qe-graph> delegation → qe-node-* interaction events.
@@ -82,17 +117,7 @@ export class QEPoint extends Drawable implements QEElement {
     el.setAttribute('fill', this.__data__.color.toString());
     this.applyStroke(el);
 
-    const r = this.computeRadius();
-    if (this.isSquare) {
-      el.setAttribute('x',      (this.x - r).toString());
-      el.setAttribute('y',      (this.y - r).toString());
-      el.setAttribute('width',  (r * 2).toString());
-      el.setAttribute('height', (r * 2).toString());
-    } else {
-      el.setAttribute('cx', this.x.toString());
-      el.setAttribute('cy', this.y.toString());
-      el.setAttribute('r',  r.toString());
-    }
+    this.setGeometry(el, this.computeRadius());
 
     this.svg_element = el;
 
@@ -126,20 +151,9 @@ export class QEPoint extends Drawable implements QEElement {
       this.parent.appendChild(this.svg_element);
     }
 
-    const r = this.computeRadius();
     this.svg_element.setAttribute('fill', this.__data__.color.toString());
     this.applyStroke(this.svg_element);
-
-    if (this.isSquare) {
-      this.svg_element.setAttribute('x',      (this.x - r).toString());
-      this.svg_element.setAttribute('y',      (this.y - r).toString());
-      this.svg_element.setAttribute('width',  (r * 2).toString());
-      this.svg_element.setAttribute('height', (r * 2).toString());
-    } else {
-      this.svg_element.setAttribute('cx', this.x.toString());
-      this.svg_element.setAttribute('cy', this.y.toString());
-      this.svg_element.setAttribute('r',  r.toString());
-    }
+    this.setGeometry(this.svg_element, this.computeRadius());
   }
 
   draw() {
