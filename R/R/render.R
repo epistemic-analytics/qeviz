@@ -831,6 +831,16 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
 #' @param unconnected What to draw for nodes with no drawn edges: `"dot"`
 #'   (default, a tiny dot that still marks the code's position) or `"hide"`
 #'   (omit the node and its label).
+#' @param positions Node positions for this plot, replacing the model's (as
+#'   rENA's `ena.plot.network(node.positions =)`): a data frame / matrix /
+#'   `rotation$nodes`-like table with a code column (the model's node id
+#'   column, `code`, or row names) and two numeric columns (the model's x / y
+#'   columns when present, else the first two numeric ones). A subset of codes
+#'   moves only those nodes. Edges, node sizes, labels and the plot extent all
+#'   follow the new positions.
+#' @param labels Display text per code: a named character vector
+#'   (`c(Technical.Constraints = "Tech. constraints")`). The code stays the
+#'   node's identity (events, edges); only the drawn label changes.
 #' @return The modified `qe_plot` object.
 #' @examples
 #' \dontrun{
@@ -839,13 +849,50 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
 #' }
 #' @export
 qe_nodes <- function(p, show = c("auto", "always", "never"),
-                     unconnected = c("dot", "hide")) {
+                     unconnected = c("dot", "hide"), positions = NULL, labels = NULL) {
   if (isTRUE(show))  show <- "always"
   if (isFALSE(show)) show <- "never"
   show <- match.arg(show)
   unconnected <- match.arg(unconnected)
   p$graph_opts[["nodes-show"]] <- show
   p$graph_opts[["nodes-unconnected"]] <- if (unconnected == "hide") "hide" else NULL
+
+  if (!is.null(positions) || !is.null(labels)) {
+    m     <- p$model
+    nodes <- .qe_frame_df(m$nodes)
+    idc   <- m$node_id_col
+    codes <- as.character(nodes[[idc]])
+    check <- function(got, arg) {
+      bad <- setdiff(got, codes)
+      if (length(bad))
+        stop(sprintf("qe_nodes(): '%s' has codes not in the model: %s\nModel codes: %s", arg,
+                     paste(dQuote(head(bad, 3)), collapse = ", "),
+                     paste(head(codes, 4), collapse = ", ")), call. = FALSE)
+    }
+    if (!is.null(positions)) {
+      pos <- as.data.frame(positions, check.names = FALSE)
+      pc  <- if (idc %in% names(pos)) as.character(pos[[idc]])
+             else if ("code" %in% names(pos)) as.character(pos$code)
+             else if (!is.null(rownames(positions))) rownames(positions)
+             else stop("qe_nodes(): 'positions' needs a code column or row names.", call. = FALSE)
+      num  <- names(pos)[vapply(pos, is.numeric, logical(1))]
+      dims <- if (all(c(m$x_col, m$y_col) %in% num)) c(m$x_col, m$y_col) else num[1:2]
+      if (length(num) < 2 || anyNA(dims))
+        stop("qe_nodes(): 'positions' needs two numeric (x, y) columns.", call. = FALSE)
+      check(pc, "positions")
+      i <- match(pc, codes)
+      nodes[[m$x_col]][i] <- pos[[dims[1]]]
+      nodes[[m$y_col]][i] <- pos[[dims[2]]]
+    }
+    if (!is.null(labels)) {
+      if (!is.character(labels) || is.null(names(labels)))
+        stop("qe_nodes(): 'labels' must be a named character vector (code = text).", call. = FALSE)
+      check(names(labels), "labels")
+      if (is.null(nodes$label)) nodes$label <- NA_character_
+      nodes$label[match(names(labels), codes)] <- unname(labels)
+    }
+    p$model$nodes <- qe_frame(nodes)
+  }
   p
 }
 

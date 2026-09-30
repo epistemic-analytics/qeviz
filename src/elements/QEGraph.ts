@@ -908,7 +908,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         model.nodes.rows().forEach((row: DataFrameRow) => {
           const pt = rowToPoint(row, nodeIdCol, '#444444');
           pt.size = 2; // default when no edge weights available
-          (pt as any).meta = { ...((pt as any).meta ?? {}), kind: 'node', name: pt.ID };
+          // Display text: the nodes frame's optional `label` column
+          // (qe_nodes(labels =)); the code id stays the node's identity.
+          const li = row.names.indexOf('label');
+          const lv = li >= 0 ? row[li] : null;
+          (pt as any).meta = { ...((pt as any).meta ?? {}), kind: 'node',
+                               name: lv != null && String(lv) !== 'NA' && String(lv) !== '' ? String(lv) : pt.ID };
           nodeLayer.__data__.objects.set(pt.ID, pt);
         });
 
@@ -1259,9 +1264,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               this._nodeLabels.delete(id);
               return;
             }
+            const text = String((pt as any).meta?.name ?? id);
             let lbl = this._nodeLabels.get(id);
+            if (lbl && lbl.text !== text) { lbl.remove(); this._nodeLabels.delete(id); lbl = undefined; }
             if (!lbl) {
-              lbl = new QELabel(id, pt, labelSvg, this, labelNodes);
+              lbl = new QELabel(text, pt, labelSvg, this, labelNodes);
               this._nodeLabels.set(id, lbl);
             } else {
               labelNodes === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();

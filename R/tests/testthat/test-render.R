@@ -228,6 +228,35 @@ test_that("qe_group intervals / conf_level / outlier", {
   expect_error(qe_group(qe_plot(model), conf_level = 2))
 })
 
+# ── qe_nodes(positions =, labels =) (0.5) ────────────────────────────────────
+
+test_that("qe_nodes(positions =) replaces node positions (all or a subset)", {
+  pos <- data.frame(code = CODES, a = 1:4 / 10, b = -(1:4) / 10)
+  p <- qe_plot(model) |> qe_nodes(positions = pos)
+  n <- qeviz:::.qe_frame_df(p$model$nodes)
+  expect_equal(n$x, pos$a)            # first two numeric columns when x / y are absent
+  expect_equal(n$y, pos$b)
+  one <- qe_plot(model) |> qe_nodes(positions = data.frame(code = "Tech", x = 9, y = 8))
+  n1 <- qeviz:::.qe_frame_df(one$model$nodes)
+  expect_equal(n1$x[n1$code == "Tech"], 9)
+  expect_equal(n1$x[n1$code == "Data"], nodes_df$x[nodes_df$code == "Data"])   # untouched
+  mat <- matrix(c(1, 2), nrow = 1, dimnames = list("Data", c("x", "y")))
+  n2 <- qeviz:::.qe_frame_df(qe_nodes(qe_plot(model), positions = mat)$model$nodes)
+  expect_equal(n2$x[n2$code == "Data"], 1)                                     # row names = codes
+  expect_error(qe_nodes(qe_plot(model), positions = data.frame(code = "Nope", x = 1, y = 1)),
+               "not in the model")
+})
+
+test_that("qe_nodes(labels =) sets display text without changing the code", {
+  p <- qe_plot(model) |> qe_nodes(labels = c(Tech = "Technology"))
+  n <- qeviz:::.qe_frame_df(p$model$nodes)
+  expect_equal(n$label[n$code == "Tech"], "Technology")
+  expect_true(is.na(n$label[n$code == "Data"]))
+  expect_equal(n$code, CODES)
+  expect_error(qe_nodes(qe_plot(model), labels = c(Nope = "x")), "not in the model")
+  expect_error(qe_nodes(qe_plot(model), labels = "unnamed"), "named character")
+})
+
 test_that("qe_points size emits a size attribute", {
   expect_match(.graph_el(qe_plot(model) |> qe_points(size = 5)),
                'size="5"', fixed = TRUE)

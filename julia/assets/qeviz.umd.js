@@ -3817,7 +3817,13 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           model.nodes.rows().forEach((row) => {
             const pt = rowToPoint(row, nodeIdCol, "#444444");
             pt.size = 2;
-            pt.meta = { ...pt.meta ?? {}, kind: "node", name: pt.ID };
+            const li = row.names.indexOf("label");
+            const lv = li >= 0 ? row[li] : null;
+            pt.meta = {
+              ...pt.meta ?? {},
+              kind: "node",
+              name: lv != null && String(lv) !== "NA" && String(lv) !== "" ? String(lv) : pt.ID
+            };
             nodeLayer.__data__.objects.set(pt.ID, pt);
           });
           if (edgesEnabled && edgeLayer && ((_l = model.edges) == null ? void 0 : _l.rows)) {
@@ -4079,7 +4085,7 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               }
             });
             model.nodes.rows().forEach((row) => {
-              var _a2, _b2;
+              var _a2, _b2, _c2;
               const codeIdx = row.names.indexOf(nodeIdCol);
               const id = codeIdx >= 0 ? String(row[codeIdx]) : "";
               if (!id) return;
@@ -4090,9 +4096,15 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 this._nodeLabels.delete(id);
                 return;
               }
+              const text = String(((_c2 = pt.meta) == null ? void 0 : _c2.name) ?? id);
               let lbl = this._nodeLabels.get(id);
+              if (lbl && lbl.text !== text) {
+                lbl.remove();
+                this._nodeLabels.delete(id);
+                lbl = void 0;
+              }
               if (!lbl) {
-                lbl = new QELabel(id, pt, labelSvg, this, labelNodes);
+                lbl = new QELabel(text, pt, labelSvg, this, labelNodes);
                 this._nodeLabels.set(id, lbl);
               } else {
                 labelNodes === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();

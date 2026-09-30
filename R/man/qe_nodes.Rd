@@ -7,7 +7,9 @@
 qe_nodes(
   p,
   show = c("auto", "always", "never"),
-  unconnected = c("dot", "hide")
+  unconnected = c("dot", "hide"),
+  positions = NULL,
+  labels = NULL
 )
 }
 \arguments{
@@ -19,6 +21,18 @@ are accepted as \code{"always"} / \code{"never"}.}
 \item{unconnected}{What to draw for nodes with no drawn edges: \code{"dot"}
 (default, a tiny dot that still marks the code's position) or \code{"hide"}
 (omit the node and its label).}
+
+\item{positions}{Node positions for this plot, replacing the model's (as
+rENA's \code{ena.plot.network(node.positions =)}): a data frame / matrix /
+\code{rotation$nodes}-like table with a code column (the model's node id
+column, \code{code}, or row names) and two numeric columns (the model's x / y
+columns when present, else the first two numeric ones). A subset of codes
+moves only those nodes. Edges, node sizes, labels and the plot extent all
+follow the new positions.}
+
+\item{labels}{Display text per code: a named character vector
+(\code{c(Technical.Constraints = "Tech. constraints")}). The code stays the
+node's identity (events, edges); only the drawn label changes.}
 }
 \value{
 The modified \code{qe_plot} object.

@@ -44,6 +44,10 @@
       out.push(row('node positions',
         missingN.length ? null : maxAbs(nodes.flatMap(([t, g]) => [t.x - g.x, t.y - g.y])),
         TOL, missingN.length ? 'missing: ' + missingN.join(', ') : ''));
+      if (!missingN.length && truth.nodes.some(t => t.label != null)) {
+        const wrong = nodes.filter(([t, g]) => (t.label ?? t.code) !== g.label).length;
+        out.push(row('node label text', wrong, 0, `${wrong} of ${nodes.length} labels differ`));
+      }
     }
 
     if (truth.edges) {
@@ -255,8 +259,12 @@
     }
     renderChecks(el, results[m.view].qeviz);
     if (m.data && m.data.edges.length) {
-      qeK[m.view] = m.data.edges.reduce((a, e) => a + e.width, 0) /
-                    m.data.edges.reduce((a, e) => a + Math.abs(e.w), 0);
+      // Width per unit weight as a fraction of the plot width (2 × extent):
+      // what <qe-graph edge-width> fixes. Plots whose layouts differ (e.g.
+      // moved nodes) have different extents but must match on screen.
+      const perW = m.data.edges.reduce((a, e) => a + e.width, 0) /
+                   m.data.edges.reduce((a, e) => a + Math.abs(e.w), 0);
+      qeK[m.view] = m.data.extent ? perW / (2 * m.data.extent) : perW;
     }
     window.__QEC_QEVIZ__ = results;
     renderScale();

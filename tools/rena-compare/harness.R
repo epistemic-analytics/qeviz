@@ -38,13 +38,17 @@ QEC_PALETTE <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
 #   points:  draw every unit point
 #   point_set:  explicit points (qeviz 0.5): list(expr | units, color, shape, name)
 #   mean_sets:  explicit means (qeviz 0.5): list of list(expr, label, color)
+#   node_positions: R expr giving a nodes table (code + dims) to draw on (0.5)
+#   node_labels:    named character, code -> display text (0.5)
 
 qec_view <- function(name, title, network = NULL, means = character(0),
                      ci = TRUE, points = FALSE, outlier = FALSE,
-                     point_set = NULL, mean_sets = NULL) {
+                     point_set = NULL, mean_sets = NULL,
+                     node_positions = NULL, node_labels = NULL) {
   list(name = name, title = title, network = network,
        means = means, ci = ci, points = points, outlier = outlier,
-       point_set = point_set, mean_sets = mean_sets)
+       point_set = point_set, mean_sets = mean_sets,
+       node_positions = node_positions, node_labels = node_labels)
 }
 
 .qec_ci <- function(view) {
@@ -91,7 +95,16 @@ qec_default_views <- function(groups) {
              mean_sets = list(list(expr = QEC_POINTS_EXPR, label = "SVD1 > 0", color = "#228833"))),
     qec_view("m_cross", "Group means with crosshair CIs", means = c(a, b), ci = "crosshairs"),
     qec_view("m_outlier", "Group means with CI + outlier intervals", means = c(a, b),
-             outlier = TRUE)
+             outlier = TRUE),
+    # ── Node overrides (qeviz 0.5 qe_nodes(positions =, labels =)) ──────────
+    qec_view("n_moved", sprintf("%s network on moved nodes (move_nodes_to_unit_circle)", a),
+             network = list(group = a), means = a,
+             node_positions = "move_nodes_to_unit_circle(set)$rotation$nodes"),
+    qec_view("n_labels", sprintf("%s network with custom node labels", a),
+             network = list(group = a),
+             node_labels = c(Technical.Constraints = "Tech. constraints",
+                             Client.and.Consultant.Requests = "Client requests",
+                             Design.Reasoning = "Design reasoning"))
   )
 }
 
@@ -179,10 +192,19 @@ qec_truth <- function(set, view, group_col) {
 
   # Code nodes are drawn only alongside a network (rENA draws them in
   # ena.plot.network(); qeviz's <qe-nodes show="auto"> does the same).
+  if (!is.null(view$node_positions)) {
+    env0 <- list2env(list(set = set), parent = globalenv())
+    moved <- as.data.frame(eval(parse(text = view$node_positions), envir = env0))
+    nodes[match(moved$code, nodes$code), dims] <- moved[, dims]
+  }
   out <- list(nodes_drawn = !is.null(view$network),
               nodes = data.frame(code = as.character(nodes$code),
                                  x = nodes[[dims[1]]], y = nodes[[dims[2]]],
                                  stringsAsFactors = FALSE))
+  if (!is.null(view$node_labels)) {
+    lab <- view$node_labels[out$nodes$code]
+    out$nodes$label <- ifelse(is.na(lab), out$nodes$code, lab)
+  }
 
   # Directed (ONA): column "A & B" is the edge A → B, drawn with its wide end
   # on B. Self-connections ("A & A") are drawn inside the node, so they are
@@ -268,9 +290,13 @@ qec_code_rena <- function(view, group_col, colors) {
                    else sprintf("c(%s)", paste(vapply(nc, .qec_q, ""), collapse = ", "))))
   } else if (!is.null(net <- view$network)) {
     a <- sprintf("colMeans(%s)", rows_of("line.weights", net$group))
+    node_args <- c(
+      if (!is.null(view$node_positions)) sprintf("  node.positions = %s,", view$node_positions),
+      if (!is.null(view$node_label_vec))
+        sprintf("  labels = %s,", paste(deparse(unname(view$node_label_vec), width.cutoff = 500L), collapse = "")))
     if (is.null(net$compare)) {
       L <- c(L, "p <- ena.plot.network(p,",
-             sprintf("  network = %s,", a),
+             sprintf("  network = %s,", a), node_args,
              sprintf("  colors  = %s)", .qec_q(colors[[net$group]])))
     } else {
       L <- c(L, "p <- ena.plot.network(p,",
@@ -354,7 +380,15 @@ QEC_REFERENCES <- list(
   )
 )
 
+# rENA's ena.plot.network(labels =) takes one label per node, in node order.
+.qec_node_labels <- function(set, map) {
+  codes <- as.character(as.data.frame(set$rotation$nodes)$code)
+  ifelse(codes %in% names(map), map[codes], codes)
+}
+
 qec_render_ref <- function(ref, set, view, group_col, colors) {
+  # rENA takes node labels as a full vector in node order: spell it out.
+  if (!is.null(view$node_labels)) view$node_label_vec <- .qec_node_labels(set, view$node_labels)
   code <- ref$code(view, group_col, colors)
   env  <- list2env(list(set = set), parent = globalenv())
   eval(parse(text = code), envir = env)
@@ -385,8 +419,11 @@ qec_extract_rena <- function(p, view, colors) {
                       !identical(t$mode, "lines"), tr)
   if (length(node_tr)) {
     t <- node_tr[[1]]
-    out$nodes <- data.frame(code = txt(t), x = num(t$x), y = num(t$y),
-                            d = num(t$marker$size), stringsAsFactors = FALSE)
+    shown <- txt(t)
+    inv <- if (is.null(view$node_labels)) NULL else stats::setNames(names(view$node_labels), view$node_labels)
+    code <- ifelse(shown %in% names(inv), inv[shown], shown)
+    out$nodes <- data.frame(code = unname(code), x = num(t$x), y = num(t$y),
+                            d = num(t$marker$size), label = shown, stringsAsFactors = FALSE)
   }
 
   # Edges: 2-point line traces whose endpoints sit on nodes.
@@ -527,6 +564,8 @@ qec_extract_adapter <- function(model, view) {
   xc    <- model$x_col; yc <- model$y_col
 
   out <- list(nodes = data.frame(code = nodes$code, x = nodes[[xc]], y = nodes[[yc]],
+                                 label = if (is.null(nodes$label)) nodes$code
+                                         else ifelse(is.na(nodes$label), nodes$code, nodes$label),
                                  stringsAsFactors = FALSE))
   if (!is.null(view$network)) {
     ecols <- names(edges)[vapply(edges, is.numeric, logical(1))]
@@ -588,6 +627,12 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
     d <- if (anyNA(m)) NA else max(abs(tn$x - gn$x[m]), abs(tn$y - gn$y[m]))
     res$nodes <- .qec_row("node positions", d, tol,
                           if (anyNA(m)) paste("missing:", paste(tn$code[is.na(m)], collapse = ", ")) else "")
+    if (!is.null(tn$label) && !anyNA(m)) {
+      got_lab <- if (is.null(gn$label)) gn$code[m] else gn$label[m]
+      wrong <- sum(tn$label != got_lab)
+      res$labels <- .qec_row("node label text", wrong, 0,
+                             sprintf("%d of %d labels differ", wrong, nrow(tn)))
+    }
   }
 
   if (!is.null(truth$edges)) {
@@ -746,6 +791,12 @@ qec_code_qe <- function(view, group_col) {
             else if (is.null(net$compare)) sprintf("  qe_edges(group = %s) |>", .qec_q(net$group))
             else sprintf("  qe_edges(group = %s, compare = %s) |>", .qec_q(net$group), .qec_q(net$compare)))
   if (isTRUE(view$points)) L <- c(L, "  qe_points() |>")
+  if (!is.null(view$node_positions) || !is.null(view$node_labels)) {
+    L <- c(L, sprintf("  qe_nodes(%s) |>", paste(c(
+      if (!is.null(view$node_positions)) sprintf("positions = %s", view$node_positions),
+      if (!is.null(view$node_labels)) sprintf("labels = %s", paste(deparse(view$node_labels), collapse = ""))),
+      collapse = ",\n           ")))
+  }
   paste(c(L, "  qe_axes() |>", '  qe_labels(nodes = "on")'), collapse = "\n")
 }
 

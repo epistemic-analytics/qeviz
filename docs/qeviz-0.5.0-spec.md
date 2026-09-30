@@ -1,6 +1,6 @@
 # qeviz 0.5.0 — spec: explicit-data inputs for rENA integration
 
-**Status:** decisions made · §1–§3 implemented (`qe_edges`, `qe_points`, `qe_group`; R + TS, verified in `tools/rena-compare`); §4–§7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
+**Status:** decisions made · §1–§4 implemented (`qe_edges`, `qe_points`, `qe_group`, `qe_nodes`; R + TS, verified in `tools/rena-compare`); §5 deferred; §6–§7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
 
 ## Why
 
@@ -218,6 +218,12 @@ qe_nodes(p, show = c("auto", "always", "never"),
 ---
 
 ## 5. `qe_trajectories()`
+
+> **Deferred** until rENA's trajectory / ETM API settles: the smoothing and
+> movie work is new (Sept 2026, tied to libqe trajectory kernels) and
+> `ena.plot.trajectory()` / `add_trajectory()` / `with_trajectory()` have open
+> bugs, so there is no stable behaviour to match yet. qeviz's existing
+> `qe_trajectories()` stays as is.
 
 ```r
 qe_trajectories(p, units = NULL,

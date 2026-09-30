@@ -19,7 +19,11 @@
     const nodes = nodesHidden ? []
       : g.getNodes().map(n => {
           const el = g.svg_element.querySelector(`circle[data-point-id="${CSS.escape(n.id)}"]`);
-          return { code: n.id, x: n.x, y: -n.y, d: el ? 2 * +el.getAttribute('r') : null };
+          // Label text actually drawn for this node (falls back to the name
+          // the read API reports if no label element is found).
+          const drawn = [...g.svg_element.querySelectorAll('text')].find(t => t.textContent === n.name);
+          return { code: n.id, x: n.x, y: -n.y, d: el ? 2 * +el.getAttribute('r') : null,
+                   label: drawn ? drawn.textContent : null };
         });
     const points = g.getPoints().map(p => ({ id: p.id, group: p.group, x: p.x, y: -p.y }));
 
@@ -117,7 +121,10 @@
         });
       });
 
-    return { nodes, points, means, edges, self };
+    // Plot half-width in model units: edge-width is a fraction of the plot
+    // width, so widths are compared across plots in plot-width units.
+    const extent = g.__data__?.extremes?.x_max ?? null;
+    return { nodes, points, means, edges, self, extent };
   }
 
   function ready(g) {
