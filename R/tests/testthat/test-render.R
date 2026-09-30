@@ -496,3 +496,11 @@ test_that("qe_group(show = FALSE) hides means; a later qe_group() restores them"
   shown <- hidden |> qe_group("OA")
   expect_match(.graph_el(shown), '<qe-means groups="OA"', fixed = TRUE)
 })
+
+test_that("qe_palette() matches the JavaScript default palette", {
+  ts <- file.path(testthat::test_path(), "..", "..", "..", "src", "elements", "QEGraph.ts")
+  skip_if_not(file.exists(ts), "TypeScript source not available")
+  src <- paste(readLines(ts, warn = FALSE), collapse = "\n")
+  block <- regmatches(src, regexpr("GROUP_PALETTE = \\[[^]]*\\]", src))
+  expect_identical(regmatches(block, gregexpr("#[0-9A-Fa-f]{6}", block))[[1]], qe_palette())
+})

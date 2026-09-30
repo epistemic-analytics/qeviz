@@ -1184,3 +1184,18 @@ qe_fragment <- function(x, height = "480px", graph_opts = list(), ...) {
   }
   invisible(path)
 }
+
+#' The default qeviz colour palette
+#'
+#' Paul Tol's "bright" scheme, the colours qeviz assigns to groups, points
+#' and networks when none are given (the same list as the JavaScript
+#' library's default). Pass a different vector to `qe_plot(palette =)`.
+#'
+#' @return A character vector of eight hex colours.
+#' @examples
+#' qe_palette()
+#' @export
+qe_palette <- function() {
+  c("#4477AA", "#EE6677", "#228833", "#CCBB44",
+    "#66CCEE", "#AA3377", "#BBBBBB", "#000000")
+}
