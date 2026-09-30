@@ -47,7 +47,7 @@ qe_model_data <- function(
     y_col       = "y",
     group_col   = "Condition"
 ) {
-  if (!is.null(points) && is.null(groups)) {
+  if (!is.null(points) && is.null(groups) && !is.null(group_col)) {
     groups <- group_summary(as.data.frame(points), x_col, y_col, group_col)
   }
   result <- list(
@@ -145,7 +145,9 @@ qe_extract <- function(
   names(edges_df) <- gsub(" & ", ".", names(edges_df), fixed = TRUE)
 
   # ── Groups (means + 95% CI) ────────────────────────────────────────────────
-  groups_df <- group_summary(points_df, dims[1], dims[2], group_col)
+  # No group column (group_col = NULL): points and networks only, no means.
+  groups_df <- if (is.null(group_col)) NULL
+               else group_summary(points_df, dims[1], dims[2], group_col)
 
   qe_model_data(
     nodes    = nodes_df,

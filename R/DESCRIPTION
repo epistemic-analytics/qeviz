@@ -1,6 +1,6 @@
 Package: qeviz
 Title: Interactive ENA / ONA Network Visualizations
-Version: 0.4.0
+Version: 0.5.0
 Authors@R: person("Cody", "Marquart", role = c("aut", "cre"),
                   email = "cody.marquart@wisc.edu")
 Description: Generates interactive Epistemic Network Analysis (ENA) and

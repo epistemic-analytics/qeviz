@@ -97,25 +97,25 @@ head(qe_units(qe_ena))
 Show both group mean networks overlaid.  Each chain call returns a new
 `qe_plot` — the original is unchanged.
 
-```{r ena-overlay, results='asis', echo=TRUE}
+```{r ena-overlay}
 p <- qe_ena |>
   qe_group() |>                                  # show all group means + CI
   qe_edges(qe_groups(qe_ena)[1],
            also = qe_groups(qe_ena)[2])          # overlay both networks
 
-htmltools::HTML(qe_fragment(p))
+p
 ```
 
 Compare groups by subtraction — positive weights favour the first group,
 negative weights favour the second:
 
-```{r ena-subtraction, results='asis', echo=TRUE}
+```{r ena-subtraction}
 p_sub <- qe_ena |>
   qe_group() |>
   qe_edges(qe_groups(qe_ena)[1],
            compare = qe_groups(qe_ena)[2])
 
-htmltools::HTML(qe_fragment(p_sub))
+p_sub
 ```
 
 ## ONA (directed)
@@ -123,12 +123,12 @@ htmltools::HTML(qe_fragment(p_sub))
 Directed edges are rendered as tapered arrows whose apex points toward the
 stronger directional contributor.
 
-```{r ona-plot, results='asis', echo=TRUE}
+```{r ona-plot}
 p_ona <- qe_ona |>
   qe_group() |>
   qe_edges(qe_groups(qe_ona)[1], also = qe_groups(qe_ona)[2])
 
-htmltools::HTML(qe_fragment(p_ona))
+p_ona
 ```
 
 ## Individual unit networks
@@ -137,7 +137,7 @@ Use `qe_units()` to list unit IDs, then pass one to `qe_edges(unit = ...)`.
 The group mean markers stay visible so the individual network can be read
 in context.
 
-```{r unit-network, results='asis', echo=TRUE}
+```{r unit-network}
 unit_id <- qe_units(qe_ena)[1]
 cat("Plotting unit:", unit_id, "\n")
 
@@ -145,20 +145,20 @@ p_unit <- qe_ena |>
   qe_group() |>             # show all group means for context
   qe_edges(unit = unit_id)  # individual edge network
 
-htmltools::HTML(qe_fragment(p_unit))
+p_unit
 ```
 
 ## Adding unit points
 
 `qe_points()` overlays the individual unit scatter dots:
 
-```{r with-points, results='asis', echo=TRUE}
+```{r with-points}
 p_pts <- qe_ena |>
   qe_group() |>
   qe_edges(qe_groups(qe_ena)[1]) |>
   qe_points()
 
-htmltools::HTML(qe_fragment(p_pts))
+p_pts
 ```
 
 ## Label control
@@ -167,14 +167,33 @@ htmltools::HTML(qe_fragment(p_pts))
 points independently.  Accepted values: `"on"`, `"off"`, `"click"`,
 `"auto"`.
 
-```{r labels, results='asis', echo=TRUE}
+```{r labels}
 p_labels <- qe_ena |>
   qe_group() |>
   qe_edges(qe_groups(qe_ena)[1]) |>
   qe_points() |>
   qe_labels(nodes = "auto", means = "on", points = "click")
 
-htmltools::HTML(qe_fragment(p_labels))
+p_labels
+```
+
+## Explicit data and plot settings (qeviz 0.5)
+
+Networks, points and means can also come straight from data, as rENA's
+`ena.plot.network()` / `ena.plot.points()` / `ena.plot.group()` take them.
+Explicit layers are drawn on the model's scales, so widths and colours stay
+comparable with the name-based plots above.
+
+```{r explicit}
+g1 <- as.matrix(ena_set$line.weights[ena_set$line.weights$Condition == qe_groups(qe_ena)[1]])
+first_half <- ena_set$points[ena_set$points$GMR1 > 0]   # means rotation: GMR1 is dimension 1
+
+qe_plot(ena_set, title = "Units with GMR1 > 0", group_col = "Condition",
+        dims = c("GMR1", "SVD2"), range = "network") |>
+  qe_edges(weights = colMeans(g1), threshold = 0.05) |>
+  qe_points(points = first_half, color = "#555555") |>
+  qe_group(points = first_half, label = "GMR1 > 0", intervals = "crosshairs") |>
+  qe_labels(nodes = "on", font_size = 13)
 ```
 
 ## Exporting standalone files

@@ -15,7 +15,8 @@ qe_group(
   intervals = c("box", "crosshairs", "none"),
   conf_level = 0.95,
   outlier = FALSE,
-  fixed_size = FALSE
+  fixed_size = FALSE,
+  show = TRUE
 )
 }
 \arguments{
@@ -52,6 +53,9 @@ per dimension). Default \code{FALSE}.}
 \item{fixed_size}{Logical. When \code{TRUE}, group mean markers keep a constant
 on-screen pixel size regardless of data extent, container size, or zoom.
 Default \code{FALSE} (markers scale with the coordinate space).}
+
+\item{show}{\code{FALSE} hides all group means (as rENA draws none unless
+asked). A later \code{qe_group()} call shows them again.}
 }
 \value{
 The modified \code{qe_plot} object.

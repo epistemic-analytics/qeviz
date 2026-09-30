@@ -489,3 +489,10 @@ test_that("qe_export_html file size is non-trivial (bundle inlined)", {
   qe_export_html(model, tmp, open = FALSE)
   expect_gt(file.size(tmp), 10000L)   # bundle alone is >> 10 kB
 })
+
+test_that("qe_group(show = FALSE) hides means; a later qe_group() restores them", {
+  hidden <- qe_plot(model) |> qe_edges("OA") |> qe_group(show = FALSE)
+  expect_false(grepl("<qe-means", .graph_el(hidden), fixed = TRUE))
+  shown <- hidden |> qe_group("OA")
+  expect_match(.graph_el(shown), '<qe-means groups="OA"', fixed = TRUE)
+})

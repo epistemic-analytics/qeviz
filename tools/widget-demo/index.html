@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>qeviz 0.5 check pages</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem 2rem; background: #f4f4f5; color: #111; }
+  h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+  .sub { color: #555; font-size: .85rem; margin: 0 0 1.25rem; line-height: 1.45; }
+  section { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+  h2 { font-size: 1rem; margin: 0 0 .4rem; }
+  p, li { font-size: .85rem; line-height: 1.45; color: #333; }
+  ul { margin: .3rem 0; padding-left: 1.2rem; }
+  a { color: #1d4ed8; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; background: #f3f4f6; padding: 0 3px; border-radius: 3px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: .6rem 0 1rem; }
+  .pair h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: #666; margin: 0 0 .3rem; }
+  .pair iframe { width: 100%; height: 480px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
+  .variant { font-size: .85rem; font-weight: 600; margin: .8rem 0 0; }
+  .variant code { font-weight: 400; }
+  .note { font-size: .8rem; color: #555; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } body { padding: 1rem; } }
+</style>
+</head>
+<body>
+<h1>qeviz 0.5 — check pages</h1>
+<p class="sub">Serve the repo root (preview config <code>demo</code>, port 7801) and open
+<code>/tools/widget-demo/</code>. Regenerate with <code>tools/rena-compare/run.R</code>,
+<code>run_ona.R</code> and <code>tools/widget-demo/render.R</code> (all take <code>RENA_SRC</code>).</p>
+
+<section>
+  <h2>1 · Accuracy reports (spec §1–§4, §6)</h2>
+  <ul>
+    <li><a href="../rena-compare/out/">rENA vs qeviz</a>: 20 views, each checked against values computed from the set. The §6 views are at the bottom (<code>d_dims</code>, <code>d_range</code>, <code>d_colors</code>, <code>d_title</code>). The 3 rENA FAILs are its own bugs, listed in the spec.</li>
+    <li><a href="../rena-compare/out-ona/">ONA vs qeviz</a>: ordered (directed) networks.</li>
+    <li><a href="../rena-compare/out/edge-width.html">Edge-width demo</a> · <a href="../rena-compare/out/mark-size.html">Mark-size demo</a></li>
+  </ul>
+  <p class="note">Open the reports with the trailing slash, or the panels won't load.</p>
+</section>
+
+<section>
+  <h2>2 · rENA <code>ena.plot.interactive()</code>: before / after (branch <code>qeviz-widget</code>)</h2>
+  <p>Left: rENA <code>main</code>, which ships its own qeviz 0.1.0 bundle. Right: the new wrapper over
+  <code>qe_plot()</code> → <code>qe_widget()</code>. Same calls, same set, each at 520 × 460.</p>
+  <div id="variants"></div>
+</section>
+
+<section>
+  <h2>3 · Vignette <code>rena-demo.Rmd</code>: before / after (spec §7)</h2>
+  <ul>
+    <li><a href="out/vignette_before.html">Before</a>: each plot pasted in with <code>htmltools::HTML(qe_fragment(p))</code>, so the bundle is inlined once per plot (1.6 MB).</li>
+    <li><a href="out/vignette.html">After</a>: each chunk just ends in the plot (<code>knit_print.qe_plot</code>), so the bundle is included once (0.7 MB). Adds an "Explicit data and plot settings" section for the 0.5 inputs.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>4 · Widget output (spec §7)</h2>
+  <ul>
+    <li><a href="out/demo.html">Knitted R Markdown</a>: two widgets on one page. The first uses 14 px Times New Roman labels (check they stay 14 px when you resize the window).</li>
+    <li><a href="out/saved.html"><code>saveWidget()</code> page</a>: self-contained, no external scripts.</li>
+    <li><b>Shiny:</b> start preview config <code>widget-shiny</code> (port 7802) and use the group selector and the subtraction checkbox.</li>
+  </ul>
+</section>
+
+<script>
+  const V = [
+    ["default",  'ena.plot.interactive(set, group_col = "Condition")',
+     "Same network. New: the FirstGame mean and CI box are drawn (the old widget drew no means)."],
+    ["subtract", 'group = "FirstGame", compare = "SecondGame"',
+     "Subtraction, with both groups' means."],
+    ["outlier",  'group = "SecondGame", outlier = TRUE',
+     "The old widget drew no means or outlier box even with outlier = TRUE. Now: mean, CI box and the Q1 − 1.5·IQR … Q3 + 1.5·IQR outlier box. The outlier box is off unless you ask for it."],
+    ["unit",     'unit = "FirstGame::steven z"',
+     "A unit's network; no means drawn."],
+    ["svd3",     'dim_cols = c("SVD1", "SVD3")',
+     "Other dimensions."],
+  ];
+  document.getElementById("variants").innerHTML = V.map(([n, call, note]) => `
+    <p class="variant">${n}: <code>${call.replace(/</g, "&lt;")}</code></p>
+    <p class="note">${note}</p>
+    <div class="pair">
+      <div><h3>Before (rENA main)</h3><iframe loading="lazy" src="out/rena/old_${n}.html"></iframe></div>
+      <div><h3>After (qeviz widget)</h3><iframe loading="lazy" src="out/rena/new_${n}.html"></iframe></div>
+    </div>`).join("");
+</script>
+</body>
+</html>

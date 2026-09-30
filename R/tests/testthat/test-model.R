@@ -153,3 +153,12 @@ test_that("qe_trajectory_units falls back to points frame", {
                      id_col = "ENA_UNIT", group_col = "Condition")
   expect_equal(sort(qe_trajectory_units(m)), sort(unique(points_df$ENA_UNIT)))
 })
+
+test_that("qe_extract(group_col = NULL) gives points and networks without groups", {
+  set <- mock_set
+  m <- qe_extract(set, group_col = NULL)
+  expect_null(m$groups)
+  expect_null(m$group_col)
+  expect_false("Condition" %in% names(m$points$data[[1]]))
+  expect_length(m$points$data, nrow(set$points))
+})

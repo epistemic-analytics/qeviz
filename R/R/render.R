@@ -58,8 +58,8 @@
   nodes_at <- length(children) + 1L
 
   # ── <qe-means> — show group means + optional CI boxes ────────────────────
-  # Omit entirely only if explicitly suppressed (not currently exposed in API;
-  # defaults to present so `qe_plot(set)` always shows group means).
+  # Present by default so `qe_plot(set)` shows group means; omitted after
+  # qe_group(show = FALSE).
   means_parts <- character(0)
   if (!is.null(opts[["groups"]]))
     means_parts <- c(means_parts, sprintf('groups="%s"', opts[["groups"]]))
@@ -73,8 +73,9 @@
   means_parts <- c(means_parts, sprintf('label="%s"', means_label))
   if (isTRUE(opts[["mean-fixed-size"]]))
     means_parts <- c(means_parts, "fixed-size")
-  children <- c(children,
-    sprintf('    <qe-means %s></qe-means>', paste(means_parts, collapse = " ")))
+  if (!isFALSE(opts[["means-show"]]))
+    children <- c(children,
+      sprintf('    <qe-means %s></qe-means>', paste(means_parts, collapse = " ")))
 
   # ── <qe-points> — unit scatter dots (only when points = TRUE) ────────────
   if (isTRUE(opts[["points"]])) {
@@ -354,6 +355,8 @@ qe_colors <- function(p, ...) {
 #' @param conf_level Confidence level of the t interval. Default 0.95.
 #' @param outlier   Also draw the outlier interval (Q1 − 1.5·IQR … Q3 + 1.5·IQR
 #'   per dimension). Default `FALSE`.
+#' @param show      `FALSE` hides all group means (as rENA draws none unless
+#'   asked). A later `qe_group()` call shows them again.
 #' @param fixed_size Logical. When `TRUE`, group mean markers keep a constant
 #'   on-screen pixel size regardless of data extent, container size, or zoom.
 #'   Default `FALSE` (markers scale with the coordinate space).
@@ -375,7 +378,13 @@ qe_colors <- function(p, ...) {
 #' @export
 qe_group <- function(p, ..., points = NULL, label = NULL, color = NULL, shape = NULL,
                      by = NULL, intervals = c("box", "crosshairs", "none"),
-                     conf_level = 0.95, outlier = FALSE, fixed_size = FALSE) {
+                     conf_level = 0.95, outlier = FALSE, fixed_size = FALSE,
+                     show = TRUE) {
+  if (!show) {
+    p$graph_opts[["means-show"]] <- FALSE
+    return(p)
+  }
+  p$graph_opts[["means-show"]] <- NULL
   requested <- c(...)   # character vector of group names, or length-0
 
   # Validate `by` against the model's group_col
