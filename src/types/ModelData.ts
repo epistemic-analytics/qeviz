@@ -37,6 +37,10 @@ export interface QEFrame {
  *             the unit id and x/y columns; `time`, `ActivityNumber`, or
  *             `RowID` supplies the playhead order when present.
  *
+ *   networks — explicit networks: one row per layer, a `name` column plus
+ *             edge columns named as in `edges`. Signed weights; drawn by
+ *             <qe-edges network="name">.
+ *
  *   groups  — pre-computed group summaries (means, CI bounds, outlier bounds).
  *             One row per group. Bounds use {x_col}.low / {x_col}.high
  *             (dot or underscore suffix both accepted).
@@ -61,6 +65,7 @@ export interface ModelData {
   points?:      QEFrame;
   trajectories?: QEFrame;
   groups?:      QEFrame;
+  networks?:    QEFrame;
   /** @deprecated use groups with bound columns instead */
   confidence?:  QEFrame;
   /** @deprecated use groups with bound columns instead */

@@ -49,8 +49,10 @@
     if (truth.edges) {
       // Directed: match source → target (the node the wide end sits on).
       const k2 = truth.directed ? (a, b) => `${a} -> ${b}` : key;
-      const hueA = hue(Q.colors[net.group]);
-      const hueB = net.compare ? hue(Q.colors[net.compare]) : null;
+      // Positive / negative colours resolved in R (explicit `colors`, else the
+      // group palette).
+      const hueA = hue(net.colors[0]);
+      const hueB = net.colors.length > 1 ? hue(net.colors[1]) : null;
       const drawn = new Map(got.edges.map(e => {
         const s = hueB == null || hueDist(hue(e.color), hueA) <= hueDist(hue(e.color), hueB) ? 1 : -1;
         return [k2(e.a, e.b), { ...e, w: s * e.w }];

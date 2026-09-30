@@ -97,14 +97,23 @@
       edge_parts <- c(edge_parts, sprintf('compare="%s"', opts[["compare"]]))
     if (!is.null(opts[["also"]]))
       edge_parts <- c(edge_parts, sprintf('also="%s"',    opts[["also"]]))
-    if (length(edge_parts) > 0 && !is.null(opts[["edge-magnify"]]))
-      edge_parts <- c(edge_parts, sprintf('magnify="%s"', opts[["edge-magnify"]]))
-    if (length(edge_parts) > 0 && !is.null(opts[["edge-color-scale"]]))
-      edge_parts <- c(edge_parts, sprintf('color-scale="%s"', opts[["edge-color-scale"]]))
-    if (length(edge_parts) > 0) {
-      children <- c(children,
-        sprintf('    <qe-edges %s></qe-edges>', paste(edge_parts, collapse = " ")))
+    # Layer attributes (0.5): colors / threshold / name for the named network,
+    # then one <qe-edges network="…"> per explicit layer.
+    attr_parts <- function(a) vapply(names(a), function(k) sprintf('%s="%s"', k, a[[k]]), "")
+    layers <- list()
+    if (length(edge_parts) > 0)
+      layers <- list(c(edge_parts, attr_parts(opts[["edge-named"]] %||% list())))
+    for (L in opts[["edge-layers"]] %||% list()) layers <- c(layers, list(attr_parts(L)))
+    # Plot-wide settings ride on the first layer.
+    if (length(layers) > 0) {
+      if (!is.null(opts[["edge-magnify"]]))
+        layers[[1]] <- c(layers[[1]], sprintf('magnify="%s"', opts[["edge-magnify"]]))
+      if (!is.null(opts[["edge-color-scale"]]))
+        layers[[1]] <- c(layers[[1]], sprintf('color-scale="%s"', opts[["edge-color-scale"]]))
     }
+    for (parts in layers)
+      children <- c(children,
+        sprintf('    <qe-edges %s></qe-edges>', paste(parts, collapse = " ")))
   }
   has_network <- any(startsWith(children, "    <qe-edges"))
 
@@ -332,11 +341,12 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 
 #' Select which edge network to draw
 #'
-#' Controls edge rendering.  Supply **either** a group name (`group`) **or** a
-#' specific unit ID (`unit`) as the primary edge source; `compare` or `also`
-#' optionally bring in a second group for subtraction or overlay.  Omitting both
-#' `group` and `unit` (or calling `qe_edges(show = FALSE)`) suppresses the edge
-#' network entirely, leaving only group means and unit points visible.
+#' Controls edge rendering.  A network is chosen **by name** — a group
+#' (`group`) or a unit (`unit`), optionally with `compare` / `also` — or given
+#' **as data** with `weights` (any vector, matrix or data frame, as rENA's
+#' `ena.plot.network()` accepts).  Name calls replace the plot's named network;
+#' `weights` calls add a layer, so repeated calls overlay.  `qe_edges(show =
+#' FALSE)` clears every network.
 #'
 #' Use [qe_units()] to inspect the unit IDs present in the model.
 #'
@@ -347,13 +357,31 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 #' @param unit    ID of a single unit whose **individual** edge network to draw
 #'   (e.g. `"FirstGame::steven z"`).  Mutually exclusive with `group`.
 #'   `compare` and `also` are not supported when `unit` is supplied.
-#' @param compare Name of a second group to subtract (`group − compare`).
-#'   Positive differences use the primary colour; negative use the secondary.
-#'   Cannot be combined with `unit`.
+#' @param weights Explicit network data: a named numeric vector (names
+#'   `"A & B"` or `"A.B"`; missing edges are 0), an unnamed vector in the
+#'   model's edge-column order, a matrix / data frame of rows (column means;
+#'   non-numeric columns are dropped, so `set$line.weights[...]` works), or a
+#'   named list of any of those (one layer each). Signed: positive weights use
+#'   `colors[1]`, negative `colors[2]`. Drawn on the model's scales — absolute
+#'   width, and colour from the model-wide range (values beyond it clamp).
+#'   Mutually exclusive with `group` / `unit`.
+#' @param compare Name of a second group to subtract (`group − compare`), or —
+#'   with `weights` — explicit data in any `weights` form, or a group name
+#'   (`weights − that group's mean`). Positive differences use the primary
+#'   colour; negative the secondary. Cannot be combined with `unit`.
 #' @param also    Name of a second group to overlay alongside `group`.
 #'   Cannot be combined with `unit`.
-#' @param show    Logical.  `FALSE` suppresses all edge rendering regardless of
-#'   other arguments.  Default `TRUE`.
+#' @param colors  `c(positive, negative)` colours for this network, or one
+#'   colour (negatives then use its complement, as in rENA). Default: the
+#'   group's palette colour(s); the first two palette colours for `weights`.
+#' @param threshold `c(min, max)`, or `min` alone: edges with |weight| < `min`
+#'   are not drawn and |weight| > `max` is capped at `max` (sign kept) — rENA's
+#'   `threshold` semantics.
+#' @param name    Label for this network layer, reported in edge events and
+#'   tooltips. Default: the group / unit name, list element names, or
+#'   `"network 1"`, `"network 2"`, ….
+#' @param show    Logical.  `FALSE` clears all networks (named and explicit).
+#'   Default `TRUE`.
 #' @param color_scale How edge weights map to colour, using webENA's ramps
 #'   (saturation 0.25–1, opacity 0.3–1). `"model"` (default) rescales from the
 #'   smallest to the largest non-zero weight anywhere in the model, so separate
@@ -380,8 +408,19 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 #' qe_plot(set) |> qe_edges("FirstGame")
 #' qe_plot(set) |> qe_edges("SecondGame")
 #'
-#' # Single group mean network
+#' # Single group mean network, by name or from data
 #' qe_plot(set) |> qe_edges("FirstGame")
+#' m <- as.matrix(set$line.weights)
+#' fg <- set$meta.data$Condition == "FirstGame"
+#' sg <- set$meta.data$Condition == "SecondGame"
+#' qe_plot(set) |> qe_edges(weights = m[fg, ])
+#'
+#' # Subtraction from data, with explicit colours
+#' qe_plot(set) |> qe_edges(weights = m[fg, ], compare = m[sg, ], colors = c("blue", "red"))
+#'
+#' # A non-group subset, thresholded
+#' qe_plot(set) |> qe_edges(weights = m[set$points$SVD1 > 0, ], threshold = 0.05,
+#'                          name = "SVD1 > 0")
 #'
 #' # Individual unit network
 #' qe_plot(set) |> qe_edges(unit = "FirstGame::steven z")
@@ -400,12 +439,15 @@ qe_group <- function(p, ..., by = NULL, intervals = TRUE, fixed_size = FALSE) {
 #' }
 #'
 #' @export
-qe_edges <- function(p, group = NULL, unit = NULL,
-                     compare = NULL, also = NULL, show = TRUE,
+qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
+                     compare = NULL, also = NULL,
+                     colors = NULL, threshold = NULL, name = NULL, show = TRUE,
                      color_scale = c("model", "plot", "absolute"), edge_width = NULL,
                      magnify = NULL) {
   if (!is.null(group) && !is.null(unit))
     stop("qe_edges(): supply either 'group' or 'unit', not both.", call. = FALSE)
+  if (!is.null(weights) && (!is.null(group) || !is.null(unit)))
+    stop("qe_edges(): supply 'weights' or a 'group' / 'unit' name, not both.", call. = FALSE)
 
   if (!show) {
     # TypeScript reads getAttribute('edges') !== 'false', so we must emit the
@@ -415,9 +457,52 @@ qe_edges <- function(p, group = NULL, unit = NULL,
     p$graph_opts$unit    <- NULL
     p$graph_opts$compare <- NULL
     p$graph_opts$also    <- NULL
+    p$graph_opts[["edge-named"]]  <- NULL
+    p$graph_opts[["edge-layers"]] <- NULL
+    p$model$networks <- NULL
     return(p)
   }
 
+  color_scale <- match.arg(color_scale)
+  if (!is.null(edge_width) && !(is.numeric(edge_width) && length(edge_width) == 1L &&
+                                is.finite(edge_width) && edge_width > 0 && edge_width <= 1))
+    stop("qe_edges(): edge_width must be a number in (0, 1].", call. = FALSE)
+  if (!is.null(magnify) && !(is.numeric(magnify) && length(magnify) == 1L &&
+                             is.finite(magnify) && magnify > 0))
+    stop("qe_edges(): magnify must be a positive number.", call. = FALSE)
+  layer_attrs <- .qe_layer_attrs(colors, threshold)
+
+  p$graph_opts$edges   <- TRUE
+  p$graph_opts[["edge-color-scale"]] <- if (color_scale == "model") NULL else color_scale
+  if (!is.null(edge_width)) p$graph_opts[["edge-width"]] <- edge_width
+  if (!is.null(magnify))    p$graph_opts[["edge-magnify"]] <- magnify
+
+  # ── Explicit data: append one layer per network ────────────────────────────
+  if (!is.null(weights)) {
+    if (!is.null(also))
+      stop("qe_edges(): 'also' takes group names; for data, pass a list to 'weights'.",
+           call. = FALSE)
+    cols <- .qe_edge_columns(p$model)
+    nets <- if (is.list(weights) && !is.data.frame(weights)) weights else list(weights)
+    base <- length(p$graph_opts[["edge-layers"]])
+    for (k in seq_along(nets)) {
+      w <- .qe_resolve_weights(nets[[k]], cols, "weights")
+      if (!is.null(compare)) {
+        w <- w - if (is.character(compare) && length(compare) == 1L)
+          .qe_group_network(p, compare, cols)
+        else .qe_resolve_weights(compare, cols, "compare")
+      }
+      lname <- if (!is.null(name) && length(nets) == 1L) name
+               else if (!is.null(names(nets)) && nzchar(names(nets)[k])) names(nets)[k]
+               else sprintf("network %d", base + k)
+      p$model$networks <- .qe_append_network(p$model$networks, lname, w)
+      p$graph_opts[["edge-layers"]] <- c(p$graph_opts[["edge-layers"]],
+        list(c(list(network = lname), layer_attrs)))
+    }
+    return(p)
+  }
+
+  # ── By name: replace the named network ─────────────────────────────────────
   available_groups <- qe_groups(p)
   available_units  <- qe_units(p)
 
@@ -431,6 +516,9 @@ qe_edges <- function(p, group = NULL, unit = NULL,
       ), call. = FALSE)
     }
   }
+  if (!is.null(compare) && !(is.character(compare) && length(compare) == 1L))
+    stop("qe_edges(): 'compare' as data needs 'weights'; with 'group' it takes a group name.",
+         call. = FALSE)
   .check_group(group,   "group")
   .check_group(compare, "compare")
   .check_group(also,    "also")
@@ -449,23 +537,81 @@ qe_edges <- function(p, group = NULL, unit = NULL,
   if (!is.null(unit) && (!is.null(compare) || !is.null(also)))
     stop("qe_edges(): 'compare' and 'also' cannot be combined with 'unit'.", call. = FALSE)
 
-  color_scale <- match.arg(color_scale)
-  if (!is.null(edge_width) && !(is.numeric(edge_width) && length(edge_width) == 1L &&
-                                is.finite(edge_width) && edge_width > 0 && edge_width <= 1))
-    stop("qe_edges(): edge_width must be a number in (0, 1].", call. = FALSE)
-  if (!is.null(magnify) && !(is.numeric(magnify) && length(magnify) == 1L &&
-                             is.finite(magnify) && magnify > 0))
-    stop("qe_edges(): magnify must be a positive number.", call. = FALSE)
-
-  p$graph_opts$edges   <- TRUE
-  p$graph_opts[["edge-color-scale"]] <- if (color_scale == "model") NULL else color_scale
-  p$graph_opts[["edge-width"]] <- edge_width
-  p$graph_opts[["edge-magnify"]] <- magnify
   p$graph_opts$group   <- group
   p$graph_opts$unit    <- unit
   p$graph_opts$compare <- compare
   p$graph_opts$also    <- also
+  p$graph_opts[["edge-named"]] <- c(if (!is.null(name)) list(name = name), layer_attrs)
   p
+}
+
+# ── Explicit-network helpers ────────────────────────────────────────────────
+
+# Edge columns of the model: every "A.B" column of the edges frame whose parts
+# are both node codes (ONA includes the self-connections "A.A").
+.qe_edge_columns <- function(model) {
+  codes <- vapply(model$nodes$data, function(r) as.character(r[[model$node_id_col]]), "")
+  pairs <- as.vector(outer(codes, codes, paste, sep = "."))
+  intersect(names(model$edges$types), pairs)
+}
+
+.qe_norm_names <- function(x) gsub(" & ", ".", x, fixed = TRUE)
+
+# Any rENA-style network input → a numeric vector named by `cols`.
+.qe_resolve_weights <- function(x, cols, arg) {
+  if (is.data.frame(x) || is.matrix(x)) {
+    df <- as.data.frame(x, check.names = FALSE)
+    df <- df[, vapply(df, is.numeric, logical(1)), drop = FALSE]
+    x  <- colMeans(as.matrix(df))
+    if (is.null(names(x)) && length(x) == length(cols)) names(x) <- cols
+  }
+  if (!is.numeric(x))
+    stop(sprintf("qe_edges(): '%s' must be numeric (vector, matrix or data frame).", arg),
+         call. = FALSE)
+  if (is.null(names(x))) {
+    if (length(x) != length(cols))
+      stop(sprintf("qe_edges(): unnamed '%s' has %d values; the model has %d edge columns.",
+                   arg, length(x), length(cols)), call. = FALSE)
+    names(x) <- cols
+  }
+  names(x) <- .qe_norm_names(names(x))
+  unknown <- setdiff(names(x), cols)
+  if (length(unknown))
+    stop(sprintf("qe_edges(): '%s' has edges not in the model: %s\nExamples of valid names: %s",
+                 arg, paste(head(unknown, 3), collapse = ", "),
+                 paste(head(cols, 3), collapse = ", ")), call. = FALSE)
+  out <- stats::setNames(numeric(length(cols)), cols)
+  out[names(x)] <- as.numeric(x)
+  out
+}
+
+# A group's mean network from the model's edges frame (for `compare = "B"`).
+.qe_group_network <- function(p, group, cols) {
+  gcol <- p$model$group_col
+  rows <- Filter(function(r) identical(as.character(r[[gcol]]), group), p$model$edges$data)
+  if (!length(rows))
+    stop(sprintf("qe_edges(): compare = %s not found in model.", dQuote(group)), call. = FALSE)
+  colMeans(do.call(rbind, lapply(rows, function(r) unlist(r[cols]))))
+}
+
+.qe_append_network <- function(frame, name, w) {
+  row <- c(list(name = name), as.list(w))
+  if (is.null(frame)) {
+    types <- c(list(name = "character"), stats::setNames(as.list(rep("numeric", length(w))), names(w)))
+    return(list(data = list(row), types = types))
+  }
+  frame$data <- c(Filter(function(r) !identical(r$name, name), frame$data), list(row))
+  frame
+}
+
+.qe_layer_attrs <- function(colors, threshold) {
+  if (!is.null(colors) && !(is.character(colors) && length(colors) %in% 1:2))
+    stop("qe_edges(): colors must be one or two colours.", call. = FALSE)
+  if (!is.null(threshold) && !(is.numeric(threshold) && length(threshold) %in% 1:2 &&
+                               all(is.finite(threshold)) && all(threshold >= 0)))
+    stop("qe_edges(): threshold must be c(min, max) or min, non-negative.", call. = FALSE)
+  c(if (!is.null(colors)) list(colors = paste(colors, collapse = ",")),
+    if (!is.null(threshold)) list(threshold = paste(threshold, collapse = ",")))
 }
 
 #' Show or hide unit points

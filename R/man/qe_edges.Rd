@@ -8,8 +8,12 @@ qe_edges(
   p,
   group = NULL,
   unit = NULL,
+  weights = NULL,
   compare = NULL,
   also = NULL,
+  colors = NULL,
+  threshold = NULL,
+  name = NULL,
   show = TRUE,
   color_scale = c("model", "plot", "absolute"),
   edge_width = NULL,
@@ -27,15 +31,37 @@ Must match a value in the model's group column.  Mutually exclusive with
 (e.g. \code{"FirstGame::steven z"}).  Mutually exclusive with \code{group}.
 \code{compare} and \code{also} are not supported when \code{unit} is supplied.}
 
-\item{compare}{Name of a second group to subtract (\verb{group − compare}).
-Positive differences use the primary colour; negative use the secondary.
-Cannot be combined with \code{unit}.}
+\item{weights}{Explicit network data: a named numeric vector (names
+\code{"A & B"} or \code{"A.B"}; missing edges are 0), an unnamed vector in the
+model's edge-column order, a matrix / data frame of rows (column means;
+non-numeric columns are dropped, so \code{set$line.weights[...]} works), or a
+named list of any of those (one layer each). Signed: positive weights use
+\code{colors[1]}, negative \code{colors[2]}. Drawn on the model's scales — absolute
+width, and colour from the model-wide range (values beyond it clamp).
+Mutually exclusive with \code{group} / \code{unit}.}
+
+\item{compare}{Name of a second group to subtract (\verb{group − compare}), or —
+with \code{weights} — explicit data in any \code{weights} form, or a group name
+(\verb{weights − that group's mean}). Positive differences use the primary
+colour; negative the secondary. Cannot be combined with \code{unit}.}
 
 \item{also}{Name of a second group to overlay alongside \code{group}.
 Cannot be combined with \code{unit}.}
 
-\item{show}{Logical.  \code{FALSE} suppresses all edge rendering regardless of
-other arguments.  Default \code{TRUE}.}
+\item{colors}{\code{c(positive, negative)} colours for this network, or one
+colour (negatives then use its complement, as in rENA). Default: the
+group's palette colour(s); the first two palette colours for \code{weights}.}
+
+\item{threshold}{\code{c(min, max)}, or \code{min} alone: edges with |weight| < \code{min}
+are not drawn and |weight| > \code{max} is capped at \code{max} (sign kept) — rENA's
+\code{threshold} semantics.}
+
+\item{name}{Label for this network layer, reported in edge events and
+tooltips. Default: the group / unit name, list element names, or
+\code{"network 1"}, \code{"network 2"}, ….}
+
+\item{show}{Logical.  \code{FALSE} clears all networks (named and explicit).
+Default \code{TRUE}.}
 
 \item{color_scale}{How edge weights map to colour, using webENA's ramps
 (saturation 0.25–1, opacity 0.3–1). \code{"model"} (default) rescales from the
@@ -60,11 +86,11 @@ same reason). \code{NULL} (default) means no magnification and no label.}
 The modified \code{qe_plot} object.
 }
 \description{
-Controls edge rendering.  Supply \strong{either} a group name (\code{group}) \strong{or} a
-specific unit ID (\code{unit}) as the primary edge source; \code{compare} or \code{also}
-optionally bring in a second group for subtraction or overlay.  Omitting both
-\code{group} and \code{unit} (or calling \code{qe_edges(show = FALSE)}) suppresses the edge
-network entirely, leaving only group means and unit points visible.
+Controls edge rendering.  A network is chosen \strong{by name} — a group
+(\code{group}) or a unit (\code{unit}), optionally with \code{compare} / \code{also} — or given
+\strong{as data} with \code{weights} (any vector, matrix or data frame, as rENA's
+\code{ena.plot.network()} accepts).  Name calls replace the plot's named network;
+\code{weights} calls add a layer, so repeated calls overlay.  \code{qe_edges(show = FALSE)} clears every network.
 }
 \details{
 Use \code{\link[=qe_units]{qe_units()}} to inspect the unit IDs present in the model.
@@ -76,8 +102,19 @@ Use \code{\link[=qe_units]{qe_units()}} to inspect the unit IDs present in the m
 qe_plot(set) |> qe_edges("FirstGame")
 qe_plot(set) |> qe_edges("SecondGame")
 
-# Single group mean network
+# Single group mean network, by name or from data
 qe_plot(set) |> qe_edges("FirstGame")
+m <- as.matrix(set$line.weights)
+fg <- set$meta.data$Condition == "FirstGame"
+sg <- set$meta.data$Condition == "SecondGame"
+qe_plot(set) |> qe_edges(weights = m[fg, ])
+
+# Subtraction from data, with explicit colours
+qe_plot(set) |> qe_edges(weights = m[fg, ], compare = m[sg, ], colors = c("blue", "red"))
+
+# A non-group subset, thresholded
+qe_plot(set) |> qe_edges(weights = m[set$points$SVD1 > 0, ], threshold = 0.05,
+                         name = "SVD1 > 0")
 
 # Individual unit network
 qe_plot(set) |> qe_edges(unit = "FirstGame::steven z")

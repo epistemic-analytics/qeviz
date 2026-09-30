@@ -29,6 +29,9 @@ QEC_PALETTE <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
 #
 # A view describes *what* to draw; both renderers are built from the same spec.
 #   network: NULL | list(group = "A") | list(group = "A", compare = "B")
+#            | list(weights = "<R expr>", compare = "<R expr>", colors = c(pos, neg),
+#                   threshold = min, name = "…")   — explicit data (qeviz 0.5):
+#            the same expression is drawn by both renderers and used for truth.
 #   means:   character vector of groups whose mean (+ CI) to show
 #   ci:      draw 95% CI boxes around the means
 #   points:  draw every unit point
@@ -53,9 +56,26 @@ qec_default_views <- function(groups) {
     qec_view("means_noci", "Both group means, intervals off",
              means = c(a, b), ci = FALSE),
     qec_view("points", "All unit points + group means",
-             means = c(a, b), points = TRUE)
+             means = c(a, b), points = TRUE),
+    # ── Explicit data (qeviz 0.5 qe_edges(weights =)) ───────────────────────
+    qec_view("w_group", sprintf("%s network from data (weights = matrix)", a),
+             network = list(weights = .qec_rows("line.weights", a),
+                            colors = QEC_PALETTE[1]), means = a),
+    qec_view("w_sub", sprintf("Subtraction from data: weights = %s, compare = %s", a, b),
+             network = list(weights = .qec_rows("line.weights", a),
+                            compare = .qec_rows("line.weights", b),
+                            colors = c("#386CB0", "#F0027F")), means = c(a, b)),
+    qec_view("w_subset", "Non-group subset (units with SVD1 > 0), threshold 0.05",
+             network = list(weights = QEC_SUBSET_EXPR, colors = "#228833",
+                            threshold = 0.05, name = "SVD1 > 0"))
   )
 }
+
+# A subset that is not a group — only expressible with explicit data.
+QEC_SUBSET_EXPR <- "as.matrix(set$line.weights)[as.data.frame(set$points)$SVD1 > 0, ]"
+
+.qec_rows <- function(frame, g, group_col = "Condition")
+  sprintf("as.matrix(set$%s[%s == %s])", frame, group_col, deparse(g))
 
 # ONA: networks only. ona::units() cannot draw means or points for models from
 # the current accumulate() (it filters on an ENA_DIRECTION column those models
@@ -66,7 +86,10 @@ qec_default_views_ona <- function(groups) {
     qec_view("net_a", sprintf("%s mean network", a), network = list(group = a)),
     qec_view("net_b", sprintf("%s mean network", b), network = list(group = b)),
     qec_view("subtract", sprintf("Subtraction: %s − %s", a, b),
-             network = list(group = a, compare = b))
+             network = list(group = a, compare = b)),
+    qec_view("w_subset", "Non-group subset from data (units with SVD1 > 0)",
+             network = list(weights = QEC_SUBSET_EXPR, colors = "#228833",
+                            name = "SVD1 > 0"))
   )
 }
 
@@ -87,6 +110,16 @@ qec_default_views_ona <- function(groups) {
 
 .qec_network <- function(set, spec, group_col) {
   if (is.null(spec)) return(NULL)
+  if (!is.null(spec$weights)) {
+    env <- list2env(list(set = set), parent = globalenv())
+    ev  <- function(e) {
+      x <- eval(parse(text = e), envir = env)
+      if (is.matrix(x) || is.data.frame(x)) colMeans(as.matrix(x)) else x
+    }
+    net <- ev(spec$weights)
+    if (!is.null(spec$compare)) net <- net - ev(spec$compare)
+    return(net)
+  }
   m <- .qec_edge_matrix(set)
   grp <- as.character(as.data.frame(set$meta.data)[[group_col]])
   net <- colMeans(m[grp == spec$group, , drop = FALSE])
@@ -99,6 +132,13 @@ qec_default_views_ona <- function(groups) {
   parts <- strsplit(names, " & ", fixed = TRUE)
   data.frame(a = vapply(parts, `[`, "", 1), b = vapply(parts, `[`, "", 2),
              stringsAsFactors = FALSE)
+}
+
+# Positive / negative colours of a network spec: explicit `colors`, else the
+# group palette (as both renderers default).
+.qec_net_colors <- function(net, colors) {
+  if (!is.null(net$colors)) return(net$colors)
+  c(colors[[net$group]], if (!is.null(net$compare)) colors[[net$compare]])
 }
 
 qec_group_colors <- function(set, group_col) {
@@ -128,8 +168,9 @@ qec_truth <- function(set, view, group_col) {
   if (!is.null(net)) {
     e <- .qec_split_pairs(names(net))
     e$w <- unname(net)
-    # Neither renderer draws a zero-weight edge; don't expect one.
-    e <- e[abs(e$w) > 1e-6, , drop = FALSE]
+    # Neither renderer draws a zero-weight edge (or one below the threshold).
+    thr <- if (is.null(view$network$threshold)) 1e-6 else max(1e-6, view$network$threshold[1])
+    e <- e[abs(e$w) >= thr, , drop = FALSE]
     self <- e$a == e$b
     if (out$directed && any(self))
       out$self <- data.frame(code = e$a[self], w = e$w[self], stringsAsFactors = FALSE)
@@ -173,7 +214,15 @@ qec_code_rena <- function(view, group_col, colors) {
   rows_of <- function(frame, g) sprintf("as.matrix(set$%s[%s == %s])", frame, gc, .qec_q(g))
   L   <- sprintf("p <- ena.plot(set, title = %s)", .qec_q(view$title))
 
-  if (!is.null(net <- view$network)) {
+  if (!is.null(net <- view$network) && !is.null(net$weights)) {
+    nc <- .qec_net_colors(net, colors)
+    L <- c(L, "p <- ena.plot.network(p,",
+           sprintf("  network = colMeans(%s)%s,", net$weights,
+                   if (is.null(net$compare)) "" else sprintf(" -\n            colMeans(%s)", net$compare)),
+           if (!is.null(net$threshold)) sprintf("  threshold = c(%s),", paste(net$threshold, collapse = ", ")),
+           sprintf("  colors  = %s)", if (length(nc) == 1) .qec_q(nc)
+                   else sprintf("c(%s)", paste(vapply(nc, .qec_q, ""), collapse = ", "))))
+  } else if (!is.null(net <- view$network)) {
     a <- sprintf("colMeans(%s)", rows_of("line.weights", net$group))
     if (is.null(net$compare)) {
       L <- c(L, "p <- ena.plot.network(p,",
@@ -211,9 +260,13 @@ qec_code_ona <- function(view, group_col, colors) {
   gc  <- .qec_sym(group_col)
   net <- view$network
   mean_of <- function(g) sprintf("colMeans(as.matrix(set$line.weights[%s == %s]))", gc, .qec_q(g))
-  cols <- if (is.null(net$compare)) .qec_q(colors[[net$group]])
-          else sprintf("c(%s, %s)", .qec_q(colors[[net$group]]), .qec_q(colors[[net$compare]]))
-  L <- if (is.null(net$compare)) sprintf("w <- %s", mean_of(net$group))
+  nc   <- .qec_net_colors(net, colors)
+  cols <- if (length(nc) == 1) .qec_q(nc)
+          else sprintf("c(%s)", paste(vapply(nc, .qec_q, ""), collapse = ", "))
+  L <- if (!is.null(net$weights))
+         c(sprintf("w <- colMeans(%s)%s", net$weights,
+                   if (is.null(net$compare)) "" else sprintf(" -\n     colMeans(%s)", net$compare)))
+       else if (is.null(net$compare)) sprintf("w <- %s", mean_of(net$group))
        else c(sprintf("w <- %s -", mean_of(net$group)), sprintf("     %s", mean_of(net$compare)))
   L <- c(L,
     sprintf("p <- plot(set, title = %s) |>", .qec_q(view$title)),
@@ -282,14 +335,16 @@ qec_extract_rena <- function(p, view, colors) {
   # Edges: 2-point line traces whose endpoints sit on nodes.
   # Default ena.plot.network (scale.weights = FALSE): width = |w| * multiplier.
   if (!is.null(view$network) && !is.null(out$nodes)) {
-    hue_a <- .qec_hue(colors[[view$network$group]])
-    hue_b <- if (!is.null(view$network$compare)) .qec_hue(colors[[view$network$compare]])
+    nc    <- .qec_net_colors(view$network, colors)
+    hue_a <- .qec_hue(nc[1])
+    hue_b <- if (length(nc) > 1) .qec_hue(nc[2])
     at_node <- function(x, y) {
       d <- abs(out$nodes$x - x) + abs(out$nodes$y - y)
       if (min(d) < 1e-9) out$nodes$code[which.min(d)] else NA_character_
     }
     rows <- lapply(tr, function(t) {
-      if (!identical(t$mode, "lines") || length(t$x) != 2 || is.null(t$line$width)) return(NULL)
+      if (!identical(t$mode, "lines") || length(t$x) != 2 || is.null(t$line$width) ||
+          !(t$line$width > 0)) return(NULL)
       x <- num(t$x); y <- num(t$y)
       a <- at_node(x[1], y[1]); b <- at_node(x[2], y[2])
       if (is.na(a) || is.na(b)) return(NULL)
@@ -364,8 +419,9 @@ qec_extract_ona <- function(p, view, colors, set) {
 
   # Directed edges: wide end → the node it sits on (b); the apex points back
   # toward the other node (a). Width is ona's base width, weight × multiplier(1).
-  hue_a <- .qec_hue(colors[[view$network$group]])
-  hue_b <- if (!is.null(view$network$compare)) .qec_hue(colors[[view$network$compare]])
+  nc    <- .qec_net_colors(view$network, colors)
+  hue_a <- .qec_hue(nc[1])
+  hue_b <- if (length(nc) > 1) .qec_hue(nc[2])
   rows <- lapply(shapes[type == "path"], function(s) {
     n <- as.numeric(regmatches(s$path, gregexpr("-?[0-9.]+(e[-+]?[0-9]+)?", s$path))[[1]])
     if (length(n) < 10) return(NULL)
@@ -407,9 +463,15 @@ qec_extract_adapter <- function(model, view) {
                                  stringsAsFactors = FALSE))
   if (!is.null(view$network)) {
     ecols <- names(edges)[vapply(edges, is.numeric, logical(1))]
-    wmean <- function(g) colMeans(as.matrix(edges[edges[[gcol]] == g, ecols, drop = FALSE]))
-    net <- wmean(view$network$group)
-    if (!is.null(view$network$compare)) net <- net - wmean(view$network$compare)
+    if (!is.null(view$network$weights)) {
+      # Explicit layer: the row qe_edges(weights =) wrote to the networks frame.
+      nrow1 <- model$networks$data[[1]]
+      net <- vapply(ecols, function(k) as.numeric(nrow1[[k]] %||% NA_real_), 0)
+    } else {
+      wmean <- function(g) colMeans(as.matrix(edges[edges[[gcol]] == g, ecols, drop = FALSE]))
+      net <- wmean(view$network$group)
+      if (!is.null(view$network$compare)) net <- net - wmean(view$network$compare)
+    }
     out$edges <- data.frame(col = ecols, w = unname(net), stringsAsFactors = FALSE)
   }
   g <- grps[grps[[gcol]] %in% view$means, , drop = FALSE]
@@ -582,7 +644,14 @@ qec_code_qe <- function(view, group_col) {
     L <- c(L, sprintf("  qe_group(%s) |>", means))
   }
   net <- view$network
+  arg <- function(k, v) if (is.null(v)) NULL else sprintf("%s = %s", k, v)
   L <- c(L, if (is.null(net)) "  qe_edges(show = FALSE) |>"
+            else if (!is.null(net$weights)) sprintf("  qe_edges(%s) |>", paste(c(
+              arg("weights", net$weights), arg("compare", net$compare),
+              arg("colors", if (is.null(net$colors)) NULL else if (length(net$colors) == 1) .qec_q(net$colors)
+                            else sprintf("c(%s)", paste(vapply(net$colors, .qec_q, ""), collapse = ", "))),
+              arg("threshold", net$threshold), arg("name", if (is.null(net$name)) NULL else .qec_q(net$name))),
+              collapse = ",\n           "))
             else if (is.null(net$compare)) sprintf("  qe_edges(group = %s) |>", .qec_q(net$group))
             else sprintf("  qe_edges(group = %s, compare = %s) |>", .qec_q(net$group), .qec_q(net$compare)))
   if (isTRUE(view$points)) L <- c(L, "  qe_points() |>")
@@ -671,7 +740,9 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
     versions = list(ref = as.character(utils::packageVersion(ref_pkg)),
                     qeviz = as.character(utils::packageVersion("qeviz"))),
     views = lapply(results, function(r) list(
-      name = r$view$name, title = r$view$title, network = r$view$network,
+      name = r$view$name, title = r$view$title,
+      network = if (is.null(r$view$network)) NULL
+                else c(r$view$network, list(colors = as.list(.qec_net_colors(r$view$network, colors)))),
       code = r$code, truth = r$truth, rena_k = r$rena_k,
       rena = r$checks$rena, adapter = r$checks$adapter))
   )

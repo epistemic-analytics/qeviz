@@ -87,6 +87,78 @@ test_that("qe_edges magnify emits the attribute (including 1)", {
   expect_error(qe_edges(qe_plot(model), "OA", magnify = 0))
 })
 
+# ── qe_edges(weights =) — explicit networks (0.5) ─────────────────────────────
+
+.edge_cols <- function() qeviz:::.qe_edge_columns(model)
+
+test_that("qe_edges(weights =) accepts a matrix and adds a networks row", {
+  m <- as.matrix(edges_df[edges_df$Condition == "OA", EDGE_COLS])
+  p <- qe_plot(model) |> qe_edges(weights = m)
+  expect_length(p$model$networks$data, 1)
+  row <- p$model$networks$data[[1]]
+  expect_equal(row$name, "network 1")
+  expect_equal(unlist(row[EDGE_COLS]), colMeans(m))
+  expect_match(.graph_el(p), '<qe-edges network="network 1">', fixed = TRUE)
+})
+
+test_that("qe_edges(weights =) accepts named ('A & B' or 'A.B') and unnamed vectors", {
+  cols <- .edge_cols()
+  v <- stats::setNames(seq_along(cols) / 10, gsub(".", " & ", cols, fixed = TRUE))
+  a <- qe_plot(model) |> qe_edges(weights = v)
+  b <- qe_plot(model) |> qe_edges(weights = unname(v))
+  expect_equal(a$model$networks$data[[1]][cols], b$model$networks$data[[1]][cols])
+  # a named subset fills the rest with 0
+  s1 <- qe_plot(model) |> qe_edges(weights = c(Data.Design = 0.4))
+  expect_equal(s1$model$networks$data[[1]]$Data.Design, 0.4)
+  expect_equal(s1$model$networks$data[[1]]$Tech.Collab, 0)
+})
+
+test_that("qe_edges(weights =) validates names and lengths", {
+  expect_error(qe_edges(qe_plot(model), weights = c(Nope.Data = 1)), "not in the model")
+  expect_error(qe_edges(qe_plot(model), weights = c(1, 2)), "edge columns")
+  expect_error(qe_edges(qe_plot(model), "OA", weights = c(Data.Design = 1)), "not both")
+})
+
+test_that("qe_edges compare works with data or a group name alongside weights", {
+  oa <- as.matrix(edges_df[edges_df$Condition == "OA", EDGE_COLS])
+  ob <- as.matrix(edges_df[edges_df$Condition == "OB", EDGE_COLS])
+  d1 <- qe_plot(model) |> qe_edges(weights = oa, compare = ob)
+  d2 <- qe_plot(model) |> qe_edges(weights = oa, compare = "OB")
+  d3 <- qe_plot(model) |> qe_edges(weights = colMeans(oa) - colMeans(ob))
+  w  <- function(p) unlist(p$model$networks$data[[1]][EDGE_COLS])
+  expect_equal(w(d1), colMeans(oa) - colMeans(ob))
+  expect_equal(w(d2), w(d1))
+  expect_equal(w(d3), w(d1))
+  expect_error(qe_edges(qe_plot(model), "OA", compare = ob), "needs 'weights'")
+})
+
+test_that("qe_edges weights calls append layers; a list adds one per element", {
+  oa <- as.matrix(edges_df[edges_df$Condition == "OA", EDGE_COLS])
+  p  <- qe_plot(model) |> qe_edges(weights = list(A = oa, B = oa * 2))
+  expect_equal(vapply(p$model$networks$data, `[[`, "", "name"), c("A", "B"))
+  p2 <- p |> qe_edges(weights = oa, name = "C")
+  expect_length(p2$model$networks$data, 3)
+  g  <- .graph_el(p2)
+  expect_equal(lengths(regmatches(g, gregexpr("<qe-edges ", g))), 3)
+  expect_null(qe_edges(p2, show = FALSE)$model$networks)
+})
+
+test_that("qe_edges colors / threshold / name reach the element (named and explicit)", {
+  g <- .graph_el(qe_plot(model) |> qe_edges("OA", colors = c("blue", "red"),
+                                              threshold = c(0.05, 0.5), name = "A net"))
+  expect_match(g, 'group="OA" name="A net" colors="blue,red" threshold="0.05,0.5"', fixed = TRUE)
+  g2 <- .graph_el(qe_plot(model) |> qe_edges(weights = c(Data.Design = 1), colors = "blue"))
+  expect_match(g2, '<qe-edges network="network 1" colors="blue">', fixed = TRUE)
+  expect_error(qe_edges(qe_plot(model), "OA", threshold = -1))
+  expect_error(qe_edges(qe_plot(model), "OA", colors = c("a", "b", "c")))
+})
+
+test_that("a named network and explicit layers coexist", {
+  g <- .graph_el(qe_plot(model) |> qe_edges("OA") |> qe_edges(weights = c(Data.Design = 1)))
+  expect_match(g, '<qe-edges group="OA"></qe-edges>', fixed = TRUE)
+  expect_match(g, '<qe-edges network="network 1"></qe-edges>', fixed = TRUE)
+})
+
 test_that("qe_points size emits a size attribute", {
   expect_match(.graph_el(qe_plot(model) |> qe_points(size = 5)),
                'size="5"', fixed = TRUE)

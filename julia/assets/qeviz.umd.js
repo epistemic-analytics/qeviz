@@ -362,6 +362,14 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     set trajectories(v) {
       this._trajectories = v;
     }
+    /** Explicit networks (one row per named layer, edge columns as in `edges`),
+     *  drawn by <qe-edges network="name">. */
+    get networks() {
+      return this._networks;
+    }
+    set networks(v) {
+      this._networks = v;
+    }
     get dimensions() {
       return this._dimensions;
     }
@@ -474,14 +482,16 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
      */
     setModelData(data) {
       var _a, _b, _c, _d;
-      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier", "trajectories"];
+      const frameKeys = ["nodes", "edges", "points", "groups", "confidence", "outlier", "trajectories", "networks"];
       frameKeys.forEach((name) => {
         var _a2;
         const raw = data[name];
         if (!((_a2 = raw == null ? void 0 : raw.data) == null ? void 0 : _a2.length)) return;
         const rows = raw.data, types = raw.types || {}, colNames = Object.keys(rows[0]), colValues = rows.map((v) => Object.values(v)), classes = colNames.map((col) => types[col] ?? "character");
         let idCol;
-        if (name === "nodes") {
+        if (name === "networks") {
+          idCol = "name";
+        } else if (name === "nodes") {
           idCol = data.node_id_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
         } else if (name === "edges" || name === "points" || name === "trajectories") {
           idCol = data.id_col ?? colNames.find((c) => (types[c] ?? "character") === "character");
@@ -3188,6 +3198,30 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
     return { x_low: xLow, x_high: xHigh, y_low: yLow, y_high: yHigh };
   }
   __name(readIntervalBounds, "readIntervalBounds");
+  function parseEdgeLayer(el) {
+    var _a, _b;
+    const a = /* @__PURE__ */ __name((k) => el.getAttribute(k), "a");
+    const cols = ((_a = a("colors")) == null ? void 0 : _a.split(",").map((c) => c.trim()).filter(Boolean)) ?? [];
+    const thr = ((_b = a("threshold")) == null ? void 0 : _b.split(",").map(Number).filter(Number.isFinite)) ?? [];
+    return {
+      group: a("group"),
+      unit: a("unit"),
+      compare: a("compare"),
+      also: a("also"),
+      network: a("network"),
+      colors: cols.length ? [cols[0], cols[1] ?? null] : null,
+      threshold: thr.length ? [thr[0], thr.length > 1 ? thr[1] : Infinity] : null,
+      name: a("name")
+    };
+  }
+  __name(parseEdgeLayer, "parseEdgeLayer");
+  function complementColor(hex) {
+    const { r, g, b } = Color.parseColor(hex);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const f = /* @__PURE__ */ __name((c) => (mx + mn - c).toString(16).padStart(2, "0"), "f");
+    return `#${f(r)}${f(g)}${f(b)}`;
+  }
+  __name(complementColor, "complementColor");
   function parseColorScale(attr) {
     const a = attr == null ? void 0 : attr.trim().toLowerCase();
     return a === "plot" || a === "absolute" ? a : "model";
@@ -3730,38 +3764,75 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
               const color = groupOfUnit ? groupColorMap[groupOfUnit] ?? "#888888" : "#888888";
               return { weights: getUnitEdges(id), color, label: id };
             }, "resolve");
-            const unitAttr = config.edgeUnit;
-            const groupAttr = config.edgeGroup;
-            const compareAttr = config.edgeCompare;
-            const alsoAttr = config.edgeAlso;
-            const primaryId = unitAttr ?? groupAttr ?? null;
-            const primary = primaryId ? resolve(primaryId) : null;
-            const secondaryId = compareAttr ?? alsoAttr ?? null;
-            const secondary = secondaryId ? resolve(secondaryId) : null;
-            const isSubtract = !!compareAttr;
-            const isOverlay = !!alsoAttr;
             const drawEdges = [];
-            if (primary && (isSubtract || isOverlay) && secondary) {
-              if (isSubtract) {
+            const networkRow = /* @__PURE__ */ __name((name) => {
+              var _a2;
+              const frame = model.networks;
+              const row = (_a2 = frame == null ? void 0 : frame.rows) == null ? void 0 : _a2.call(frame).find((r) => r.rowName === name);
+              if (!row) return null;
+              const w = {};
+              edgePairs.forEach(({ col }) => {
+                const i = row.names.indexOf(col);
+                if (i >= 0) {
+                  const v = Number(row[i]);
+                  if (Number.isFinite(v)) w[col] = v;
+                }
+              });
+              return w;
+            }, "networkRow");
+            const thresholded = /* @__PURE__ */ __name((w, thr) => {
+              if (!thr) return w;
+              const a = Math.abs(w);
+              if (a < thr[0]) return 0;
+              return a > thr[1] ? Math.sign(w) * thr[1] : w;
+            }, "thresholded");
+            config.edgeLayers.forEach((L, li) => {
+              const push = /* @__PURE__ */ __name((col, pair, w, color, meta2) => {
+                w = thresholded(w, L.threshold);
+                if (Math.abs(w) < 1e-6) return;
+                drawEdges.push({ col: `${li}:${col}`, pair, weight: Math.abs(w), color, layer: li, ...meta2 });
+              }, "push");
+              const signColors = /* @__PURE__ */ __name((pos2, neg2) => {
+                if (!L.colors) return [pos2, neg2];
+                return [L.colors[0], L.colors[1] ?? complementColor(L.colors[0])];
+              }, "signColors");
+              if (L.network) {
+                const w = networkRow(L.network);
+                if (!w) return;
+                const [pos2, neg2] = signColors(GROUP_PALETTE[0], GROUP_PALETTE[1]);
+                const meta2 = { name: L.name ?? L.network };
                 edgePairs.forEach(({ col, pair }) => {
-                  const diff = (primary.weights[col] ?? 0) - (secondary.weights[col] ?? 0);
-                  if (Math.abs(diff) < 1e-6) return;
-                  drawEdges.push({ col, pair, weight: Math.abs(diff), color: diff > 0 ? primary.color : secondary.color });
+                  const v = w[col] ?? 0;
+                  push(col, pair, v, v >= 0 ? pos2 : neg2, meta2);
+                });
+                return;
+              }
+              const primaryId = L.unit ?? L.group ?? null;
+              if (!primaryId) return;
+              const primary = resolve(primaryId);
+              const secondaryId = L.compare ?? L.also ?? null;
+              const secondary = secondaryId ? resolve(secondaryId) : null;
+              const meta = { name: L.name ?? primaryId, group: L.group ?? void 0, unit: L.unit ?? void 0 };
+              const [pos, neg] = signColors(primary.color, (secondary == null ? void 0 : secondary.color) ?? primary.color);
+              if (secondary && L.compare) {
+                edgePairs.forEach(({ col, pair }) => {
+                  const d = (primary.weights[col] ?? 0) - (secondary.weights[col] ?? 0);
+                  push(col, pair, d, d > 0 ? pos : neg, meta);
+                });
+              } else if (secondary && L.also) {
+                edgePairs.forEach(({ col, pair }) => {
+                  const wA = primary.weights[col] ?? 0, wB = secondary.weights[col] ?? 0;
+                  if (wA > 0) push(col + "-a", pair, wA, pos, meta);
+                  if (wB > 0) push(col + "-b", pair, wB, neg, { ...meta, name: L.also ?? void 0, group: L.also ?? void 0 });
                 });
               } else {
                 edgePairs.forEach(({ col, pair }) => {
-                  const wA = primary.weights[col] ?? 0;
-                  const wB = secondary.weights[col] ?? 0;
-                  if (wA > 0) drawEdges.push({ col: col + "-a", pair, weight: wA, color: primary.color });
-                  if (wB > 0) drawEdges.push({ col: col + "-b", pair, weight: wB, color: secondary.color });
+                  const w = primary.weights[col] ?? 0;
+                  if (w > 0) push(col, pair, w, pos, meta);
                 });
               }
-            } else if (primary) {
-              edgePairs.forEach(({ col, pair }) => {
-                const w = primary.weights[col] ?? 0;
-                if (w > 0) drawEdges.push({ col, pair, weight: w, color: primary.color });
-              });
-            }
+            });
+            drawEdges.sort((a, b) => b.weight - a.weight);
             const isDirected = !!model.directed;
             const widthFrac = widthPerWeight(config.edgeWidth) * (config.edgeMagnify ?? 1);
             const rangeOf = /* @__PURE__ */ __name((ws) => {
@@ -3819,12 +3890,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
             });
             const totalWeightByPair = {};
             if (isDirected) {
-              drawEdges.forEach(({ pair, weight }) => {
-                const key = `${pair[0]}.${pair[1]}`;
+              drawEdges.forEach(({ pair, weight, layer }) => {
+                const key = `${layer}:${pair[0]}.${pair[1]}`;
                 totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
               });
             }
-            drawEdges.forEach(({ col, pair, weight, color }) => {
+            drawEdges.forEach(({ col, pair, weight, color, layer, name, group, unit }) => {
               const fromNode = nodeLayer.__data__.objects.get(pair[0]);
               const toNode = nodeLayer.__data__.objects.get(pair[1]);
               if (!fromNode || !toNode) return;
@@ -3838,8 +3909,8 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 edgeLine = new NodeEdge({}, fromPt, toPt);
                 edgeLine.weight = 0;
               } else if (isDirected) {
-                const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
-                const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
+                const fwd = totalWeightByPair[`${layer}:${pair[0]}.${pair[1]}`] ?? weight;
+                const bwd = totalWeightByPair[`${layer}:${pair[1]}.${pair[0]}`] ?? 0;
                 const totalweight = fwd + bwd;
                 edgeLine = new TaperedWeightedMidpointEdge(
                   { weight, totalweight },
@@ -3863,8 +3934,9 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
                 // Identity for the qe-edge-* interaction events.
                 source: pair[0],
                 target: pair[1],
-                group: groupAttr ?? void 0,
-                unit: unitAttr ?? void 0
+                group,
+                unit,
+                layer: name
               };
               const targetLayer = isSelf ? edgenodeLayer ?? edgeLayer : edgeLayer;
               targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
@@ -3960,7 +4032,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
       const nodesEl = this.querySelector("qe-nodes");
       const meansEl = this.querySelector("qe-means");
       const pointsEl = this.querySelector("qe-points");
-      const edgesEl = this.querySelector("qe-edges");
+      const edgeEls = [...this.querySelectorAll("qe-edges")];
+      const firstAttr = /* @__PURE__ */ __name((a) => {
+        var _a2;
+        return ((_a2 = edgeEls.find((e) => e.hasAttribute(a))) == null ? void 0 : _a2.getAttribute(a)) ?? null;
+      }, "firstAttr");
+      const magnifyEl = edgeEls.find((e) => e.hasAttribute("magnify"));
       const trajectoriesEl = this.querySelector("qe-trajectories");
       const axesEl = this.querySelector("qe-axes");
       const labelsShorthand = this.getAttribute("labels");
@@ -3998,14 +4075,12 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
         // fixed-size keeps unit dots a constant on-screen px size (webENA parity).
         pointFixedSize: !!pointsEl && pointsEl.hasAttribute("fixed-size"),
         // Edges — presence of <qe-edges> = draw a network.
-        showEdges: !!edgesEl,
-        edgeGroup: (edgesEl == null ? void 0 : edgesEl.getAttribute("group")) ?? null,
-        edgeUnit: (edgesEl == null ? void 0 : edgesEl.getAttribute("unit")) ?? null,
-        edgeCompare: (edgesEl == null ? void 0 : edgesEl.getAttribute("compare")) ?? null,
-        edgeAlso: (edgesEl == null ? void 0 : edgesEl.getAttribute("also")) ?? null,
-        edgeColorScale: parseColorScale((edgesEl == null ? void 0 : edgesEl.getAttribute("color-scale")) ?? null),
-        edgeMagnify: (edgesEl == null ? void 0 : edgesEl.hasAttribute("magnify")) ? (() => {
-          const v = Number(edgesEl.getAttribute("magnify"));
+        showEdges: edgeEls.length > 0,
+        edgeLayers: edgeEls.map(parseEdgeLayer),
+        // Plot-wide edge settings: the first <qe-edges> that sets them.
+        edgeColorScale: parseColorScale(firstAttr("color-scale")),
+        edgeMagnify: magnifyEl ? (() => {
+          const v = Number(magnifyEl.getAttribute("magnify"));
           return Number.isFinite(v) && v > 0 ? v : 1;
         })() : null,
         // Trajectories — presence of <qe-trajectories> = draw cognitive trajectories
@@ -4061,6 +4136,10 @@ var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "
           "also",
           "color-scale",
           "magnify",
+          "network",
+          "colors",
+          "threshold",
+          "name",
           "groups",
           "confidence",
           "label",

@@ -109,6 +109,37 @@ function readIntervalBounds(
  */
 type ColorScale = 'model' | 'plot' | 'absolute';
 
+/** One <qe-edges> element: a named network or an explicit `network` row. */
+type EdgeLayerSpec = {
+  group: string | null; unit: string | null;
+  compare: string | null; also: string | null;
+  network: string | null;
+  colors: [string, string | null] | null;   // positive, negative (null → complement)
+  threshold: [number, number] | null;       // min, max (max = Infinity when omitted)
+  name: string | null;
+};
+
+function parseEdgeLayer(el: Element): EdgeLayerSpec {
+  const a = (k: string) => el.getAttribute(k);
+  const cols = a('colors')?.split(',').map(c => c.trim()).filter(Boolean) ?? [];
+  const thr  = a('threshold')?.split(',').map(Number).filter(Number.isFinite) ?? [];
+  return {
+    group: a('group'), unit: a('unit'), compare: a('compare'), also: a('also'),
+    network: a('network'),
+    colors: cols.length ? [cols[0], cols[1] ?? null] : null,
+    threshold: thr.length ? [thr[0], thr.length > 1 ? thr[1] : Infinity] : null,
+    name: a('name'),
+  };
+}
+
+/** Complementary hue (rENA: one colour → negatives use hue + 180°). */
+function complementColor(hex: string): string {
+  const { r, g, b } = Color.parseColor(hex);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  const f = (c: number) => (mx + mn - c).toString(16).padStart(2, '0');
+  return `#${f(r)}${f(g)}${f(b)}`;
+}
+
 function parseColorScale(attr: string | null): ColorScale {
   const a = attr?.trim().toLowerCase();
   return a === 'plot' || a === 'absolute' ? a : 'model';
@@ -858,62 +889,98 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             return { weights: getUnitEdges(id), color, label: id };
           };
 
-          // ── Step 5: Determine display mode from attributes ────────────────────
+          // ── Steps 5–6: Build the edges to draw, one <qe-edges> layer at a time ─
           //
-          //  Modes (controlled by HTML attributes on <ena-graph>):
-          //
-          //    group mean (default)   — no attrs, or group="FirstGame"
-          //    single unit            — unit="steven z::FirstGame"
-          //    group subtraction      — group="FirstGame" compare="SecondGame"
-          //    unit subtraction       — unit="A" compare="B"
-          //    two groups overlaid    — group="FirstGame" also="SecondGame"
-          //
-          // Edge selection: group / compare / also are edge-only attributes.
-          // No `group` → no edge network drawn (only means are shown).
-          const unitAttr    = config.edgeUnit;
-          const groupAttr   = config.edgeGroup;
-          const compareAttr = config.edgeCompare;
-          const alsoAttr    = config.edgeAlso;
+          //  Named layers (as before):
+          //    group="A"               — group mean
+          //    unit="u"                — one unit's network
+          //    group="A" compare="B"   — subtraction A − B (sign → colour)
+          //    group="A" also="B"      — two groups overlaid
+          //  Explicit layers (0.5):
+          //    network="n1"            — a row of model.networks (signed)
+          //  Per layer: colors="pos,neg" overrides the palette; threshold="min,max"
+          //  drops |w| < min and caps |w| > max (rENA semantics).
+          // Each entry's weight is ≥ 0; the sign is carried by its colour.
+          type DrawEdge = { col: string; pair: [string, string]; weight: number; color: string;
+                            layer: number; name?: string; group?: string; unit?: string };
+          const drawEdges: DrawEdge[] = [];
 
-          // Primary edge target — unit overrides group; no default to first group.
-          const primaryId = unitAttr ?? groupAttr ?? null;
-          const primary   = primaryId ? resolve(primaryId) : null;
+          const networkRow = (name: string): EdgeWeights | null => {
+            const frame = (model as any).networks;
+            const row = frame?.rows?.().find((r: DataFrameRow) => r.rowName === name);
+            if (!row) return null;
+            const w: EdgeWeights = {};
+            edgePairs.forEach(({ col }) => {
+              const i = row.names.indexOf(col);
+              if (i >= 0) { const v = Number(row[i]); if (Number.isFinite(v)) w[col] = v; }
+            });
+            return w;
+          };
+          const thresholded = (w: number, thr: [number, number] | null): number => {
+            if (!thr) return w;
+            const a = Math.abs(w);
+            if (a < thr[0]) return 0;
+            return a > thr[1] ? Math.sign(w) * thr[1] : w;
+          };
 
-          // Optional secondary target for subtraction or overlay.
-          const secondaryId = compareAttr ?? alsoAttr ?? null;
-          const secondary   = secondaryId ? resolve(secondaryId) : null;
-          const isSubtract  = !!compareAttr;
-          const isOverlay   = !!alsoAttr;
+          config.edgeLayers.forEach((L, li) => {
+            const push = (col: string, pair: [string, string], w: number, color: string,
+                          meta: { name?: string; group?: string; unit?: string }) => {
+              w = thresholded(w, L.threshold);
+              if (Math.abs(w) < 1e-6) return;
+              drawEdges.push({ col: `${li}:${col}`, pair, weight: Math.abs(w), color, layer: li, ...meta });
+            };
+            const signColors = (pos: string, neg: string): [string, string] => {
+              if (!L.colors) return [pos, neg];
+              return [L.colors[0], L.colors[1] ?? complementColor(L.colors[0])];
+            };
 
-          // ── Step 6: Build the set of edges to draw ────────────────────────────
-          // Each entry: { weight, color } — weight is always ≥ 0.
-          // For subtraction, negative diffs get the secondary color.
-          const drawEdges: Array<{ col: string; pair: [string, string]; weight: number; color: string }> = [];
-
-          if (primary && (isSubtract || isOverlay) && secondary) {
-            if (isSubtract) {
-              // A − B: positive → primary color, negative → secondary color
+            if (L.network) {
+              // Explicit network: signed weights from model.networks.
+              const w = networkRow(L.network);
+              if (!w) return;
+              const [pos, neg] = signColors(GROUP_PALETTE[0], GROUP_PALETTE[1]);
+              const meta = { name: L.name ?? L.network };
               edgePairs.forEach(({ col, pair }) => {
-                const diff = (primary.weights[col] ?? 0) - (secondary.weights[col] ?? 0);
-                if (Math.abs(diff) < 1e-6) return;
-                drawEdges.push({ col, pair, weight: Math.abs(diff), color: diff > 0 ? primary.color : secondary.color });
+                const v = w[col] ?? 0;
+                push(col, pair, v, v >= 0 ? pos : neg, meta);
+              });
+              return;
+            }
+
+            // Named layer — unit overrides group; no default to the first group.
+            const primaryId = L.unit ?? L.group ?? null;
+            if (!primaryId) return;
+            const primary   = resolve(primaryId);
+            const secondaryId = L.compare ?? L.also ?? null;
+            const secondary = secondaryId ? resolve(secondaryId) : null;
+            const meta = { name: L.name ?? primaryId, group: L.group ?? undefined, unit: L.unit ?? undefined };
+            const [pos, neg] = signColors(primary.color, secondary?.color ?? primary.color);
+
+            if (secondary && L.compare) {
+              // A − B: positive → primary colour, negative → secondary colour
+              edgePairs.forEach(({ col, pair }) => {
+                const d = (primary.weights[col] ?? 0) - (secondary.weights[col] ?? 0);
+                push(col, pair, d, d > 0 ? pos : neg, meta);
+              });
+            } else if (secondary && L.also) {
+              // Overlay: both networks, each in its own colour
+              edgePairs.forEach(({ col, pair }) => {
+                const wA = primary.weights[col] ?? 0, wB = secondary.weights[col] ?? 0;
+                if (wA > 0) push(col + '-a', pair, wA, pos, meta);
+                if (wB > 0) push(col + '-b', pair, wB, neg, { ...meta, name: L.also ?? undefined, group: L.also ?? undefined });
               });
             } else {
-              // Overlay: draw both networks independently
               edgePairs.forEach(({ col, pair }) => {
-                const wA = primary.weights[col] ?? 0;
-                const wB = secondary.weights[col] ?? 0;
-                if (wA > 0) drawEdges.push({ col: col + '-a', pair, weight: wA, color: primary.color });
-                if (wB > 0) drawEdges.push({ col: col + '-b', pair, weight: wB, color: secondary.color });
+                const w = primary.weights[col] ?? 0;
+                if (w > 0) push(col, pair, w, pos, meta);
               });
             }
-          } else if (primary) {
-            // Single group mean or single unit
-            edgePairs.forEach(({ col, pair }) => {
-              const w = primary.weights[col] ?? 0;
-              if (w > 0) drawEdges.push({ col, pair, weight: w, color: primary.color });
-            });
-          }
+          });
+
+          // Thin edges on top (rENA's thin.lines.in.front): later objects draw
+          // over earlier ones, so add the heaviest first.
+          drawEdges.sort((a, b) => b.weight - a.weight);
 
           // ── Step 7: Mark sizes and colour ────────────────────────────────────
           // Width is absolute (webENA): raw weight × one width-per-weight set by
@@ -992,13 +1059,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // proportionally along the edge.  Build a lookup keyed by "A.B".
           const totalWeightByPair: Record<string, number> = {};
           if (isDirected) {
-            drawEdges.forEach(({ pair, weight }) => {
-              const key = `${pair[0]}.${pair[1]}`;
+            drawEdges.forEach(({ pair, weight, layer }) => {
+              const key = `${layer}:${pair[0]}.${pair[1]}`;
               totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
             });
           }
 
-          drawEdges.forEach(({ col, pair, weight, color }) => {
+          drawEdges.forEach(({ col, pair, weight, color, layer, name, group, unit }) => {
             const fromNode = nodeLayer.__data__.objects.get(pair[0]);
             const toNode   = nodeLayer.__data__.objects.get(pair[1]);
             if (!fromNode || !toNode) return;
@@ -1025,8 +1092,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // Set a placeholder weight; update() will overwrite it.
               (edgeLine as any).weight = 0;
             } else if (isDirected) {
-              const fwd = totalWeightByPair[`${pair[0]}.${pair[1]}`] ?? weight;
-              const bwd = totalWeightByPair[`${pair[1]}.${pair[0]}`] ?? 0;
+              const fwd = totalWeightByPair[`${layer}:${pair[0]}.${pair[1]}`] ?? weight;
+              const bwd = totalWeightByPair[`${layer}:${pair[1]}.${pair[0]}`] ?? 0;
               const totalweight = fwd + bwd;
               edgeLine = new TaperedWeightedMidpointEdge(
                 { weight, totalweight },
@@ -1050,8 +1117,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // Identity for the qe-edge-* interaction events.
               source:       pair[0],
               target:       pair[1],
-              group:        groupAttr ?? undefined,
-              unit:         unitAttr ?? undefined,
+              group,
+              unit,
+              layer:        name,
             };
             // Self-connections go in the `edgenodes` layer (above `nodes` in
             // draw order) so the dot is visible on top of the code node.
@@ -1163,10 +1231,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     pointFixedSize: boolean;
     // Edges
     showEdges: boolean;
-    edgeGroup: string | null;
-    edgeUnit: string | null;
-    edgeCompare: string | null;
-    edgeAlso: string | null;
+    edgeLayers: EdgeLayerSpec[];
     edgeColorScale: ColorScale;
     edgeMagnify: number | null;
 
@@ -1190,7 +1255,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     const nodesEl  = this.querySelector('qe-nodes');
     const meansEl  = this.querySelector('qe-means');
     const pointsEl = this.querySelector('qe-points');
-    const edgesEl  = this.querySelector('qe-edges');
+    // Every <qe-edges> child is one layer (0.5): a named network (group / unit
+    // / compare / also) or an explicit one (network="name" → model.networks).
+    const edgeEls  = [...this.querySelectorAll('qe-edges')];
+    const firstAttr = (a: string) => edgeEls.find(e => e.hasAttribute(a))?.getAttribute(a) ?? null;
+    const magnifyEl = edgeEls.find(e => e.hasAttribute('magnify'));
     const trajectoriesEl = this.querySelector('qe-trajectories');
     const axesEl   = this.querySelector('qe-axes');
     const labelsShorthand = this.getAttribute('labels');
@@ -1232,14 +1301,12 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       pointFixedSize: !!pointsEl && pointsEl.hasAttribute('fixed-size'),
 
       // Edges — presence of <qe-edges> = draw a network.
-      showEdges:   !!edgesEl,
-      edgeGroup:   edgesEl?.getAttribute('group')   ?? null,
-      edgeUnit:    edgesEl?.getAttribute('unit')     ?? null,
-      edgeCompare: edgesEl?.getAttribute('compare')  ?? null,
-      edgeAlso:    edgesEl?.getAttribute('also')     ?? null,
-      edgeColorScale: parseColorScale(edgesEl?.getAttribute('color-scale') ?? null),
-      edgeMagnify: edgesEl?.hasAttribute('magnify') ? (() => {
-        const v = Number(edgesEl.getAttribute('magnify'));
+      showEdges:   edgeEls.length > 0,
+      edgeLayers:  edgeEls.map(parseEdgeLayer),
+      // Plot-wide edge settings: the first <qe-edges> that sets them.
+      edgeColorScale: parseColorScale(firstAttr('color-scale')),
+      edgeMagnify: magnifyEl ? (() => {
+        const v = Number(magnifyEl.getAttribute('magnify'));
         return Number.isFinite(v) && v > 0 ? v : 1;
       })() : null,
 
@@ -1301,6 +1368,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       subtree:         true,
       attributeFilter: [
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
+        'network', 'colors', 'threshold', 'name',
         'groups', 'confidence', 'label', 'unconnected',
         'scale-points', 'edge-width', 'labels', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
