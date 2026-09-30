@@ -1,0 +1,3 @@
+# The qeviz bundle is attached by qe_widget() (dependencies =) so its version
+# tracks the package version.
+dependencies: []

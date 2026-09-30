@@ -1,0 +1,31 @@
+---
+title: "qeviz widget demo"
+output: html_document
+---
+
+Two qeviz plots of one RS.data model, knitted as htmlwidgets (spec §7).
+
+```{r setup, message = FALSE}
+data(RS.data)
+codes <- c("Data", "Technical.Constraints", "Performance.Parameters",
+           "Client.and.Consultant.Requests", "Design.Reasoning", "Collaboration")
+accum <- ena.accumulate.data(
+  units        = RS.data[, c("Condition", "UserName")],
+  conversation = RS.data[, c("Condition", "GroupName")],
+  codes        = RS.data[, codes],
+  window.size.back = 4
+)
+set <- ena.make.set(accum)
+```
+
+```{r first}
+qe_plot(set, title = "FirstGame", group_col = "Condition", height = 420) |>
+  qe_edges("FirstGame") |> qe_group("FirstGame") |>
+  qe_labels(nodes = "on", font_size = 14, font_family = "Times New Roman")
+```
+
+```{r subtraction}
+qe_plot(set, title = "FirstGame − SecondGame", group_col = "Condition", height = 420) |>
+  qe_edges("FirstGame", compare = "SecondGame") |> qe_group() |>
+  qe_labels(nodes = "on")
+```

@@ -13,15 +13,17 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Imports:
+    htmltools,
+    htmlwidgets,
     jsonlite
 Suggests:
     rENA,
     tma,
     rstudioapi,
-    htmltools,
     covr,
     knitr,
     rmarkdown,
+    shiny,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Config/testthat/edition: 3

@@ -3,7 +3,7 @@
 # ── Internal: locate and read the bundled JS ───────────────────────────────────
 
 .bundle_js <- function() {
-  path <- system.file("qeviz.umd.js", package = "qeviz")
+  path <- system.file("htmlwidgets", "lib", "qeviz", "qeviz.umd.js", package = "qeviz")
   if (!nzchar(path) || !file.exists(path))
     stop("qeviz.umd.js not found in package inst/. Re-install the package.")
   paste(readLines(path, warn = FALSE), collapse = "\n")
@@ -324,20 +324,6 @@ qe_colors <- function(p, ...) {
   p
 }
 
-#' Render a qe_plot object in the viewer
-#'
-#' Called automatically when a `qe_plot` object is returned at the top level
-#' of the console.  Writes to a temp file and opens the RStudio viewer or
-#' the system browser.
-#'
-#' @param x A `qe_plot` object.
-#' @param ... Ignored.
-#' @export
-print.qe_plot <- function(x, ...) {
-  tmp <- tempfile(fileext = ".html")
-  qe_export_html(x, tmp, open = TRUE)
-  invisible(x)
-}
 
 
 # ══ Chain functions ════════════════════════════════════════════════════════════
@@ -705,8 +691,8 @@ qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
   unknown <- setdiff(names(x), cols)
   if (length(unknown))
     stop(sprintf("qe_edges(): '%s' has edges not in the model: %s\nExamples of valid names: %s",
-                 arg, paste(head(unknown, 3), collapse = ", "),
-                 paste(head(cols, 3), collapse = ", ")), call. = FALSE)
+                 arg, paste(utils::head(unknown, 3), collapse = ", "),
+                 paste(utils::head(cols, 3), collapse = ", ")), call. = FALSE)
   out <- stats::setNames(numeric(length(cols)), cols)
   out[names(x)] <- as.numeric(x)
   out
@@ -788,7 +774,7 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
     all <- .qe_frame_df(m$points)
     bad <- setdiff(units, all[[m$id_col]])
     if (length(bad))
-      stop(sprintf("qe_points(): unit(s) not in model: %s", paste(dQuote(head(bad, 3)), collapse = ", ")),
+      stop(sprintf("qe_points(): unit(s) not in model: %s", paste(dQuote(utils::head(bad, 3)), collapse = ", ")),
            call. = FALSE)
     all[match(units, all[[m$id_col]]), , drop = FALSE]
   } else .qe_point_frame(points, m)
@@ -927,8 +913,8 @@ qe_nodes <- function(p, show = c("auto", "always", "never"),
       bad <- setdiff(got, codes)
       if (length(bad))
         stop(sprintf("qe_nodes(): '%s' has codes not in the model: %s\nModel codes: %s", arg,
-                     paste(dQuote(head(bad, 3)), collapse = ", "),
-                     paste(head(codes, 4), collapse = ", ")), call. = FALSE)
+                     paste(dQuote(utils::head(bad, 3)), collapse = ", "),
+                     paste(utils::head(codes, 4), collapse = ", ")), call. = FALSE)
     }
     if (!is.null(positions)) {
       pos <- as.data.frame(positions, check.names = FALSE)

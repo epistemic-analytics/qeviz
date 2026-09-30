@@ -4,8 +4,22 @@
     {
       "name": "demo",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "/Users/clmarquart/Workspaces/sandbox/qeviz", "-l", "7801"],
+      "runtimeArgs": [
+        "serve",
+        "/Users/clmarquart/Workspaces/sandbox/qeviz",
+        "-l",
+        "7801"
+      ],
       "port": 7801
+    },
+    {
+      "name": "widget-shiny",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd tools/widget-demo && RENA_SRC=/Users/clmarquart/Workspaces/RStudio/rENA Rscript -e 'shiny::runApp(\".\", port = 7802, launch.browser = FALSE)'"
+      ],
+      "port": 7802
     }
   ]
 }

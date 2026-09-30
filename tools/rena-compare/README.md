@@ -16,7 +16,7 @@ on `ENA_DIRECTION`, which those models no longer carry), so the ONA views are
 networks only.
 
 ```bash
-npm run build                                  # refresh R/inst/qeviz.umd.js
+npm run build                                  # refresh R/inst/htmlwidgets/lib/qeviz/qeviz.umd.js
 RENA_SRC=~/Workspaces/RStudio/rENA Rscript tools/rena-compare/run.R
 ONA_SRC=~/Workspaces/RStudio/ona RENA_SRC=~/Workspaces/RStudio/rENA Rscript tools/rena-compare/run_ona.R
 npx serve . -l 7801                            # then open the URLs below

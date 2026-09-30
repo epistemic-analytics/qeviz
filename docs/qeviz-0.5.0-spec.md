@@ -1,6 +1,6 @@
 # qeviz 0.5.0 — spec: explicit-data inputs for rENA integration
 
-**Status:** decisions made · §1–§4 and §6 implemented (`qe_edges`, `qe_points`, `qe_group`, `qe_nodes`, `qe_plot(dims, range, title, scale_points, palette)`, `qe_colors`, `qe_labels(font_*)`; R + TS, verified in `tools/rena-compare`); §5 deferred; §7 to do · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
+**Status:** decisions made · §1–§4, §6 and §7 implemented (`qe_edges`, `qe_points`, `qe_group`, `qe_nodes`, `qe_plot(dims, range, title, scale_points, palette)`, `qe_colors`, `qe_labels(font_*)`, `qe_widget`, `qeOutput` / `renderQe`; R + TS, verified in `tools/rena-compare`); §5 deferred · **Target:** qeviz 0.5.0 · **Consumer:** rENA (a `qeviz` plot backend), then webENA / Python / Julia
 
 ## Why
 
@@ -290,6 +290,29 @@ Required for rENA regardless of the rest:
 - These replace rENA's own widget (`R/ena_interactive.R`, `inst/htmlwidgets/`),
   which vendors the qeviz **0.1.0** bundle, duplicates `qe_extract()`
   (`.ena_to_model_data`) and uses the pre-0.2 attribute API.
+
+**§7 decisions**
+
+- The widget is named `qeviz` (package `qeviz`). rENA's widget of the same name
+  is an older build of this library and is replaced, not kept alongside:
+  `ena.plot.interactive()`, `ena.export.html()`, `enaInteractiveOutput()` and
+  `renderEnaInteractive()` become thin wrappers over `qe_plot()` /
+  `qe_widget()` / `qeOutput()` / `renderQe()`, and rENA's `inst/htmlwidgets/`,
+  `.ena_to_model_data()` and its CI / outlier helpers are deleted.
+- The payload is `{model, graph}`: the ModelData JSON (serialised in R with the
+  same options as `qe_html()`, parsed in the binding) and the `<qe-graph>`
+  markup from `.build_graph_element()`, so the widget and the standalone HTML
+  cannot drift. Shiny re-renders with unchanged markup reuse the element and
+  only call `setModelData()`.
+- One copy of the bundle, at `R/inst/htmlwidgets/lib/qeviz/qeviz.umd.js`; the
+  dependency is attached from R so its version tracks the package.
+- `print.qe_plot` shows the widget; `qe_html()` / `qe_export_html()` /
+  `qe_fragment()` are unchanged. `knit_print.qe_plot` is registered on load
+  (knitr stays in Suggests). `htmlwidgets` and `htmltools` move to Imports.
+- Not in 0.5.0: Shiny input events (with the webENA event work), Python /
+  Julia widgets.
+- Check pages: `tools/widget-demo/` (`render.R` knits `demo.Rmd` and writes a
+  `saveWidget()` page; `app.R` is a Shiny app with a group selector).
 
 ---
 

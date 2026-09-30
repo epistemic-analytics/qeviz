@@ -9,7 +9,7 @@
 #   QEC_OUT    output directory (default tools/rena-compare/out)
 #
 # qeviz is always loaded from this repo's R/ package so the report reflects
-# the current bundle in R/inst/qeviz.umd.js (run `npm run build` first).
+# the current bundle in R/inst/htmlwidgets/lib/qeviz/qeviz.umd.js (run `npm run build` first).
 #
 # To test your own model instead of RS.data, source harness.R and call
 # qec_compare(set, group_col = "<your group column>").

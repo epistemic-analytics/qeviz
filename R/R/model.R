@@ -276,6 +276,6 @@ qe_trajectory_units <- function(x) {
   if (anyNA(out) || length(bad))
     stop(sprintf("dims not found among the dimensions: %s\nAvailable: %s",
                  paste(dQuote(if (anyNA(out)) dims else bad), collapse = ", "),
-                 paste(head(num, 6), collapse = ", ")), call. = FALSE)
+                 paste(utils::head(num, 6), collapse = ", ")), call. = FALSE)
   out
 }
