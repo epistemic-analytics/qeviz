@@ -90,6 +90,9 @@ qec_default_views <- function(groups) {
     qec_view("w_subset", "Non-group subset (units with SVD1 > 0), threshold 0.05",
              network = list(weights = QEC_SUBSET_EXPR, colors = "#228833",
                             threshold = 0.05, name = "SVD1 > 0")),
+    qec_view("w_clamp", sprintf("%s network from data, threshold = c(0.05, 0.15) (drop + cap)", a),
+             network = list(weights = .qec_rows("line.weights", a), colors = QEC_PALETTE[1],
+                            threshold = c(0.05, 0.15))),
     # ── Explicit points / means (qeviz 0.5 qe_points / qe_group) ────────────
     qec_view("p_set", "Point set from data: units with SVD1 > 0, triangles",
              point_set = list(expr = QEC_POINTS_EXPR, color = "#228833",
@@ -232,8 +235,12 @@ qec_truth <- function(set, view, group_col) {
     e <- .qec_split_pairs(names(net))
     e$w <- unname(net)
     # Neither renderer draws a zero-weight edge (or one below the threshold).
-    thr <- if (is.null(view$network$threshold)) 1e-6 else max(1e-6, view$network$threshold[1])
+    # threshold = c(min, max): |w| < min is dropped, |w| > max is capped at max
+    # with its sign kept (rENA semantics).
+    tv  <- view$network$threshold
+    thr <- if (is.null(tv)) 1e-6 else max(1e-6, tv[1])
     e <- e[abs(e$w) >= thr, , drop = FALSE]
+    if (length(tv) == 2L) e$w <- sign(e$w) * pmin(abs(e$w), tv[2])
     self <- e$a == e$b
     if (out$directed && any(self))
       out$self <- data.frame(code = e$a[self], w = e$w[self], stringsAsFactors = FALSE)
@@ -590,7 +597,7 @@ qec_extract_ona <- function(p, view, colors, set) {
 
 # ── Adapter: what qe_extract() hands to qeviz ─────────────────────────────────
 
-qec_extract_adapter <- function(model, view) {
+qec_extract_adapter <- function(model, view, html = NULL) {
   rows <- function(f) do.call(rbind, lapply(f$data, as.data.frame, stringsAsFactors = FALSE))
   nodes <- rows(model$nodes)
   pts   <- rows(model$points)
@@ -613,6 +620,15 @@ qec_extract_adapter <- function(model, view) {
       wmean <- function(g) colMeans(as.matrix(edges[edges[[gcol]] == g, ecols, drop = FALSE]))
       net <- wmean(view$network$group)
       if (!is.null(view$network$compare)) net <- net - wmean(view$network$compare)
+    }
+    # Apply the <qe-edges threshold="min,max"> attribute as emitted, as the
+    # renderer does: drop |w| < min, cap |w| > max (sign kept).
+    thr <- if (is.null(html)) NULL
+           else regmatches(html, regexpr('<qe-edges[^>]*threshold="[^"]*"', html))
+    if (length(thr)) {
+      tv <- as.numeric(strsplit(sub('.*threshold="([^"]*)"', "\\1", thr), ",")[[1]])
+      net[abs(net) < tv[1]] <- 0
+      if (length(tv) > 1) net <- sign(net) * pmin(abs(net), tv[2])
     }
     out$edges <- data.frame(col = ecols, w = unname(net), stringsAsFactors = FALSE)
   }
@@ -854,7 +870,9 @@ qec_code_qe <- function(view, group_col) {
               arg("weights", net$weights), arg("compare", net$compare),
               arg("colors", if (is.null(net$colors)) NULL else if (length(net$colors) == 1) .qec_q(net$colors)
                             else sprintf("c(%s)", paste(vapply(net$colors, .qec_q, ""), collapse = ", "))),
-              arg("threshold", net$threshold), arg("name", if (is.null(net$name)) NULL else .qec_q(net$name))),
+              arg("threshold", if (length(net$threshold) > 1)
+                                 sprintf("c(%s)", paste(net$threshold, collapse = ", ")) else net$threshold),
+              arg("name", if (is.null(net$name)) NULL else .qec_q(net$name))),
               collapse = ",\n           "))
             else if (is.null(net$compare)) sprintf("  qe_edges(group = %s) |>", .qec_q(net$group))
             else sprintf("  qe_edges(group = %s, compare = %s) |>", .qec_q(net$group), .qec_q(net$compare)))
@@ -931,7 +949,7 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
 
     qe <- qec_render_qe(set, v, group_col, probe_js)
     writeLines(qe$html, file.path(out_dir, "panels", paste0("qe_", v$name, ".html")))
-    adapter <- qec_extract_adapter(qe$model, v)
+    adapter <- qec_extract_adapter(qe$model, v, qe$html)
 
     # Thickness per unit weight; must match across views for plots of one
     # model to be comparable (checked across views in report.js).

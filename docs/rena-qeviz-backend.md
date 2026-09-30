@@ -71,7 +71,7 @@ p$plot                                         # an htmlwidget on either backend
 | `ena.plot(point.size)` | `qe_points(size)` |
 | `showticklabels`, `ticks`, `axispadding`, `autosize`, `automargin`, `displayModeBar` | ignored silently (plotly layout only) |
 | **`ena.plot.network()`**: `network`, `colors`, `threshold` | `qe_edges(weights, colors, threshold)` |
-| `threshold = c(min, max)` | `qe_edges(threshold = c(min, max))`. Weights above the maximum are drawn at the maximum. Needs the qeviz addition below. |
+| `threshold = c(min, max)` | `qe_edges(threshold = c(min, max))`: \|w\| < min not drawn, \|w\| > max drawn at max, sign kept. Already in qeviz 0.5.0 (§1). |
 | `thin.lines.in.front` | qeviz default (thin lines on top) |
 | `node.positions`, `labels`, `show.all.nodes` | `qe_nodes(positions, labels, unconnected)` |
 | `label.font.*` | `qe_labels(font_*)`, plot-wide not per layer |
@@ -104,14 +104,14 @@ p$plot                                         # an htmlwidget on either backend
    when they change the picture. Stay silent for plotly-only layout options.
 2. **Trajectories and movies:** error on the qeviz backend. No silent fallback
    to plotly (mixing renderers is confusing).
-3. **`threshold` maximum:** add it to qeviz as `qe_edges(threshold = c(min,
-   max))`, clamping weights above the maximum, rather than warning. rENA users
-   rely on it.
+3. **`threshold` maximum:** supported, not warned. It turned out to be in
+   qeviz 0.5.0 already (§1, R and TS). The cap is now verified in
+   `tools/rena-compare` (view `w_clamp`, `threshold = c(0.05, 0.15)`: rENA,
+   the adapter and the qeviz render all agree).
 4. **Order:** the pending qeviz work and the widget replacement are committed
    (qeviz `dd4353b`, rENA `f67089b`). The switch goes on rENA `qeviz-widget`
    after them.
 
 ## qeviz additions needed
 
-- `qe_edges(threshold = c(min, max))`: two-element form, clamping `|w| > max`
-  to `max` (R + TS `threshold` attribute accepting `min,max`).
+None so far. `qe_edges(threshold = c(min, max))` was already in 0.5.0.
