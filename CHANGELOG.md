@@ -6,6 +6,63 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [0.5.0] - 2026-09-30
+
+Explicit-data inputs and plot output for rENA's qeviz backend
+(`docs/qeviz-0.5.0-spec.md`, `docs/rena-qeviz-backend.md`): networks, points and
+means can come straight from data, as rENA's `ena.plot.*()` functions take them,
+and plots are htmlwidgets for RStudio, R Markdown / Quarto and Shiny. The new
+inputs are in the TypeScript core and the R package; Python and Julia ship the
+0.5.0 bundle, and their API parity follows in 0.5.x. Verified side by side
+against rENA's plotly plots in `tools/rena-compare/`.
+
+### Added
+- **Explicit networks:** `qe_edges(weights =, compare =, colors =, threshold =,
+  name =)`. `weights` is a vector, matrix or data frame (averaged); `compare`
+  subtracts a second network; `threshold = c(min, max)` drops |w| < min and caps
+  |w| > max (rENA semantics). Each call adds a network layer, drawn on the
+  model's width and colour scales.
+- **Explicit points:** `qe_points(units =, points =, color =, shape =, labels =,
+  name =)` draws a point set; shapes are circle, square, triangle and diamond.
+- **Explicit means:** `qe_group(points =, label =, color =, shape =,
+  intervals =, conf_level =, outlier =)` draws the mean of any subset with a box
+  or crosshair t interval and an optional outlier interval (Q1 − 1.5·IQR …
+  Q3 + 1.5·IQR). Each explicit mean keeps its own interval settings.
+  `qe_group(show = FALSE)` hides all means.
+- **Node overrides:** `qe_nodes(show =, unconnected =, positions =, labels =)`.
+- **Plot settings:** `qe_plot(dims =, range =, title =, scale_points =,
+  palette =)`, `qe_range()`, `qe_colors()` (per-group colours),
+  `qe_labels(font_size =, font_family =, font_color =)` with font size in pixels,
+  and `qe_palette()` (the default Paul Tol "bright" palette).
+- **`qe_extract(dims =)`** picks the plotted dimensions by name or index;
+  `qe_extract(group_col = NULL)` gives a model with no groups.
+- **htmlwidget output:** `qe_widget()`; printing a `qe_plot` shows the widget,
+  a plot at the end of a knitr / Quarto chunk renders inline, and
+  `qeOutput()` / `renderQe()` are the Shiny bindings.
+- **TypeScript / wire format:** ModelData `networks`, `pointsets` and `palette`;
+  groups-frame `color`, `shape`, `label`, `{dim}.olow` / `.ohigh`, `intervals`
+  and `outlier` columns; multiple `<qe-edges>` with `network`, `colors`,
+  `threshold` and `name`; `<qe-points set>`; `<qe-means intervals outlier>`;
+  `<qe-graph range plot-title scale-points label-font-size label-font-family
+  label-font-color>`.
+
+### Changed
+- **The bundle is minified** (203 KB → 104 KB) and ships with its source map
+  next to every copy. Where the bundle is inlined into a page (`qe_html()`,
+  `qe_fragment()`, Python / Julia inline output) the source-map comment is
+  stripped.
+- **R:** the bundle moved to `inst/htmlwidgets/lib/qeviz/`; `htmlwidgets` and
+  `htmltools` are now imports.
+- **`qe_labels()` changes only the arguments supplied** (a bare call still
+  applies the defaults), so setting fonts no longer resets the label modes.
+- Pixel-sized labels and the title re-lay out when the plot is resized.
+- The `rena-demo` vignette ends each chunk in the plot instead of pasting
+  `qe_fragment()` HTML, so the bundle is included once.
+
+### Fixed
+- A missing interval bound in the groups frame could be read as 0.
+- `qe_points()` / `qe_group()` failed on a model without a group column.
+
 ## [0.4.0] - 2026-09-28
 
 First release since 0.2.0: it also includes the unreleased 0.3.0 changes below.
