@@ -1,6 +1,6 @@
 # rENA plotting backend switch (qeviz)
 
-**Status:** phases 1–4 implemented; phases 5–6 to do · **Repo / branch:** rENA
+**Status:** phases 1–5 implemented; phase 6 (docs / NEWS) to do · **Repo / branch:** rENA
 `qeviz-widget` · **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
 
 rENA's existing plotting API (`ena.plot()`, `plot.ena.set()`, the
@@ -67,9 +67,15 @@ p$plot                                         # an htmlwidget on either backend
      their input unchanged (`ena.plot.movie()` returns the plot's widget).
    - No qeviz integration: qeviz trajectories are deferred (0.5.0 spec §5),
      and these functions are likely unused.
-5. **Harness.** `tools/rena-compare` runs each view's single piece of
-   `ena.plot()` code through both backends. The hand-written `qe_*()` code on
-   the qeviz side goes away; the model-space readback checks are unchanged.
+5. **Harness** (done). The rENA report has three columns per view: rENA
+   (plotly), the same generated rENA code run with `backend = "qeviz"`, and the
+   hand-written `qe_*()` chain (kept so named-group features, `qe_colors()` and
+   `qe_points(units =)` stay covered). All three are checked against the same
+   model-space truth, plus model-data checks for both qeviz columns. Backend
+   warnings show under the panel. The ONA report is unchanged (ona doesn't
+   use `ENAplot`). First run: the backend column passes every check (118
+   render, 71 model data), including the two views where rENA's plotly output
+   fails (crosshair CIs, outlier box), and its cross-plot edge scale is 1.000.
 6. **Tests and docs.** Tests for every mapped, ignored and unsupported
    argument (qeviz tests skip without qeviz ≥ 0.5.0); a NEWS entry; a backend
    section in the plotting docs.

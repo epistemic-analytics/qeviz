@@ -168,11 +168,17 @@
     }
 
     if (truth.points) {
-      const ps = truth.points.map(t => [t, got.points.find(p => p.id === t.id)]);
+      // By unit id when the drawn ids overlap the truth's; otherwise (the rENA
+      // backend fed plain matrices numbers points 1..n) nearest neighbour.
+      const byId = truth.points.some(t => got.points.some(p => p.id === t.id));
+      const near = t => got.points.reduce((b, p) => {
+        const d = Math.max(Math.abs(p.x - t.x), Math.abs(p.y - t.y));
+        return d < b.d ? { p, d } : b; }, { p: null, d: Infinity }).p;
+      const ps = truth.points.map(t => [t, byId ? got.points.find(p => p.id === t.id) : near(t)]);
       const missing = ps.filter(([, g]) => !g).length;
       const r = row('unit point positions',
         missing ? null : maxAbs(ps.flatMap(([t, g]) => [t.x - g.x, t.y - g.y])),
-        TOL, `${truth.points.length} expected, ${got.points.length} drawn`);
+        TOL, `${truth.points.length} expected, ${got.points.length} drawn${byId ? '' : ' (matched by position)'}`);
       if (truth.points.length !== got.points.length) r.status = 'FAIL';
       out.push(r);
     }
@@ -192,34 +198,42 @@
     }</tbody></table>`;
   }
 
-  const results = {};   // view -> { rena, adapter, qeviz }
+  const BE = !!Q.backend;  // third column: rENA code on ena.plot(backend = "qeviz")
+  const results = {};   // view -> { rena, adapter, qeviz, be, be_adapter }
   const qeK = {};       // view -> qeviz thickness per unit weight
+  const beK = {};       // view -> backend thickness per unit weight
 
   function renderScale() {
     const nets = Q.views.filter(v => v.rena_k != null);
     if (!nets.length) { document.getElementById('scale').remove(); return; }
-    const waiting = nets.filter(v => qeK[v.name] == null).length;
+    const waiting = nets.filter(v => qeK[v.name] == null || (BE && beK[v.name] == null)).length;
     const rel = (k, ref) => (k == null || ref == null ? null : k / ref);
-    const refR = nets[0].rena_k, refQ = qeK[nets[0].name];
+    const refR = nets[0].rena_k, refQ = qeK[nets[0].name], refB = beK[nets[0].name];
     const status = r => r == null ? '' : Math.abs(r - 1) <= 1e-3 ? 'PASS' : 'FAIL';
     const cell = r => r == null ? '<td class="num">—</td><td></td>'
       : `<td class="num">${r.toFixed(3)}</td><td><span class="st st-${status(r).toLowerCase()}">${status(r)}</span></td>`;
     document.getElementById('scale-table').innerHTML =
-      `<table><thead><tr><th>Plot</th><th>${esc(REF.label)}</th><th></th><th>qeviz</th><th></th></tr></thead><tbody>${
-        nets.map(v => `<tr><td>${esc(v.title)}</td>${cell(rel(v.rena_k, refR))}${cell(rel(qeK[v.name], refQ))}</tr>`).join('')
+      `<table><thead><tr><th>Plot</th><th>${esc(REF.label)}</th><th></th>` +
+      (BE ? `<th>${esc(REF.label)} → qeviz</th><th></th>` : '') + `<th>qeviz</th><th></th></tr></thead><tbody>${
+        nets.map(v => `<tr><td>${esc(v.title)}</td>${cell(rel(v.rena_k, refR))}` +
+          (BE ? cell(rel(beK[v.name], refB)) : '') + `${cell(rel(qeK[v.name], refQ))}</tr>`).join('')
       }</tbody></table>` + (waiting ? `<p class="pending">${waiting} qeviz plot(s) rendering…</p>` : '');
-    window.__QEC_SCALE__ = { rena: nets.map(v => rel(v.rena_k, refR)), qeviz: nets.map(v => rel(qeK[v.name], refQ)) };
+    window.__QEC_SCALE__ = { rena: nets.map(v => rel(v.rena_k, refR)), qeviz: nets.map(v => rel(qeK[v.name], refQ)),
+                             backend: BE ? nets.map(v => rel(beK[v.name], refB)) : null };
   }
   function tally() {
-    const all = Object.values(results).flatMap(r => ['rena', 'adapter', 'qeviz']
+    const all = Object.values(results).flatMap(r => ['rena', 'adapter', 'qeviz', 'be', 'be_adapter']
       .flatMap(k => (r[k] || []).map(x => ({ ...x, renderer: k }))));
     const by = k => ['PASS', 'WARN', 'FAIL'].map(s => all.filter(x => x.renderer === k && x.status === s).length);
-    const waiting = Q.views.filter(v => !results[v.name].qeviz).length;
+    const waitingFor = k => Q.views.filter(v => !results[v.name][k]).length;
     document.getElementById('summary').innerHTML = [
-      [`${REF.label} render`, 'rena'], ['qeviz adapter', 'adapter'], ['qeviz render', 'qeviz'],
+      [`${REF.label} render`, 'rena'],
+      ...(BE ? [[`${REF.label} → qeviz render`, 'be'], [`${REF.label} → qeviz model data`, 'be_adapter']] : []),
+      ['qeviz render', 'qeviz'], ['qeviz model data', 'adapter'],
     ].map(([label, k]) => {
       const [p, w, f] = by(k);
-      const pending = k === 'qeviz' && waiting > 0;
+      const waiting = (k === 'qeviz' || k === 'be') ? waitingFor(k) : 0;
+      const pending = waiting > 0;
       const state = pending ? `<span class="pending">${waiting} view(s) rendering…</span>` : '';
       const head = f ? `${f} fail` : pending ? 'pending' : w ? `pass · ${w} warn` : 'all pass';
       return `<div class="tile ${f ? 'bad' : pending ? '' : w ? 'warn' : 'ok'}"><div class="tl">${label}</div>` +
@@ -244,47 +258,67 @@
   }
 
   const main = document.getElementById('views');
+  const warnList = ws => ws && ws.length
+    ? `<details class="warns" open><summary>${ws.length} backend warning(s)</summary><ul>${
+        ws.map(w => `<li>${esc(w)}</li>`).join('')}</ul></details>` : '';
   Q.views.forEach(v => {
-    results[v.name] = { rena: v.rena, adapter: v.adapter, qeviz: null };
+    results[v.name] = { rena: v.rena, adapter: v.adapter, qeviz: null,
+                        be: null, be_adapter: BE ? v.be_adapter : null };
     const sec = document.createElement('section');
     sec.innerHTML = `
       <h2>${esc(v.title)}</h2>
-      <div class="cols">
+      <div class="cols${BE ? ' cols3' : ''}">
         <div class="col"><h3>${esc(REF.label)} <span class="tag">${esc(REF.tag)}</span></h3>
           <iframe src="panels/ref_${v.name}.html" class="frame"></iframe>
           ${codeBlock(v.code.rena)}
           <div class="checks" id="c-rena-${v.name}"></div></div>
-        <div class="col"><h3>qeviz <span class="tag">web component</span></h3>
+        ${BE ? `<div class="col"><h3>${esc(REF.label)} → qeviz <span class="tag">backend = "qeviz"</span></h3>
+          <iframe src="panels/be_${v.name}.html" class="frame"></iframe>
+          ${codeBlock(v.code.be, 'The same code with only the backend changed.')}
+          ${warnList(v.be_warnings)}
+          <div class="checks" id="c-be-${v.name}"></div>
+          <details><summary>model data checks</summary>
+            <div class="checks" id="c-bead-${v.name}"></div></details></div>` : ''}
+        <div class="col"><h3>qeviz <span class="tag">direct API</span></h3>
           <iframe src="panels/qe_${v.name}.html" class="frame"></iframe>
           ${codeBlock(v.code.qe, Q.qe_note)}
           <div class="checks" id="c-qe-${v.name}"></div>
-          <details><summary>adapter (qe_extract ModelData) checks</summary>
+          <details><summary>model data (qe_extract) checks</summary>
             <div class="checks" id="c-ad-${v.name}"></div></details></div>
       </div>`;
     main.appendChild(sec);
     renderChecks(sec.querySelector(`#c-rena-${v.name}`), v.rena);
     renderChecks(sec.querySelector(`#c-ad-${v.name}`), v.adapter);
     renderChecks(sec.querySelector(`#c-qe-${v.name}`), null, 'Waiting for qeviz to render…');
+    if (BE) {
+      renderChecks(sec.querySelector(`#c-bead-${v.name}`), v.be_adapter);
+      renderChecks(sec.querySelector(`#c-be-${v.name}`), null, 'Waiting for qeviz to render…');
+    }
   });
 
   function accept(m) {
-    if (!m || m.type !== 'qec-result' || !results[m.view] || results[m.view].qeviz) return;
-    const v = Q.views.find(x => x.name === m.view);
-    const el = document.getElementById(`c-qe-${m.view}`);
+    if (!m || m.type !== 'qec-result') return;
+    // Backend panels report as "be:<view>".
+    const isBE = String(m.view).startsWith('be:');
+    const name = isBE ? m.view.slice(3) : m.view;
+    const slot = isBE ? 'be' : 'qeviz';
+    if (!results[name] || results[name][slot]) return;
+    const v = Q.views.find(x => x.name === name);
+    const el = document.getElementById(`${isBE ? 'c-be' : 'c-qe'}-${name}`);
     try {
-      results[m.view].qeviz = m.data ? check(v.truth, m.data, v.network)
-                                     : [row('render', null, 0, m.error)];
+      results[name][slot] = m.data ? check(v.truth, m.data, v.network)
+                                   : [row('render', null, 0, m.error)];
     } catch (err) {
-      results[m.view].qeviz = [row('check', null, 0, String(err))];
+      results[name][slot] = [row('check', null, 0, String(err))];
     }
-    renderChecks(el, results[m.view].qeviz);
+    renderChecks(el, results[name][slot]);
     if (m.data && m.data.edges.length) {
       // Width per unit weight as a fraction of the plot width (2 × extent):
       // what <qe-graph edge-width> fixes. Plots whose layouts differ (e.g.
       // moved nodes) have different extents but must match on screen.
       const perW = m.data.edges.reduce((a, e) => a + e.width, 0) /
                    m.data.edges.reduce((a, e) => a + Math.abs(e.w), 0);
-      qeK[m.view] = m.data.extent ? perW / (2 * m.data.extent) : perW;
+      (isBE ? beK : qeK)[name] = m.data.extent ? perW / (2 * m.data.extent) : perW;
     }
     window.__QEC_QEVIZ__ = results;
     renderScale();
@@ -296,10 +330,10 @@
   // which also catches results posted before this page was listening.
   window.addEventListener('message', ev => accept(ev.data));
   const poll = setInterval(() => {
-    document.querySelectorAll('iframe[src*="/qe_"], iframe[src^="panels/qe_"]').forEach(f => {
+    document.querySelectorAll('iframe[src^="panels/qe_"], iframe[src^="panels/be_"]').forEach(f => {
       try { accept(f.contentWindow.__QEC_RESULT__); } catch (_) { /* cross-origin */ }
     });
-    if (Q.views.every(v => results[v.name].qeviz)) clearInterval(poll);
+    if (Q.views.every(v => results[v.name].qeviz && (!BE || results[v.name].be))) clearInterval(poll);
   }, 250);
 
   renderScale();

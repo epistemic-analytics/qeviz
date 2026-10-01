@@ -25,16 +25,23 @@ npx serve . -l 7801                            # then open the URLs below
 Open `http://localhost:7801/tools/rena-compare/out/` or `.../out-ona/` (note the
 trailing slash).
 
+When the rENA at `RENA_SRC` has the plotting backend switch (`ena.plot(backend =)`,
+branch `qeviz-widget`), the rENA report gains a middle column: the same generated
+rENA code, run with `backend = "qeviz"`. Without it, the report has two columns.
+
 | Column | Source of the numbers | Where it's checked |
 |---|---|---|
 | rENA render | `plotly_build()` traces from `ena.plot.network/group/points` | R (console + report) |
-| qeviz adapter | `qe_extract()` ModelData | R (console + report) |
-| qeviz render | `getNodes/getPoints`, rendered SVG, points layer (`qe_probe.js`) | browser (`report.js`) |
+| rENA → qeviz render | the same rENA code with `backend = "qeviz"`, read back by `qe_probe.js` | browser (`report.js`) |
+| rENA → qeviz model data | that plot's `$qe` ModelData | R (console `be-adapter` + report) |
+| qeviz render | the hand-written `qe_*()` chain: `getNodes/getPoints`, rendered SVG, points layer (`qe_probe.js`) | browser (`report.js`) |
+| qeviz model data | `qe_extract()` ModelData | R (console `adapter` + report) |
 
 Truth is taken from the set: `rotation$nodes`, `colMeans(line.weights)` per group (the difference
 of those means for subtraction), group means, and `t.test` 95% CIs on `points`. Comparisons use model space.
-qeviz's y-flip is undone, and qeviz is rendered with `scale-points="false"` because rENA doesn't
-rescale points.
+qeviz's y-flip is undone, and qeviz is rendered with `qe_plot(scale_points = FALSE)` because rENA
+doesn't rescale points (the backend does the same). Points from plain matrices carry no unit ids, so
+they are matched by position.
 
 Each plot's code is generated from its view spec as text, then `eval()`'d, and that same text is shown
 under the plot in the report. The page therefore always shows the code that actually ran.

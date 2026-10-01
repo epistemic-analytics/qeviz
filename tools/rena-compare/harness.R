@@ -603,7 +603,7 @@ qec_extract_adapter <- function(model, view, html = NULL) {
   pts   <- rows(model$points)
   edges <- rows(model$edges)
   grps  <- rows(model$groups)
-  gcol  <- model$group_col
+  gcol  <- model$group_col %||% "group"   # no group column: explicit means only
   xc    <- model$x_col; yc <- model$y_col
 
   out <- list(nodes = data.frame(code = nodes$code, x = nodes[[xc]], y = nodes[[yc]],
@@ -612,8 +612,9 @@ qec_extract_adapter <- function(model, view, html = NULL) {
                                  stringsAsFactors = FALSE))
   if (!is.null(view$network)) {
     ecols <- names(edges)[vapply(edges, is.numeric, logical(1))]
-    if (!is.null(view$network$weights)) {
-      # Explicit layer: the row qe_edges(weights =) wrote to the networks frame.
+    if (!is.null(view$network$weights) || length(model$networks$data)) {
+      # Explicit layer: the row qe_edges(weights =) wrote to the networks frame
+      # (every network on the rENA qeviz backend is one).
       nrow1 <- model$networks$data[[1]]
       net <- vapply(ecols, function(k) as.numeric(nrow1[[k]] %||% NA_real_), 0)
     } else {
@@ -633,6 +634,8 @@ qec_extract_adapter <- function(model, view, html = NULL) {
     out$edges <- data.frame(col = ecols, w = unname(net), stringsAsFactors = FALSE)
   }
   labels <- c(view$means, vapply(view$mean_sets, `[[`, "", "label"))
+  # No groups frame (the backend draws no means unless asked): no means.
+  if (is.null(grps)) grps <- stats::setNames(data.frame(character(0)), gcol)
   g <- grps[grps[[gcol]] %in% labels, , drop = FALSE]
   b <- function(col, side) { v <- g[[paste0(col, ".", side)]]; if (is.null(v)) rep(NA_real_, nrow(g)) else v }
   out$means <- data.frame(group = g[[gcol]], x = g[[xc]], y = g[[yc]],
@@ -644,7 +647,7 @@ qec_extract_adapter <- function(model, view, html = NULL) {
   # The groups frame always carries bounds; whether to draw them is the
   # renderer's decision, so there is nothing to check here when intervals are off.
   if (.qec_ci(view) == "none") out$means[, c("x_lo", "x_hi", "y_lo", "y_hi")] <- NA_real_
-  if (!is.null(view$point_set)) {
+  if ((!is.null(view$point_set) || isTRUE(view$points)) && length(model$pointsets$data)) {
     ps <- rows(model$pointsets)
     out$points <- data.frame(id = ps$id, x = ps[[xc]], y = ps[[yc]], stringsAsFactors = FALSE)
   } else if (isTRUE(view$points))
@@ -819,7 +822,10 @@ qec_check <- function(truth, got, tol = 1e-5, edge_key = c("pair", "col")) {
     if (is.null(gp) || !nrow(gp)) {
       res$points <- .qec_row("unit point positions", NA, tol, "no points found")
     } else {
-      if (!is.null(gp$id)) {
+      # Match by unit id when the drawn points carry them; ids that don't
+      # overlap at all (rENA traces, or the qeviz backend fed plain matrices,
+      # which numbers points 1..n) fall back to nearest-neighbour matching.
+      if (!is.null(gp$id) && any(tp$id %in% gp$id)) {
         m <- match(tp$id, gp$id)
         d <- if (anyNA(m)) NA else max(abs(tp$x - gp$x[m]), abs(tp$y - gp$y[m]))
       } else {
@@ -913,6 +919,28 @@ qec_render_qe <- function(set, view, group_col, probe_js) {
   list(html = .qec_fill(html, "</body>", probe), model = p$model, code = code)
 }
 
+# rENA's own plotting code, run with ena.plot(..., backend = "qeviz"): the
+# reference code with only the backend changed. Warnings (arguments the
+# backend ignores) are collected and shown under the panel.
+qec_has_backend <- function() {
+  "backend" %in% names(formals(get("ena.plot", envir = asNamespace("rENA"))))
+}
+
+qec_render_backend <- function(set, view, ref_code, probe_js) {
+  code <- .qec_fill(ref_code, "p <- ena.plot(set, ", 'p <- ena.plot(set, backend = "qeviz", ')
+  env  <- list2env(list(set = set), parent = globalenv())
+  warns <- character(0)
+  withCallingHandlers(eval(parse(text = code), envir = env), warning = function(w) {
+    warns <<- c(warns, conditionMessage(w)); invokeRestart("muffleWarning")
+  })
+  p    <- env$p
+  html <- qeviz::qe_html(p$qe)
+  probe <- sprintf("<script>window.__QEC_VIEW__ = %s;</script>\n<script>%s</script>\n</body>",
+                   jsonlite::toJSON(paste0("be:", view$name), auto_unbox = TRUE), probe_js)
+  list(html = .qec_fill(html, "</body>", probe), model = p$qe$model, code = code,
+       warnings = unique(warns))
+}
+
 # Literal first-occurrence replacement. sub(fixed = TRUE) still interprets
 # backslashes in the replacement, which would mangle JSON / JS escapes.
 .qec_fill <- function(x, marker, value) {
@@ -934,6 +962,9 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
   if (is.null(views)) views <- if (reference == "ona") qec_default_views_ona(names(colors))
                                else qec_default_views(names(colors))
   probe_js <- paste(readLines(file.path(.QEC_DIR, "qe_probe.js"), warn = FALSE), collapse = "\n")
+  # Third column: rENA's code through ena.plot(backend = "qeviz"), when the
+  # loaded rENA has the backend switch.
+  backend <- reference == "rena" && qec_has_backend()
 
   results <- lapply(views, function(v) {
     message("• ", v$name, ": ", v$title)
@@ -951,21 +982,28 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
     writeLines(qe$html, file.path(out_dir, "panels", paste0("qe_", v$name, ".html")))
     adapter <- qec_extract_adapter(qe$model, v, qe$html)
 
+    be <- if (backend) qec_render_backend(set, v, rp$code, probe_js)
+    if (backend) writeLines(be$html, file.path(out_dir, "panels", paste0("be_", v$name, ".html")))
+
     # Thickness per unit weight; must match across views for plots of one
     # model to be comparable (checked across views in report.js).
     rena_k <- if (!is.null(rena$edges) && nrow(rena$edges))
       sum(rena$edges$width) / sum(abs(rena$edges$w)) else NULL
 
-    list(view = v, truth = truth, colors = vcol, code = list(rena = rp$code, qe = qe$code), rena_k = rena_k,
+    list(view = v, truth = truth, colors = vcol,
+         code = list(rena = rp$code, qe = qe$code, be = be$code), rena_k = rena_k,
+         be_warnings = be$warnings,
          checks = list(rena = qec_check(truth, rena, tol),
-                       adapter = qec_check(truth, adapter, tol, edge_key = "col")))
+                       adapter = qec_check(truth, adapter, tol, edge_key = "col"),
+                       be_adapter = if (backend)
+                         qec_check(truth, qec_extract_adapter(be$model, v, be$html), tol, edge_key = "col")))
   })
 
   ref_pkg <- if (reference == "ona") "ona" else "rENA"
   payload <- list(
     label = label, tol = tol, colors = as.list(colors),
     reference = list(label = ref$label, tag = ref$tag),
-    setup_code = setup_code, qe_note = QEC_QE_NOTE,
+    setup_code = setup_code, qe_note = QEC_QE_NOTE, backend = backend,
     generated = format(Sys.time(), "%Y-%m-%d %H:%M"),
     versions = list(ref = as.character(utils::packageVersion(ref_pkg)),
                     qeviz = as.character(utils::packageVersion("qeviz"))),
@@ -974,7 +1012,8 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
       network = if (is.null(r$view$network)) NULL
                 else c(r$view$network, list(colors = as.list(.qec_net_colors(r$view$network, r$colors)))),
       code = r$code, truth = r$truth, rena_k = r$rena_k,
-      rena = r$checks$rena, adapter = r$checks$adapter))
+      rena = r$checks$rena, adapter = r$checks$adapter,
+      be_adapter = r$checks$be_adapter, be_warnings = as.list(r$be_warnings)))
   )
   json <- jsonlite::toJSON(payload, auto_unbox = TRUE, digits = NA,
                            dataframe = "rows", null = "null", na = "null")
@@ -988,7 +1027,8 @@ qec_compare <- function(set, views = NULL, out_dir = file.path(.QEC_DIR, "out"),
   # Console summary (the qeviz-render column is only available in the browser).
   summary <- do.call(rbind, lapply(results, function(r) {
     rbind(cbind(view = r$view$name, renderer = ref$label, r$checks$rena),
-          cbind(view = r$view$name, renderer = "adapter", r$checks$adapter))
+          cbind(view = r$view$name, renderer = "adapter", r$checks$adapter),
+          if (backend) cbind(view = r$view$name, renderer = "be-adapter", r$checks$be_adapter))
   }))
   old <- options(width = max(getOption("width"), 160)); on.exit(options(old), add = TRUE)
   print(summary[, c("view", "renderer", "check", "status", "max_delta")], row.names = FALSE)
