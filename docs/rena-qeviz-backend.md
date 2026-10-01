@@ -1,6 +1,6 @@
 # rENA plotting backend switch (qeviz)
 
-**Status:** phases 1–3 (plumbing, layer functions, composites) implemented; phases 4–6 to do · **Repo / branch:** rENA
+**Status:** phases 1–4 implemented; phases 5–6 to do · **Repo / branch:** rENA
 `qeviz-widget` · **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
 
 rENA's existing plotting API (`ena.plot()`, `plot.ena.set()`, the
@@ -59,11 +59,14 @@ p$plot                                         # an htmlwidget on either backend
      when they use under half) through `qeviz::qe_range()`. `show()` uses it.
    - `clear()` and `scale.ENAplot()` need no change: neither touches plotly.
    - `add_points()`'s `legend.name` names the qeviz point set.
-4. **Not available on the qeviz backend**
-   - `ena.plot.trajectory()`, `add_trajectory()`, `with_trajectory()` and
-     `ena.plot.movie()`: trajectories are deferred (0.5.0 spec §5), and the
-     movie functions are plotly animations.
-   - These fail with a clear error pointing to `backend = "plotly"`.
+4. **Trajectories and movies stay plotly-only** (done)
+   - `ena.plot.trajectory()`, `add_trajectory()`, `ena.plot.movie()` and
+     `with_trajectory()` work on plotly exactly as before.
+   - On a qeviz-backend plot they are a no-op with a warning (class
+     `rENA_qeviz_unsupported`) pointing to `backend = "plotly"`, and return
+     their input unchanged (`ena.plot.movie()` returns the plot's widget).
+   - No qeviz integration: qeviz trajectories are deferred (0.5.0 spec §5),
+     and these functions are likely unused.
 5. **Harness.** `tools/rena-compare` runs each view's single piece of
    `ena.plot()` code through both backends. The hand-written `qe_*()` code on
    the qeviz side goes away; the model-space readback checks are unchanged.
@@ -118,8 +121,9 @@ p$plot                                         # an htmlwidget on either backend
 
 1. **Arguments that can't be honoured:** warn once per argument per session
    when they change the picture. Stay silent for plotly-only layout options.
-2. **Trajectories and movies:** error on the qeviz backend. No silent fallback
-   to plotly (mixing renderers is confusing).
+2. **Trajectories and movies:** no qeviz integration. On a qeviz plot they
+   warn and change nothing (revised from "error": they keep working on
+   plotly, and are likely unused). No silent fallback to plotly.
 3. **`threshold` maximum:** supported, not warned. It turned out to be in
    qeviz 0.5.0 already (§1, R and TS). The cap is now verified in
    `tools/rena-compare` (view `w_clamp`, `threshold = c(0.05, 0.15)`: rENA,
