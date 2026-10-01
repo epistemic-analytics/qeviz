@@ -539,3 +539,12 @@ test_that("explicit means carry their own intervals and outlier setting", {
   expect_identical(get("b", "intervals"), "crosshairs")
   expect_true(get("b", "outlier"))
 })
+
+test_that("qe_range() sets the axis range of an existing plot", {
+  p <- qe_plot(model)
+  expect_match(.graph_el(qe_range(p, 2)), 'range="2"', fixed = TRUE)
+  expect_match(.graph_el(qe_range(p, "points")), 'range="points"', fixed = TRUE)
+  expect_false(grepl("range=", .graph_el(qe_range(qe_range(p, 2), NULL))))
+  expect_error(qe_range(p, list(x = 1)), "symmetric")
+  expect_error(qe_range(p, -1), "positive")
+})

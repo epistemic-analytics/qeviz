@@ -272,12 +272,7 @@ document.getElementById("vis").setModelData(model);
 #' @export
 qe_plot <- function(x, title = NULL, width = "100%", height = 440,
                     range = NULL, scale_points = TRUE, palette = NULL, ...) {
-  if (is.list(range))
-    stop("qe_plot(): only symmetric ranges are supported: \"network\", \"points\" or a number.",
-         call. = FALSE)
-  if (!is.null(range) && !(identical(range, "network") || identical(range, "points") ||
-                           (is.numeric(range) && length(range) == 1L && is.finite(range) && range > 0)))
-    stop("qe_plot(): range must be \"network\", \"points\" or a positive number.", call. = FALSE)
+  .qe_check_range(range, "qe_plot")
   if (!is.null(palette) && !(is.character(palette) && length(palette) >= 1L))
     stop("qe_plot(): palette must be a character vector of colours.", call. = FALSE)
   p <- structure(
@@ -1211,4 +1206,35 @@ qe_fragment <- function(x, height = "480px", graph_opts = list(), ...) {
 qe_palette <- function() {
   c("#4477AA", "#EE6677", "#228833", "#CCBB44",
     "#66CCEE", "#AA3377", "#BBBBBB", "#000000")
+}
+
+#' Set the axis range of a plot
+#'
+#' Changes the symmetric axis range of an existing plot, as `qe_plot(range =)`
+#' does at creation.
+#'
+#' @param p     A `qe_plot` object.
+#' @param range `"network"` (the node extent × 1.2), `"points"` (the unit
+#'   points' extent × 1.2), a positive number (the axes run from `-range` to
+#'   `range`), or `NULL` for the default.
+#' @return The modified `qe_plot` object.
+#' @examples
+#' \dontrun{
+#' qe_plot(set) |> qe_range(2)
+#' }
+#' @export
+qe_range <- function(p, range) {
+  .qe_check_range(range, "qe_range")
+  p$graph_opts[["range"]] <- range
+  p
+}
+
+.qe_check_range <- function(range, fn) {
+  if (is.list(range))
+    stop(sprintf("%s(): only symmetric ranges are supported: \"network\", \"points\" or a number.", fn),
+         call. = FALSE)
+  if (!is.null(range) && !(identical(range, "network") || identical(range, "points") ||
+                           (is.numeric(range) && length(range) == 1L && is.finite(range) && range > 0)))
+    stop(sprintf("%s(): range must be \"network\", \"points\" or a positive number.", fn), call. = FALSE)
+  invisible(range)
 }

@@ -1,6 +1,6 @@
 # rENA plotting backend switch (qeviz)
 
-**Status:** phase 1 (plumbing) and phase 2 (layer functions) implemented; phases 3–6 to do · **Repo / branch:** rENA
+**Status:** phases 1–3 (plumbing, layer functions, composites) implemented; phases 4–6 to do · **Repo / branch:** rENA
 `qeviz-widget` · **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
 
 rENA's existing plotting API (`ena.plot()`, `plot.ena.set()`, the
@@ -44,12 +44,21 @@ p$plot                                         # an htmlwidget on either backend
 2. **Layers.** Each of the three layer functions starts with
    `if (<qeviz backend>) return(<qeviz version>(...))`, mapping arguments as
    in the table below. The plotly code underneath is untouched.
-3. **Composites**
-   - `ena.plotter()`: its subtraction multiplier maps to `magnify`, with
-     `magnify = 1` on the side plots.
-   - `clear()`: needs a qeviz branch.
-   - `scale.ENAplot()` and `check_range()`: they call `plotly::layout()`
-     directly, so each gets a small qeviz branch mapping onto `range`.
+3. **Composites** (done)
+   - `ena.plotter()` and `ena.plot.subtraction()` take `backend` (default:
+     the option) and pass it to every `ena.plot()` they create. On qeviz the
+     weights are not multiplied; `networkMultiplier` and
+     `subtractionMultiplier` become magnification (via `ena.plot(magnify =)`):
+     the subtraction plot gets `networkMultiplier × subtractionMultiplier`
+     and the side plots `networkMultiplier`, all labelled "(scaled Nx)" once
+     either is set, as webENA labels its side plots.
+   - `add_network(edge.multiplier)`: weights unscaled, the multiplier is the
+     layer's `magnify`.
+   - `check_range()`: a qeviz branch applies the plotly rule (grow the
+     symmetric range to 1.2× the largest plotted point / mean, or shrink it
+     when they use under half) through `qeviz::qe_range()`. `show()` uses it.
+   - `clear()` and `scale.ENAplot()` need no change: neither touches plotly.
+   - `add_points()`'s `legend.name` names the qeviz point set.
 4. **Not available on the qeviz backend**
    - `ena.plot.trajectory()`, `add_trajectory()`, `with_trajectory()` and
      `ena.plot.movie()`: trajectories are deferred (0.5.0 spec §5), and the
@@ -119,7 +128,18 @@ p$plot                                         # an htmlwidget on either backend
    (qeviz `dd4353b`, rENA `f67089b`). The switch goes on rENA `qeviz-widget`
    after them.
 
+## rENA bugs found (noted, not fixed)
+
+- `add_network()` with the default `wh = NULL` multiplies by
+  `edge.multiplier` twice (once when the default network is built, again when
+  it is passed on). The qeviz backend applies it once, as `magnify`.
+- `scale.ENAplot()` is a no-op: it rescales a local copy of the points and
+  returns the plot unchanged.
+
 ## qeviz additions (made for the switch)
+
+- `qe_range()`: set the range of an existing plot (phase 3, for
+  `check_range()`).
 
 - `qe_palette()`: exported default palette (phase 1).
 - `qe_labels()` changes only the arguments supplied, so a layer call setting
