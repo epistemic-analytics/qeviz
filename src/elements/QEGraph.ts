@@ -287,7 +287,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // only react to events from its own associated visual.  _vizena is resolved
       // in connectedCallback(); before that point we accept all events (initial
       // load), but once the association is known we filter strictly.
-      if (this._vizena && e.target !== this._vizena) return;
+      // composedPath()[0]: inside a shadow root (e.g. a qe-visual in another
+      // component), e.target is retargeted to the shadow host
+      const origin = e.composedPath?.()[0] ?? e.target;
+      if (this._vizena && origin !== this._vizena) return;
 
       const model = (e as CustomEvent).detail;
       if (!model) return;
