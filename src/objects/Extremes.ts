@@ -5,16 +5,22 @@ class Extremes {
   // _point_max?: Point;
   // _node_max?: Point;
 
-  constructor(x: number, y: number) { //, n?: Point, p?: Point) {
+  /** Centre of the view; (0, 0) — the ENA origin — unless centred on the content */
+  cx: number;
+  cy: number;
+
+  constructor(x: number, y: number, cx: number = 0, cy: number = 0) { //, n?: Point, p?: Point) {
     this.x_max = x;
     this.y_max = y;
+    this.cx = cx;
+    this.cy = cy;
     // this._point_max = p;
     // this._node_max = n;
   }
   as_viewBox(p: number = 1.2): string {
     let x = this.x_max * p;
     let y = this.y_max * p;
-    return (`${x * -1} ${y * -1} ${x * 2} ${y * 2}`);
+    return (`${this.cx - x} ${this.cy - y} ${x * 2} ${y * 2}`);
   }
 
   // get point_max(): Point {

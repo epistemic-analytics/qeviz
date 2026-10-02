@@ -261,7 +261,13 @@ export class Graph {
     return (added);
   }
 
-  update_extremes() {
+  /**
+   * The visible extent: 1.3 × the farthest point or node. Centred on the
+   * origin (the ENA convention: (0, 0) is the mean of the points), or with
+   * `centerContent`, on the middle of the points' and nodes' bounding box, so
+   * a network that sits off to one side of the origin fills the plot.
+   */
+  update_extremes(centerContent: boolean = false) {
     // let
     //   dim1 = this.options.GRAPH.dimensions[0],
     //   dim2 = this.options.GRAPH.dimensions[1],
@@ -286,14 +292,30 @@ export class Graph {
       // the next integer, which — for ENA's small coordinate ranges (≈1–2) —
       // left the network floating in a lot of dead space. Keep the raw value so
       // the drawing fills the canvas.
-      const content_max = Math.max(
-        ...search_layers.map(l => Math.max(
-          ...[...l.objects.values()].map(o => Math.max(Math.abs(o.x), Math.abs(o.y)))
-        )).filter(a => Math.abs(a) !== Infinity)
-      );
-      const found_max = (Number.isFinite(content_max) && content_max > 0 ? content_max : 1) * 1.3;
-      this.extremes = new Extremes(found_max, found_max);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      search_layers.forEach(l => l.objects.forEach((o: any) => {
+        if (Number.isFinite(o.x)) { minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x); }
+        if (Number.isFinite(o.y)) { minY = Math.min(minY, o.y); maxY = Math.max(maxY, o.y); }
+      }));
+      const found = Number.isFinite(minX) && Number.isFinite(minY);
+      const cx = centerContent && found ? (minX + maxX) / 2 : 0;
+      const cy = centerContent && found ? (minY + maxY) / 2 : 0;
+      const content_max = found
+        ? Math.max(Math.abs(minX - cx), Math.abs(maxX - cx), Math.abs(minY - cy), Math.abs(maxY - cy))
+        : 0;
+      const found_max = (content_max > 0 ? content_max : 1) * 1.3;
+      this.extremes = new Extremes(found_max, found_max, cx, cy);
     }
+  }
+
+  /** Farthest node from (cx, cy), on either axis */
+  nodeExtentFrom(cx: number, cy: number): number {
+    const nodes = this.layers.search("layers", "nodes");
+    let max = 0;
+    nodes?.objects.forEach((o: any) => {
+      if (Number.isFinite(o.x) && Number.isFinite(o.y)) max = Math.max(max, Math.abs(o.x - cx), Math.abs(o.y - cy));
+    });
+    return max;
   }
 
   base_point_size(scale = 8): number {

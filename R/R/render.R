@@ -188,7 +188,7 @@
   # Plot-wide attributes on <qe-graph> (values HTML-escaped).
   esc <- function(v) gsub('"', "&quot;", gsub("<", "&lt;", gsub("&", "&amp;", as.character(v), fixed = TRUE),
                                           fixed = TRUE), fixed = TRUE)
-  gattr <- c("edge-width", "plot-title", "range", "scale-points",
+  gattr <- c("edge-width", "plot-title", "range", "center", "scale-points",
              "label-font-size", "label-font-family", "label-font-color")
   ga <- paste0(vapply(gattr, function(k)
     if (is.null(opts[[k]])) "" else sprintf(' %s="%s"', k, esc(opts[[k]])), ""), collapse = "")
@@ -255,6 +255,11 @@ document.getElementById("vis").setModelData(model);
 #' @param scale_points Rescale unit points and means so the outermost point
 #'   meets the outermost code node (default `TRUE`); `FALSE` plots raw
 #'   coordinates, as rENA does.
+#' @param center Where the view is centred: `"origin"` (default; (0, 0), the
+#'   ENA convention, where the points' mean sits) or `"content"`, the middle of
+#'   the nodes' and points' bounding box, so a network that sits off to one side
+#'   of the origin fills the plot. With `"content"`, `range = "network"` is
+#'   measured from that centre.
 #' @param palette Group colours, assigned in order of appearance. Default:
 #'   Paul Tol's colour-blind-safe "bright" scheme. See also [qe_colors()].
 #' @param ...     Additional arguments forwarded to [qe_extract()] when `x` is a
@@ -271,7 +276,9 @@ document.getElementById("vis").setModelData(model);
 #'
 #' @export
 qe_plot <- function(x, title = NULL, width = "100%", height = 440,
-                    range = NULL, scale_points = TRUE, palette = NULL, ...) {
+                    range = NULL, scale_points = TRUE, center = c("origin", "content"),
+                    palette = NULL, ...) {
+  center <- match.arg(center)
   .qe_check_range(range, "qe_plot")
   if (!is.null(palette) && !(is.character(palette) && length(palette) >= 1L))
     stop("qe_plot(): palette must be a character vector of colours.", call. = FALSE)
@@ -288,6 +295,7 @@ qe_plot <- function(x, title = NULL, width = "100%", height = 440,
   p$graph_opts[["plot-title"]] <- title
   p$graph_opts[["range"]] <- range
   if (isFALSE(scale_points)) p$graph_opts[["scale-points"]] <- "false"
+  if (center == "content") p$graph_opts[["center"]] <- "content"
   if (!is.null(palette)) p$model$palette <- as.list(palette)
   p
 }

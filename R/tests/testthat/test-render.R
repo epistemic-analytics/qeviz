@@ -273,6 +273,9 @@ test_that("qe_plot(range =, scale_points =, palette =)", {
   expect_error(qe_plot(model, range = "wide"))
   expect_match(.graph_el(qe_plot(model, scale_points = FALSE)), 'scale-points="false"', fixed = TRUE)
   expect_false(grepl("scale-points", .graph_el(qe_plot(model)), fixed = TRUE))
+  expect_match(.graph_el(qe_plot(model, center = "content")), 'center="content"', fixed = TRUE)
+  expect_false(grepl("center=", .graph_el(qe_plot(model)), fixed = TRUE))
+  expect_error(qe_plot(model, center = "middle"))
   expect_equal(unlist(qe_plot(model, palette = c("#111111", "#222222"))$model$palette),
                c("#111111", "#222222"))
 })

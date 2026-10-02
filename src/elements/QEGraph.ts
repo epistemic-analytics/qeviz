@@ -178,7 +178,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // MutationObserver in connectedCallback().
     return [
       'width', 'height', 'for',
-      'scale-points',
+      'scale-points', 'center',
       'labels', 'label-nodes', 'label-means', 'label-points',
     ];
   }
@@ -250,6 +250,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   // <qe-graph range> / plot-title / label-font-* (qe_plot(range =, title =),
   // qe_labels(font_*)); resolved each render.
   private _rangeExtent: number | null = null;
+  private _rangeMode: 'network' | 'points' | 'number' | null = null;
+  /** center="content": centre the view on the drawn content, not the origin */
+  private _centerContent = false;
   private _plotTitle: string | null = null;
   private _titleEl: SVGTextElement | null = null;
   private _resizeObs: ResizeObserver | null = null;
@@ -401,6 +404,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         : config.range === 'points' ? effectivePointExtent * pointScale * 1.2
         : typeof config.range === 'number' ? config.range
         : null;
+      this._rangeMode = config.range === 'network' || config.range === 'points' ? config.range
+        : typeof config.range === 'number' ? 'number' : null;
+      this._centerContent = config.centerContent;
       this._plotTitle = config.plotTitle;
       this._labelFont = config.labelFont;
 
@@ -1367,6 +1373,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     showNodes: boolean;
     edgeWidth: number;
     range: 'network' | 'points' | number | null;
+    centerContent: boolean;
     plotTitle: string | null;
     labelFont: { size: number | null; family: string | null; color: string | null };
     hideUnconnectedNodes: boolean;
@@ -1450,6 +1457,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       })(),
       hideUnconnectedNodes: nodesEl?.getAttribute('unconnected')?.toLowerCase() === 'hide',
       scalePoints: this.getAttribute('scale-points') !== 'false',
+      centerContent: this.getAttribute('center') === 'content',
 
       // Means — presence of <qe-means> = show; absence = hide.
       showMeans:        !!meansEl,
@@ -1554,7 +1562,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
         'network', 'colors', 'threshold', 'name',
         'groups', 'confidence', 'label', 'intervals', 'outlier', 'set', 'unconnected',
-        'scale-points', 'edge-width', 'labels', 'range', 'plot-title',
+        'scale-points', 'edge-width', 'labels', 'range', 'center', 'plot-title',
         'label-font-size', 'label-font-family', 'label-font-color', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
@@ -2227,6 +2235,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
     const parent = this._labelsGroup;
     const extent = this.__data__.extremes.x_max;
+    const { cx, cy } = this.__data__.extremes;
     if (!parent || extent <= 0) return;
 
     const fontSize = extent * 0.06;
@@ -2253,13 +2262,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       if (axis === 'x') {
         // At the right (+x) tip, anchored end so any-length text grows inward
         // and never clips past the viewBox edge; nudged just above the axis.
-        el.setAttribute('x', (extent - gap).toString());
+        el.setAttribute('x', (cx + extent - gap).toString());
         el.setAttribute('y', (-gap).toString());
         el.setAttribute('text-anchor', 'end');
       } else {
         // Just below the top (−y) tip, centered on the y-axis, inside the box.
         el.setAttribute('x', (gap).toString());
-        el.setAttribute('y', (-extent + fontSize + gap).toString());
+        el.setAttribute('y', (cy - extent + fontSize + gap).toString());
         el.setAttribute('text-anchor', 'start');
       }
     };
@@ -2284,8 +2293,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       el.setAttribute('font-family', 'system-ui, sans-serif');
       el.setAttribute('font-style',  'italic');
       el.setAttribute('fill',        '#556');
-      el.setAttribute('x', (-extent + gap).toString());
-      el.setAttribute('y', (-extent + fontSize + gap).toString());
+      el.setAttribute('x', (cx - extent + gap).toString());
+      el.setAttribute('y', (cy - extent + fontSize + gap).toString());
       el.setAttribute('text-anchor', 'start');
     }
 
@@ -2308,8 +2317,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       t.setAttribute('font-family', this._labelFont.family ?? 'system-ui, sans-serif');
       t.setAttribute('font-weight', '600');
       t.setAttribute('fill', this._labelFont.color ?? '#223');
-      t.setAttribute('x', '0');
-      t.setAttribute('y', (-extent + ts * 1.1).toString());
+      t.setAttribute('x', cx.toString());
+      t.setAttribute('y', (cy - extent + ts * 1.1).toString());
       t.setAttribute('text-anchor', 'middle');
     }
   }
@@ -2321,9 +2330,15 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   update_extremes() {
-    this.__data__.update_extremes();
+    const graph = this.__data__ as Graph;
+    graph.update_extremes(this._centerContent);
     if (this._rangeExtent && this._rangeExtent > 0) {
-      (this.__data__ as Graph).extremes = new Extremes(this._rangeExtent, this._rangeExtent);
+      // A centred view measures range="network" from its centre, not the origin
+      const { cx, cy } = graph.extremes;
+      const r = this._centerContent && this._rangeMode === 'network'
+        ? graph.nodeExtentFrom(cx, cy) * 1.2
+        : this._rangeExtent;
+      graph.extremes = new Extremes(r, r, cx, cy);
     }
 
     const svgRect = this.svg_element?.getBoundingClientRect();
@@ -2353,10 +2368,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           axis_y = axisLineLayer.objects.get("axis-y") as Line
         ;
         if (axis_x && axis_y) {
-          axis_x.from = new Point({ ID: "axis-x-start", dimensions: [-this.__data__.extremes.x_max, 0], classes: ["ena.dimension", "ena.dimension"] });
-          axis_x.to = new Point({ ID: "axis-x-end", dimensions: [this.__data__.extremes.x_max, 0], classes: ["ena.dimension", "ena.dimension"] });
-          axis_y.from = new Point({ ID: "axis-y-start", dimensions: [0, -this.__data__.extremes.y_max], classes: ["ena.dimension", "ena.dimension"] });
-          axis_y.to = new Point({ ID: "axis-y-end", dimensions: [0, this.__data__.extremes.y_max], classes: ["ena.dimension", "ena.dimension"] });
+          const ex = this.__data__.extremes;
+          axis_x.from = new Point({ ID: "axis-x-start", dimensions: [ex.cx - ex.x_max, 0], classes: ["ena.dimension", "ena.dimension"] });
+          axis_x.to = new Point({ ID: "axis-x-end", dimensions: [ex.cx + ex.x_max, 0], classes: ["ena.dimension", "ena.dimension"] });
+          axis_y.from = new Point({ ID: "axis-y-start", dimensions: [0, ex.cy - ex.y_max], classes: ["ena.dimension", "ena.dimension"] });
+          axis_y.to = new Point({ ID: "axis-y-end", dimensions: [0, ex.cy + ex.y_max], classes: ["ena.dimension", "ena.dimension"] });
         }
       }
     }

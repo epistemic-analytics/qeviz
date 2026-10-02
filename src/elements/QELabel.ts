@@ -130,14 +130,16 @@ export class QELabel {
       }
 
       case Label.POSITION.CONTAINER: {
-        // Project from origin through the point onto the viewBox boundary.
-        // Labels ring the outer edge of the plot, one per code/group direction.
-        const px = this.point.x;
-        const py = this.point.y;
+        // Project from the view's centre (the origin, unless center="content")
+        // through the point onto the viewBox boundary. Labels ring the outer
+        // edge of the plot, one per code/group direction.
+        const { cx, cy } = this.graph.__data__.extremes;
+        const px = this.point.x - cx;
+        const py = this.point.y - cy;
         const dist = Math.sqrt(px * px + py * py) || 1;
         const scale = (extent * 0.93) / dist;
-        x      = px * scale;
-        y      = py * scale - offset * 0.3;
+        x      = cx + px * scale;
+        y      = cy + py * scale - offset * 0.3;
         anchor = px >= 0 ? 'start' : 'end';
         break;
       }
