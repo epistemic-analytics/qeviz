@@ -23,3 +23,6 @@ tools/rena-compare/out-ona/
 
 # qeviz widget demo output
 tools/widget-demo/out/
+
+# Julia: resolved per environment, not committed for a package
+julia/Manifest.toml
