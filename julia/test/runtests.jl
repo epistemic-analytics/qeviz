@@ -1,6 +1,8 @@
 using Test
 using QEViz
 using DataFrames
+using JSON3
+using Statistics
 
 # ── Shared fixtures ─────────────────────────────────────────────────────────────
 
@@ -176,36 +178,36 @@ end
     p  = qe_plot(model)
     p2 = qe_edges(p; group="FirstGame")
     @test p2.opts["group"]      == "FirstGame"
-    @test p2.opts["show_edges"] == true
-    @test isnothing(p2.opts["unit"])
+    @test p2.opts["edges"] == true
+    @test !haskey(p2.opts, "unit")
 end
 
 @testset "qe_edges unit" begin
     p  = qe_plot(model)
     p2 = qe_edges(p; unit="FirstGame::alice")
     @test p2.opts["unit"]       == "FirstGame::alice"
-    @test p2.opts["show_edges"] == true
-    @test isnothing(p2.opts["group"])
+    @test p2.opts["edges"] == true
+    @test !haskey(p2.opts, "group")
 end
 
 @testset "qe_edges compare" begin
     p  = qe_plot(model)
     p2 = qe_edges(p; group="FirstGame", compare="SecondGame")
     @test p2.opts["compare"] == "SecondGame"
-    @test isnothing(p2.opts["also"])
+    @test !haskey(p2.opts, "also")
 end
 
 @testset "qe_edges also" begin
     p  = qe_plot(model)
     p2 = qe_edges(p; group="FirstGame", also="SecondGame")
     @test p2.opts["also"] == "SecondGame"
-    @test isnothing(p2.opts["compare"])
+    @test !haskey(p2.opts, "compare")
 end
 
 @testset "qe_edges show=false" begin
     p  = qe_plot(model)
     p2 = qe_edges(p; show=false)
-    @test p2.opts["show_edges"] == false
+    @test p2.opts["edges"] == "false"
     @test !haskey(p2.opts, "group")
 end
 
@@ -246,13 +248,13 @@ end
 @testset "qe_points show" begin
     p  = qe_plot(model)
     p2 = qe_points(p)
-    @test p2.opts["show_points"] == true
+    @test p2.opts["points"] == true
 end
 
 @testset "qe_points hide" begin
     p  = qe_plot(model)
     p2 = qe_points(p; show=false)
-    @test p2.opts["show_points"] == false
+    @test p2.opts["points"] == false
 end
 
 @testset "qe_points does not mutate original" begin
@@ -268,25 +270,25 @@ end
     p  = qe_plot(model)
     p2 = qe_trajectories(p; units="FirstGame::alice", smooth="poly",
                          max_degree=4, degree_selection="fixed", line_style="tapered")
-    @test p2.opts["show_trajectories"] == true
-    @test p2.opts["trajectory_units"] == "FirstGame::alice"
-    @test p2.opts["trajectory_smooth"] == "poly"
-    @test p2.opts["trajectory_max_degree"] == 4
-    @test p2.opts["trajectory_degree_selection"] == "fixed"
-    @test p2.opts["trajectory_line_style"] == "tapered"
+    @test p2.opts["trajectories"] == true
+    @test p2.opts["trajectory-units"] == "FirstGame::alice"
+    @test p2.opts["trajectory-smooth"] == "poly"
+    @test p2.opts["trajectory-max-degree"] == 4
+    @test p2.opts["trajectory-degree-selection"] == "fixed"
+    @test p2.opts["trajectory-line-style"] == "tapered"
 end
 
 @testset "qe_trajectories defaults to loocv_2d" begin
     p  = qe_plot(model)
     p2 = qe_trajectories(p; smooth="poly")
-    @test p2.opts["trajectory_max_degree"] == 3
-    @test p2.opts["trajectory_degree_selection"] == "loocv_2d"
+    @test p2.opts["trajectory-max-degree"] == 3
+    @test p2.opts["trajectory-degree-selection"] == "loocv_2d"
 end
 
 @testset "qe_trajectories hide" begin
     p  = qe_plot(model)
     p2 = qe_trajectories(p; show=false)
-    @test p2.opts["show_trajectories"] == false
+    @test p2.opts["trajectories"] == false
 end
 
 @testset "qe_trajectories unknown unit" begin
@@ -303,7 +305,7 @@ end
     p  = qe_plot(model)
     p2 = qe_trajectories(p)
     @test !haskey(p.opts, "show_trajectories")
-    @test p2.opts["show_trajectories"] == true
+    @test p2.opts["trajectories"] == true
 end
 
 
@@ -312,17 +314,17 @@ end
 @testset "qe_labels defaults" begin
     p  = qe_plot(model)
     p2 = qe_labels(p)
-    @test p2.opts["label_nodes"]  == "on"
-    @test p2.opts["label_means"]  == "on"
-    @test p2.opts["label_points"] == "auto"
+    @test p2.opts["label-nodes"]  == "on"
+    @test p2.opts["label-means"]  == "on"
+    @test p2.opts["label-points"] == "auto"
 end
 
 @testset "qe_labels custom" begin
     p  = qe_plot(model)
     p2 = qe_labels(p; nodes="off", means="click", points="on")
-    @test p2.opts["label_nodes"]  == "off"
-    @test p2.opts["label_means"]  == "click"
-    @test p2.opts["label_points"] == "on"
+    @test p2.opts["label-nodes"]  == "off"
+    @test p2.opts["label-means"]  == "click"
+    @test p2.opts["label-points"] == "on"
 end
 
 
@@ -628,4 +630,41 @@ end
     s = sprint(show, MIME("text/html"), p)
     @test occursin("<qe-visual", s)
     @test occursin("setModelData(", s)
+end
+
+include("golden.jl")
+
+# ── 0.5 parity: Julia-specific behaviour (the rest is in golden.jl) ─────────────
+
+@testset "branches do not share explicit data" begin
+    base = qe_plot(g_m)
+    a = qe_edges(base; weights = g_w_oa, name = "a")
+    b = qe_group(qe_points(base; points = g_points[1:2, :]); points = g_points[1:3, :], label = "sub")
+    @test !haskey(base.model, "networks") && !haskey(base.model, "pointsets")
+    @test haskey(a.model, "networks") && !haskey(b.model, "networks")
+    @test "sub" in qe_groups(b) && "sub" ∉ qe_groups(a) && "sub" ∉ qe_groups(base)
+end
+
+@testset "parity validation errors" begin
+    p = qe_plot(g_m)
+    @test_throws ErrorException qe_edges(p; group = "OA", weights = g_w_oa)
+    @test_throws ErrorException qe_edges(p; weights = [0.1, 0.2])
+    @test_throws ErrorException qe_edges(p; weights = g_w_oa, threshold = (-1, 2))
+    @test_throws ErrorException qe_range(p, (0, 1))
+    @test_throws ErrorException qe_group(p; points = g_points[1:2, :], label = "OA")
+    @test_throws ErrorException qe_colors(p, "Nope" => "#000000")
+    @test_throws ErrorException qe_points(p; points = g_points[1:2, :], shape = "hexagon")
+end
+
+@testset "t quantile matches R" begin
+    # R: qt(c(0.975, 0.95, 0.995), c(3, 7, 1))
+    @test QEViz._t_quantile(0.975, 3) ≈ 3.182446305283708 rtol = 1e-12
+    @test QEViz._t_quantile(0.95, 7) ≈ 1.894578605090006 rtol = 1e-12
+    @test QEViz._t_quantile(0.995, 1) ≈ 63.656741162871526 rtol = 1e-12
+end
+
+@testset "palette and title" begin
+    @test qe_palette()[1] == "#4477AA" && length(qe_palette()) == 8
+    @test !occursin("plot-title", QEViz._build_graph_element(qe_plot(g_m)))
+    @test occursin("plot-title=\"T\"", QEViz._build_graph_element(qe_plot(g_m; title = "T")))
 end

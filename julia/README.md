@@ -60,11 +60,22 @@ All chain functions accept a `QEPlot` as their first argument, copy it internall
 
 | Function | Description |
 |---|---|
-| `qe_group(p, names...; intervals=true)` | Which group means (and CI boxes) to display. Omit `names` to show all groups. |
+| `qe_plot(model; title, width, height, range, scale_points, point_scale, center, palette)` | Create a plot. `title` is drawn when given; `range` is `"network"`, `"points"` or a number. |
+| `qe_group(p, names...; intervals="box", conf_level, outlier, show)` | Which group means (and intervals) to display. Omit `names` to show all groups; `show=false` hides them. |
+| `qe_group(p; points, label, color, shape, intervals, outlier)` | The mean of any subset of points (a DataFrame or matrix), with its own t interval. |
 | `qe_edges(p; group, unit, compare, also, show)` | Which edge network to draw. `group` and `unit` are mutually exclusive. `show=false` suppresses all edges. |
+| `qe_edges(p; weights, compare, colors, threshold, name)` | A network from data: a `Dict` of edge weights, an unnamed vector in edge-column order, or a DataFrame / matrix (averaged). Each call adds a layer. |
 | `qe_points(p; show=true, size=nothing)` | Show or hide individual unit scatter dots; `size` overrides the default dot size. |
+| `qe_points(p; units / points, color, shape, labels, name)` | A point set: unit IDs or a DataFrame of positions, with per-point colour, shape and labels. |
+| `qe_nodes(p; show, unconnected, positions, labels)` | When to draw code nodes; move them (`positions` DataFrame) or relabel them (`Dict` code => text). |
 | `qe_axes(p; x=true, y=true, show=true)` | Draw the axes (opt-in); `x`/`y` add per-axis labels (dimension name, custom string, or `false`). |
-| `qe_labels(p; nodes, means, points)` | Label visibility — `"on"`, `"off"`, `"click"`, or `"auto"`. |
+| `qe_labels(p; nodes, means, points, font_size, font_family, font_color)` | Label visibility (`"on"`, `"off"`, `"click"`, `"auto"`) and font (size in px). Only the arguments given change. |
+| `qe_colors(p, "Group" => "#hex", ...)` | Pin groups to colours. |
+| `qe_range(p, range)` | Set the symmetric axis range. |
+| `qe_palette()` | The default palette (Paul Tol "bright"). |
+
+The arguments mirror the R package's `qe_*()` functions; `tests/golden/` checks that
+Julia, Python and R produce the same markup and model data for the same calls.
 
 ## Introspection
 
