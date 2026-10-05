@@ -1,6 +1,6 @@
 {
   "name": "@qe-libs/qeviz",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Generic 2D model visualization library for quantitative/qualitative exploration",
   "type": "module",
   "main": "./dist/qeviz.umd.js",

@@ -6,7 +6,7 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
-## [Unreleased]
+## [0.5.1] - 2026-10-05
 
 ### Added
 - **`center="content"`** on `<qe-graph>` (`qe_plot(center = "content")`):

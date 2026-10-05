@@ -1,7 +1,7 @@
 name = "QEViz"
 uuid = "7d9f4b3a-2a1c-4e5d-8b7c-1d2e3f4a5b6c"
 authors = []
-version = "0.5.0"
+version = "0.5.1"
 
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b466-eeecee3f7bbb"
