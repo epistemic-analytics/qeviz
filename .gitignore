@@ -26,3 +26,6 @@ tools/widget-demo/out/
 
 # Julia: resolved per environment, not committed for a package
 julia/Manifest.toml
+
+# rENA vs pyENA side-by-side output
+tools/rena-pyena/out/
