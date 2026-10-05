@@ -1,0 +1,6168 @@
+{
+  "base": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "edges_group": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges group=\"OA\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "edges_compare": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges group=\"OA\" compare=\"OB\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "edges_also_mag": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\" edge-width=\"0.05\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges group=\"OA\" also=\"OB\" magnify=\"2\" color-scale=\"plot\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "points_all": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-points label=\"auto\" size=\"3\" fixed-size><\/qe-points>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "axes_labels": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-axes x y=\"Second\"><\/qe-axes>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "w_vector": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges network=\"net A\" colors=\"#228833,#AA3377\" threshold=\"0.05,0.3\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "net A",
+            "Data.Design": 0.1041,
+            "Data.Tech": 0.3,
+            "Design.Tech": 0.08645,
+            "Data.Collab": 0.056875,
+            "Design.Collab": 0.35455,
+            "Tech.Collab": 0.096275
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      }
+    }
+  },
+  "w_unnamed": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges network=\"network 1\" colors=\"#228833\" threshold=\"0.1\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "network 1",
+            "Data.Design": 0.1041,
+            "Data.Tech": 0.3,
+            "Design.Tech": 0.08645,
+            "Data.Collab": 0.056875,
+            "Design.Collab": 0.35455,
+            "Tech.Collab": 0.096275
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      }
+    }
+  },
+  "w_matrix_compare": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges network=\"network 1\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "network 1",
+            "Data.Design": -0.290475,
+            "Data.Tech": 0.16825,
+            "Design.Tech": -0.16995,
+            "Data.Collab": -0.447925,
+            "Design.Collab": 0.249475,
+            "Tech.Collab": -0.467675
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      }
+    }
+  },
+  "w_two_layers": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges network=\"first\" magnify=\"1.5\"><\/qe-edges>\n    <qe-edges network=\"second\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "first",
+            "Data.Design": 0.1041,
+            "Data.Tech": 0.3,
+            "Design.Tech": 0.08645,
+            "Data.Collab": 0.056875,
+            "Design.Collab": 0.35455,
+            "Tech.Collab": 0.096275
+          },
+          {
+            "name": "second",
+            "Data.Design": 0.05205,
+            "Data.Tech": 0.15,
+            "Design.Tech": 0.043225,
+            "Data.Collab": 0.0284375,
+            "Design.Collab": 0.177275,
+            "Tech.Collab": 0.0481375
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      }
+    }
+  },
+  "w_replace": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges network=\"n\"><\/qe-edges>\n    <qe-edges network=\"n\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "n",
+            "Data.Design": 0.2082,
+            "Data.Tech": 0.6,
+            "Design.Tech": 0.1729,
+            "Data.Collab": 0.11375,
+            "Design.Collab": 0.7091,
+            "Tech.Collab": 0.19255
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      }
+    }
+  },
+  "w_then_hide": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "ps_units": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-points set=\"picked\" label=\"auto\"><\/qe-points>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "pointsets": {
+        "data": [
+          {
+            "set": "picked",
+            "id": "OA.alice",
+            "x": -0.0302,
+            "y": -0.098,
+            "group": "OA",
+            "color": "#228833",
+            "shape": "triangle",
+            "label": "A"
+          },
+          {
+            "set": "picked",
+            "id": "OB.eve",
+            "x": 0.0339,
+            "y": -0.2484,
+            "group": "OB",
+            "color": "#228833",
+            "shape": "triangle",
+            "label": "E"
+          }
+        ],
+        "types": {
+          "set": "character",
+          "id": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "group": "character",
+          "color": "character",
+          "shape": "character",
+          "label": "character"
+        }
+      }
+    }
+  },
+  "ps_points": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-points set=\"points 1\" label=\"auto\" size=\"4\"><\/qe-points>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "pointsets": {
+        "data": [
+          {
+            "set": "points 1",
+            "id": "OA.alice",
+            "x": -0.0302,
+            "y": -0.098,
+            "group": "OA",
+            "shape": "diamond"
+          },
+          {
+            "set": "points 1",
+            "id": "OA.bob",
+            "x": 0.0167,
+            "y": 0.0268,
+            "group": "OA",
+            "shape": "diamond"
+          },
+          {
+            "set": "points 1",
+            "id": "OA.carol",
+            "x": 0.0333,
+            "y": 0.0826,
+            "group": "OA",
+            "shape": "diamond"
+          }
+        ],
+        "types": {
+          "set": "character",
+          "id": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "group": "character",
+          "shape": "character"
+        }
+      }
+    }
+  },
+  "ps_two_sets": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-points set=\"one\" label=\"auto\"><\/qe-points>\n    <qe-points set=\"points 2\" label=\"auto\"><\/qe-points>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "pointsets": {
+        "data": [
+          {
+            "set": "one",
+            "id": "OA.alice",
+            "x": -0.0302,
+            "y": -0.098,
+            "group": "OA",
+            "color": null
+          },
+          {
+            "set": "one",
+            "id": "OA.bob",
+            "x": 0.0167,
+            "y": 0.0268,
+            "group": "OA",
+            "color": null
+          },
+          {
+            "set": "points 2",
+            "id": "OB.eve",
+            "x": 0.0339,
+            "y": -0.2484,
+            "group": "OB",
+            "color": "#EE6677"
+          },
+          {
+            "set": "points 2",
+            "id": "OB.frank",
+            "x": 0.0147,
+            "y": 0.0158,
+            "group": "OB",
+            "color": "#EE6677"
+          }
+        ],
+        "types": {
+          "set": "character",
+          "id": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "group": "character",
+          "color": "character"
+        }
+      }
+    }
+  },
+  "g_named": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means groups=\"OA\" confidence intervals=\"crosshairs\" label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "g_named_outlier": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means confidence outlier label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0730069278352556,
+            "x.high": 0.0442569278352556,
+            "y.low": -0.0773184344907664,
+            "y.high": 0.109668434490766,
+            "x.olow": -0.1362125,
+            "x.ohigh": 0.1150875,
+            "y.olow": -0.1019375,
+            "y.ohigh": 0.1581625
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.0797226979342674,
+            "x.high": 0.133922697934267,
+            "y.low": -0.251471663445519,
+            "y.high": 0.0384216634455193,
+            "x.olow": -0.1138,
+            "x.ohigh": 0.1652,
+            "y.olow": -0.4483875,
+            "y.ohigh": 0.2451125
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric",
+          "x.olow": "numeric",
+          "x.ohigh": "numeric",
+          "y.olow": "numeric",
+          "y.ohigh": "numeric"
+        }
+      }
+    }
+  },
+  "g_explicit": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means groups=\"sub\" confidence outlier label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266,
+            "x.olow": null,
+            "x.ohigh": null,
+            "y.olow": null,
+            "y.ohigh": null,
+            "color": null,
+            "shape": null,
+            "intervals": null,
+            "outlier": null
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275,
+            "x.olow": null,
+            "x.ohigh": null,
+            "y.olow": null,
+            "y.ohigh": null,
+            "color": null,
+            "shape": null,
+            "intervals": null,
+            "outlier": null
+          },
+          {
+            "Condition": "sub",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0730069278352556,
+            "x.high": 0.0442569278352556,
+            "y.low": -0.0773184344907664,
+            "y.high": 0.109668434490766,
+            "x.olow": -0.1362125,
+            "x.ohigh": 0.1150875,
+            "y.olow": -0.1019375,
+            "y.ohigh": 0.1581625,
+            "color": "#CCBB44",
+            "shape": "diamond",
+            "intervals": "box",
+            "outlier": true
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric",
+          "x.olow": "numeric",
+          "x.ohigh": "numeric",
+          "y.olow": "numeric",
+          "y.ohigh": "numeric",
+          "color": "character",
+          "shape": "character",
+          "intervals": "character",
+          "outlier": "logical"
+        }
+      }
+    }
+  },
+  "g_explicit_two": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-means groups=\"a,b\" confidence intervals=\"crosshairs\" label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266,
+            "intervals": null,
+            "outlier": null
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275,
+            "intervals": null,
+            "outlier": null
+          },
+          {
+            "Condition": "a",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266,
+            "intervals": "box",
+            "outlier": false
+          },
+          {
+            "Condition": "b",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275,
+            "intervals": "crosshairs",
+            "outlier": false
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric",
+          "intervals": "character",
+          "outlier": "logical"
+        }
+      }
+    }
+  },
+  "g_hidden": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-edges group=\"OA\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "n_positions": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges group=\"OA\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 0.5,
+            "y": 0.5
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -0.5,
+            "y": -0.5
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "n_labels": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\" unconnected=\"hide\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0,
+            "label": "D"
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1,
+            "label": null
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0,
+            "label": null
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1,
+            "label": "C"
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer",
+          "label": "character"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "plot_settings": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\" plot-title=\"Settings\" range=\"points\" center=\"content\" scale-points=\"false\" point-scale=\"2\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means confidence label=\"on\"><\/qe-means>\n    <qe-edges group=\"OA\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      },
+      "palette": [
+        "#111111",
+        "#222222"
+      ]
+    }
+  },
+  "range_number": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\" range=\"1.5\">\n    <qe-means confidence label=\"on\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric"
+        }
+      }
+    }
+  },
+  "colors_labels": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\" label-font-size=\"12\" label-font-family=\"Georgia\" label-font-color=\"#333333\">\n    <qe-means confidence label=\"click\"><\/qe-means>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": "Condition",
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "Condition": "OA",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266,
+            "color": "#000000"
+          },
+          {
+            "Condition": "OB",
+            "x": 0.0271,
+            "y": -0.106525,
+            "x.low": -0.117356013607594,
+            "x.high": 0.171556013607594,
+            "y.low": -0.302535937674928,
+            "y.high": 0.0894859376749275,
+            "color": null
+          }
+        ],
+        "types": {
+          "Condition": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric",
+          "color": "character"
+        }
+      }
+    }
+  },
+  "nogroup_explicit": {
+    "graph": "<qe-graph width=\"100%\" height=\"440\">\n    <qe-nodes label=\"on\"><\/qe-nodes>\n    <qe-means groups=\"subset\" confidence label=\"on\"><\/qe-means>\n    <qe-points set=\"points 1\" label=\"auto\"><\/qe-points>\n    <qe-edges network=\"network 1\"><\/qe-edges>\n  <\/qe-graph>",
+    "model": {
+      "directed": false,
+      "id_col": "ENA_UNIT",
+      "node_id_col": "code",
+      "x_col": "x",
+      "y_col": "y",
+      "group_col": null,
+      "nodes": {
+        "data": [
+          {
+            "code": "Data",
+            "x": 1,
+            "y": 0
+          },
+          {
+            "code": "Design",
+            "x": 0,
+            "y": 1
+          },
+          {
+            "code": "Tech",
+            "x": -1,
+            "y": 0
+          },
+          {
+            "code": "Collab",
+            "x": 0,
+            "y": -1
+          }
+        ],
+        "types": {
+          "code": "character",
+          "x": "integer",
+          "y": "integer"
+        }
+      },
+      "edges": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "Condition": "OA",
+            "Data.Design": 0.0531,
+            "Data.Tech": 0.2977,
+            "Design.Tech": 0.1146,
+            "Data.Collab": 0.1816,
+            "Design.Collab": 0.1613,
+            "Tech.Collab": 0.1797
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "Condition": "OA",
+            "Data.Design": 0.1978,
+            "Data.Tech": 0.3182,
+            "Design.Tech": 0.0231,
+            "Data.Collab": 0.0139,
+            "Design.Collab": 0.195,
+            "Tech.Collab": 0.1584
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "Condition": "OA",
+            "Data.Design": 0.1421,
+            "Data.Tech": 0.1969,
+            "Design.Tech": 0.0779,
+            "Data.Collab": 0.0183,
+            "Design.Collab": 0.7697,
+            "Tech.Collab": 0.0022
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "Condition": "OA",
+            "Data.Design": 0.0234,
+            "Data.Tech": 0.3872,
+            "Design.Tech": 0.1302,
+            "Data.Collab": 0.0137,
+            "Design.Collab": 0.2922,
+            "Tech.Collab": 0.0448
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "Condition": "OB",
+            "Data.Design": 0.3329,
+            "Data.Tech": 0.139,
+            "Design.Tech": 0.119,
+            "Data.Collab": 0.7179,
+            "Design.Collab": 0.0249,
+            "Tech.Collab": 0.7881
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "Condition": "OB",
+            "Data.Design": 0.4177,
+            "Data.Tech": 0.19,
+            "Design.Tech": 0.3415,
+            "Data.Collab": 0.3395,
+            "Design.Collab": 0.1889,
+            "Tech.Collab": 0.3617
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "Condition": "OB",
+            "Data.Design": 0.4397,
+            "Data.Tech": 0.0158,
+            "Design.Tech": 0.519,
+            "Data.Collab": 0.3975,
+            "Design.Collab": 0.1438,
+            "Tech.Collab": 0.6716
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "Condition": "OB",
+            "Data.Design": 0.388,
+            "Data.Tech": 0.1822,
+            "Design.Tech": 0.0461,
+            "Data.Collab": 0.5643,
+            "Design.Collab": 0.0627,
+            "Tech.Collab": 0.4344
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "Condition": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "points": {
+        "data": [
+          {
+            "ENA_UNIT": "OA.alice",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "ENA_UNIT": "OA.bob",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "ENA_UNIT": "OA.carol",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "ENA_UNIT": "OA.dan",
+            "x": -0.0773,
+            "y": 0.0533
+          },
+          {
+            "ENA_UNIT": "OB.eve",
+            "x": 0.0339,
+            "y": -0.2484
+          },
+          {
+            "ENA_UNIT": "OB.frank",
+            "x": 0.0147,
+            "y": 0.0158
+          },
+          {
+            "ENA_UNIT": "OB.grace",
+            "x": -0.0808,
+            "y": -0.0252
+          },
+          {
+            "ENA_UNIT": "OB.henry",
+            "x": 0.1406,
+            "y": -0.1683
+          }
+        ],
+        "types": {
+          "ENA_UNIT": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "networks": {
+        "data": [
+          {
+            "name": "network 1",
+            "Data.Design": 0.1041,
+            "Data.Tech": 0.3,
+            "Design.Tech": 0.08645,
+            "Data.Collab": 0.056875,
+            "Design.Collab": 0.35455,
+            "Tech.Collab": 0.096275
+          }
+        ],
+        "types": {
+          "name": "character",
+          "Data.Design": "numeric",
+          "Data.Tech": "numeric",
+          "Design.Tech": "numeric",
+          "Data.Collab": "numeric",
+          "Design.Collab": "numeric",
+          "Tech.Collab": "numeric"
+        }
+      },
+      "pointsets": {
+        "data": [
+          {
+            "set": "points 1",
+            "id": "OA.alice",
+            "x": -0.0302,
+            "y": -0.098
+          },
+          {
+            "set": "points 1",
+            "id": "OA.bob",
+            "x": 0.0167,
+            "y": 0.0268
+          },
+          {
+            "set": "points 1",
+            "id": "OA.carol",
+            "x": 0.0333,
+            "y": 0.0826
+          },
+          {
+            "set": "points 1",
+            "id": "OA.dan",
+            "x": -0.0773,
+            "y": 0.0533
+          }
+        ],
+        "types": {
+          "set": "character",
+          "id": "character",
+          "x": "numeric",
+          "y": "numeric"
+        }
+      },
+      "groups": {
+        "data": [
+          {
+            "group": "subset",
+            "x": -0.014375,
+            "y": 0.016175,
+            "x.low": -0.0936627799287653,
+            "x.high": 0.0649127799287653,
+            "y.low": -0.110255890683266,
+            "y.high": 0.142605890683266,
+            "intervals": "box",
+            "outlier": false
+          }
+        ],
+        "types": {
+          "group": "character",
+          "x": "numeric",
+          "y": "numeric",
+          "x.low": "numeric",
+          "x.high": "numeric",
+          "y.low": "numeric",
+          "y.high": "numeric",
+          "intervals": "character",
+          "outlier": "logical"
+        }
+      }
+    }
+  }
+}
