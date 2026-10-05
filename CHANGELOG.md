@@ -41,6 +41,13 @@ R package (`tests/golden/`).
   1e-14) with no scipy or Distributions.jl.
 - Julia: `Project.toml` listed wrong UUIDs for DataFrames, JSON3 and Test, so
   the package could not be installed.
+- Python `from_pyena()` failed on real pyENA models: it read attribute names
+  pyENA doesn't have (`positions_`, `normed_networks_`, `units_`; pyENA's are
+  `rotation_nodes_`, `line_weights_`, `unit_labels_`, with `meta_data_` for
+  groups), and turned `"A & B"` connection names into `"A . B"`, which match
+  no edge. Its tests used a mock with the same guessed names; they now use
+  pyENA's real attributes, plus a fit of a real pyENA model when pyENA is
+  installed.
 
 ## [0.5.2] - 2026-10-05
 

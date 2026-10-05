@@ -63,6 +63,7 @@ import re
 import time
 from typing import Any, Optional, Sequence, Union
 
+import numpy as np
 import pandas as pd
 
 
@@ -1496,34 +1497,49 @@ def from_pyena(
         p.edges("FirstGame", also="SecondGame").points()  # auto-displays in Jupyter
         p.export_html("output.html")
     """
+    # pyENA's attribute names (rotation_nodes_, line_weights_, unit_labels_,
+    # meta_data_); the older names are accepted as fallbacks.
+    def attr(*names):
+        for n in names:
+            if getattr(model, n, None) is not None:
+                return getattr(model, n)
+        raise AttributeError(f"from_pyena(): model has none of {names}; is it a fitted pyena.ENA?")
+
+    units     = [str(u) for u in attr("unit_labels_", "units_")]
+    node_pos  = np.asarray(attr("rotation_nodes_", "positions_"), dtype=float)
+    pts       = np.asarray(attr("points_"), dtype=float)
+
     # Nodes: code name + (x, y)
     nodes_df = pd.DataFrame({
-        "code": model.codes_,
-        "x":    model.positions_[:, dims[0]],
-        "y":    model.positions_[:, dims[1]],
+        "code": list(attr("codes_")),
+        "x":    node_pos[:, dims[0]],
+        "y":    node_pos[:, dims[1]],
     })
 
-    # Edges: normalised connection weights, "&" → "." separator
-    conn_cols = [c.replace("&", ".") for c in model.connection_names_]
-    edges_df  = pd.DataFrame(model.normed_networks_, columns=conn_cols)
-    edges_df.insert(0, id_col, model.units_)
+    # Edges: normalised connection weights; "A & B" → "A.B"
+    conn_cols = [c.replace(" & ", ".").replace("&", ".") for c in attr("connection_names_")]
+    edges_df  = pd.DataFrame(np.asarray(attr("line_weights_", "normed_networks_"), dtype=float),
+                             columns=conn_cols)
+    edges_df.insert(0, id_col, units)
 
     # Points: projected (x, y) per unit
     points_df = pd.DataFrame({
-        id_col: model.units_,
-        "x":    model.points_[:, dims[0]],
-        "y":    model.points_[:, dims[1]],
+        id_col: units,
+        "x":    pts[:, dims[0]],
+        "y":    pts[:, dims[1]],
     })
 
-    # Attach group from unit-level metadata
+    # Attach group from unit-level metadata (indexed by unit)
     if group_col is not None:
-        meta = model.accum_.meta
+        meta = getattr(model, "meta_data_", None)
+        if meta is None:
+            meta = model.accum_.meta
         if group_col not in meta.columns:
             raise ValueError(
                 f"group_col {group_col!r} not found in model metadata. "
                 f"Available columns: {list(meta.columns)}"
             )
-        group_vals = meta.reindex(model.units_)[group_col].tolist()
+        group_vals = [str(v) for v in meta.reindex(units)[group_col].tolist()]
         points_df[group_col] = group_vals
         edges_df[group_col]  = group_vals
 

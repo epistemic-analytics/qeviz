@@ -627,7 +627,7 @@ def _make_mock_pyena(n_units: int = 8, n_codes: int = 4,
     rng        = np.random.default_rng(42)
     code_names = [f"Code{i}" for i in range(n_codes)]
     conn_names = [
-        f"{code_names[i]}&{code_names[j]}"
+        f"{code_names[i]} & {code_names[j]}"
         for j in range(1, n_codes)
         for i in range(j)
     ]
@@ -650,14 +650,16 @@ def _make_mock_pyena(n_units: int = 8, n_codes: int = 4,
     class _ENA:
         pass
 
+    # pyena.ENA's fitted attributes (pyena/ena.py)
     m                    = _ENA()
-    m.units_             = units
+    m.unit_labels_       = units
     m.codes_             = code_names
     m.connection_names_  = conn_names
-    m.networks_          = accum.networks_
-    m.normed_networks_   = rng.random((n_units, n_conn))
-    m.positions_         = rng.uniform(-1, 1, (n_codes, 2))
+    m.connection_counts_ = accum.networks_
+    m.line_weights_      = rng.random((n_units, n_conn))
+    m.rotation_nodes_    = rng.uniform(-1, 1, (n_codes, 2))
     m.points_            = rng.uniform(-1, 1, (n_units, 2))
+    m.meta_data_         = meta
     m.accum_             = accum
     return m
 
@@ -696,6 +698,25 @@ def test_from_pyena_separator_normalised():
     non_id = [c for c in p.model["edges"]["types"] if c != "QEUNIT"]
     assert all("." in c for c in non_id), "Expected '.' separator in edge columns"
     assert not any("&" in c for c in non_id)
+    assert "Code0.Code1" in non_id           # "Code0 & Code1" → "Code0.Code1"
+
+
+def test_from_pyena_real_model():
+    """A real pyENA fit (skipped when pyENA isn't installed): the attribute
+    names and edge-column names must line up with the model's codes."""
+    pyena = pytest.importorskip("pyena")
+    rng = np.random.default_rng(3)
+    codes = ["A", "B", "C", "D"]
+    rows = [{"unit": f"{g}.u{u}", "convo": f"{g}.c{u % 2}", "Condition": g,
+             **{c: int(rng.random() < 0.4) for c in codes}}
+            for g in ("G1", "G2") for u in range(4) for _ in range(6)]
+    model = pyena.ENA().fit(pd.DataFrame(rows), "unit", "convo", codes, window_size=3)
+    p = qeviz.from_pyena(model, group_col="Condition")
+    edge_cols = p._edge_columns()
+    assert len(edge_cols) == len(model.connection_names_)
+    assert p.groups() == ["G1", "G2"]
+    assert p.units() == [str(u) for u in model.unit_labels_]
+    p.edges("G1", compare="G2").group()     # builds without error
 
 
 def test_from_pyena_group_col_in_points():
@@ -782,8 +803,8 @@ def test_palette_and_title():
 def test_from_pyena_dims():
     fake = _make_mock_pyena()
     rng = np.random.default_rng(1)
-    fake.positions_ = np.column_stack([fake.positions_, rng.uniform(-1, 1, len(fake.positions_))])
+    fake.rotation_nodes_ = np.column_stack([fake.rotation_nodes_, rng.uniform(-1, 1, len(fake.rotation_nodes_))])
     fake.points_ = np.column_stack([fake.points_, rng.uniform(-1, 1, len(fake.points_))])
     p = qeviz.from_pyena(fake, dims=(0, 2))
-    assert p.model["nodes"]["data"][0]["y"] == pytest.approx(float(fake.positions_[0, 2]))
+    assert p.model["nodes"]["data"][0]["y"] == pytest.approx(float(fake.rotation_nodes_[0, 2]))
     assert p.model["points"]["data"][0]["y"] == pytest.approx(float(fake.points_[0, 2]))
