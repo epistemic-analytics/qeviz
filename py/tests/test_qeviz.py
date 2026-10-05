@@ -189,7 +189,7 @@ def test_plot_from_dict():
                          group_col="group")
     p = qeviz.plot(m)
     assert isinstance(p, QEPlot)
-    assert p.model is m
+    assert p.model == m          # a copy: chain methods never edit the caller's dict
 
 
 def test_plot_missing_edges_raises():
@@ -300,7 +300,7 @@ def test_edges_also():
 
 def test_edges_show_false():
     p = _make_plot().edges(show=False)
-    assert p._opts["show_edges"] is False
+    assert p._opts["edges"] == "false"
     for k in ("group", "unit", "compare", "also"):
         assert k not in p._opts
 
@@ -332,12 +332,12 @@ def test_edges_invalid_unit_raises():
 
 def test_points_show():
     p = _make_plot().points()
-    assert p._opts["show_points"] is True
+    assert p._opts["points"] is True
 
 
 def test_points_hide():
     p = _make_plot().points(False)
-    assert p._opts["show_points"] is False
+    assert p._opts["points"] is False
 
 
 def test_trajectories_show():
@@ -345,23 +345,23 @@ def test_trajectories_show():
         "alice", smooth="poly", max_degree=4, degree_selection="fixed",
         line_style="tapered",
     )
-    assert p._opts["show_trajectories"] is True
-    assert p._opts["trajectory_units"] == "alice"
-    assert p._opts["trajectory_smooth"] == "poly"
-    assert p._opts["trajectory_max_degree"] == 4
-    assert p._opts["trajectory_degree_selection"] == "fixed"
-    assert p._opts["trajectory_line_style"] == "tapered"
+    assert p._opts["trajectories"] is True
+    assert p._opts["trajectory-units"] == "alice"
+    assert p._opts["trajectory-smooth"] == "poly"
+    assert p._opts["trajectory-max-degree"] == 4
+    assert p._opts["trajectory-degree-selection"] == "fixed"
+    assert p._opts["trajectory-line-style"] == "tapered"
 
 
 def test_trajectories_defaults_loocv():
     p = _make_plot().trajectories("alice", smooth="poly")
-    assert p._opts["trajectory_max_degree"] == 3
-    assert p._opts["trajectory_degree_selection"] == "loocv_2d"
+    assert p._opts["trajectory-max-degree"] == 3
+    assert p._opts["trajectory-degree-selection"] == "loocv_2d"
 
 
 def test_trajectories_hide():
     p = _make_plot().trajectories(show=False)
-    assert p._opts["show_trajectories"] is False
+    assert p._opts["trajectories"] is False
 
 
 def test_trajectories_invalid_unit_raises():
@@ -376,9 +376,9 @@ def test_trajectories_invalid_degree_selection_raises():
 
 def test_labels():
     p = _make_plot().labels(nodes="off", means="click", points="on")
-    assert p._opts["label_nodes"]  == "off"
-    assert p._opts["label_means"]  == "click"
-    assert p._opts["label_points"] == "on"
+    assert p._opts["label-nodes"]  == "off"
+    assert p._opts["label-means"]  == "click"
+    assert p._opts["label-points"] == "on"
 
 
 # ── HTML output — child element structure ─────────────────────────────────────
@@ -729,6 +729,61 @@ def test_from_pyena_chain():
     assert view._opts["groups"]   == "G0"
     assert view._opts["group"]    == "G0"
     assert view._opts["compare"]  == "G1"
-    assert view._opts["show_points"] is True
+    assert view._opts["points"] is True
     # Original unmodified
     assert "groups" not in p._opts
+
+
+# ── 0.5 parity: Python-specific behaviour (the rest is in test_golden.py) ─────
+
+def test_branches_do_not_share_explicit_data():
+    base = _make_plot()
+    cols = base._edge_columns()
+    a = base.edges(weights=[0.1] * len(cols), name="a")
+    b = base.points(points=points_df.iloc[0:2]).group(points=points_df.iloc[0:3], label="sub")
+    assert "networks" not in base.model and "pointsets" not in base.model
+    assert "networks" in a.model and "networks" not in b.model
+    assert "sub" in b.groups() and "sub" not in a.groups() and "sub" not in base.groups()
+
+
+def test_parity_validation_errors():
+    p = _make_plot()
+    cols = p._edge_columns()
+    with pytest.raises(ValueError, match="not both"):
+        p.edges("A", weights=[0.1] * len(cols))
+    with pytest.raises(ValueError, match="edge columns"):
+        p.edges(weights=[0.1, 0.2])
+    with pytest.raises(ValueError, match="threshold"):
+        p.edges(weights=[0.1] * len(cols), threshold=(-1, 2))
+    with pytest.raises(ValueError, match="symmetric"):
+        p.range((0, 1))
+    with pytest.raises(ValueError, match="already a group"):
+        p.group(points=points_df.iloc[0:2], label="A")
+    with pytest.raises(ValueError, match="not found"):
+        p.colors(Nope="#000000")
+    with pytest.raises(ValueError, match="shape"):
+        p.points(points=points_df.iloc[0:2], shape="hexagon")
+
+
+def test_t_quantile_matches_r_without_scipy():
+    # R: qt(c(0.975, 0.95, 0.995), c(3, 7, 1))
+    for (p, df), want in (((0.975, 3), 3.182446305283708), ((0.95, 7), 1.894578605090006),
+                          ((0.995, 1), 63.656741162871526)):
+        assert qeviz._t_quantile(p, df) == pytest.approx(want, rel=1e-12)
+
+
+def test_palette_and_title():
+    assert qeviz.palette()[0] == "#4477AA" and len(qeviz.palette()) == 8
+    p = qeviz.plot(_make_plot().model)
+    assert "plot-title" not in p._build_graph_element()       # title only when given
+    assert 'plot-title="T"' in qeviz.plot(_make_plot().model, title="T")._build_graph_element()
+
+
+def test_from_pyena_dims():
+    fake = _make_mock_pyena()
+    rng = np.random.default_rng(1)
+    fake.positions_ = np.column_stack([fake.positions_, rng.uniform(-1, 1, len(fake.positions_))])
+    fake.points_ = np.column_stack([fake.points_, rng.uniform(-1, 1, len(fake.points_))])
+    p = qeviz.from_pyena(fake, dims=(0, 2))
+    assert p.model["nodes"]["data"][0]["y"] == pytest.approx(float(fake.positions_[0, 2]))
+    assert p.model["points"]["data"][0]["y"] == pytest.approx(float(fake.points_[0, 2]))

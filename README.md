@@ -107,16 +107,25 @@ qe_export_html(p, "output.html")
 
 ## Chain API
 
-All three languages share the same chain operations:
+All three languages share the same chain operations, with the same argument
+names; a plot built in any of them produces the same `<qe-graph>` markup and
+model data (checked by the shared fixtures in `tests/golden/`):
 
 | Operation | R | Python | Julia |
 |---|---|---|---|
-| Create | `qe_plot(set)` | `qeviz.plot(model)` | `qe_plot(model)` |
+| Create | `qe_plot(set, title=, range=, scale_points=, point_scale=, center=, palette=)` | `qeviz.plot(model, title=, range=, ...)` | `qe_plot(model; title=, range=, ...)` |
 | Group means | `qe_group(p, ...)` | `p.group(...)` | `qe_group(p, ...)` |
+| Mean of a subset | `qe_group(p, points=, label=, color=, shape=, intervals=, outlier=)` | `p.group(points=, ...)` | `qe_group(p; points=, ...)` |
 | Edge network | `qe_edges(p, group=, unit=, compare=, also=)` | `p.edges(group=, unit=, ...)` | `qe_edges(p; group=, unit=, ...)` |
+| Network from data | `qe_edges(p, weights=, compare=, colors=, threshold=, name=)` | `p.edges(weights=, ...)` | `qe_edges(p; weights=, ...)` |
 | Unit points | `qe_points(p)` | `p.points()` | `qe_points(p)` |
+| Point set | `qe_points(p, units=/points=, color=, shape=, labels=, name=)` | `p.points(units=/points=, ...)` | `qe_points(p; units=/points=, ...)` |
+| Nodes | `qe_nodes(p, show, unconnected=, positions=, labels=)` | `p.nodes(show, positions=, labels=)` | `qe_nodes(p; show=, positions=, labels=)` |
 | Axes | `qe_axes(p, x=, y=)` | `p.axes(x=, y=)` | `qe_axes(p; x=, y=)` |
-| Labels | `qe_labels(p, nodes=, means=, points=)` | `p.labels(...)` | `qe_labels(p; ...)` |
+| Labels | `qe_labels(p, nodes=, means=, points=, font_size=, font_family=, font_color=)` | `p.labels(...)` | `qe_labels(p; ...)` |
+| Group colours | `qe_colors(p, A = "#hex")` | `p.colors(A="#hex")` | `qe_colors(p, "A" => "#hex")` |
+| Axis range | `qe_range(p, range)` | `p.range(range)` | `qe_range(p, range)` |
+| Default palette | `qe_palette()` | `qeviz.palette()` | `qe_palette()` |
 | Export | `qe_export_html(p, path)` | `p.export_html(path)` | `qe_export_html(p, path)` |
 | Introspect | `qe_groups(p)` / `qe_units(p)` | `p.groups()` / `p.units()` | `qe_groups(p)` / `qe_units(p)` |
 
@@ -128,6 +137,10 @@ All three languages share the same chain operations:
 | `unit` | Unit ID for an **individual** network (e.g. `"FirstGame::alice"`). Mutually exclusive with `group`. |
 | `compare` | Second group to subtract (`group − compare`). Positive differences use the primary colour. |
 | `also` | Second group to overlay alongside `group`. |
+| `weights` | A network from data instead of a name: a named vector / Series / Dict of edge weights, an unnamed vector in the model's edge-column order, or a matrix / data frame (averaged over rows). Each call adds a layer. |
+| `colors` | One or two colours (positive, negative); with one, negative weights use its complement. |
+| `threshold` | `min` or `c(min, max)`: \|weight\| < min is not drawn, \|weight\| > max is drawn at max (sign kept). |
+| `name` | Name of the network (reported in edge events); a later call with the same name replaces it. |
 | `show` / `show=false` | Suppress all edges. |
 | `color_scale` | Colour mapping (webENA ramps: saturation 0.25–1, opacity 0.3–1). `"model"` (default) rescales across the whole model, so plots of one model share a colour scale; `"plot"` rescales within the plot (webENA); `"absolute"` uses saturation = opacity = weight. |
 | `edge_width` | Width of a weight-1 edge as a fraction of the plot width (default 0.04). Width is absolute — equal weights draw equally wide — and each node's diameter is the sum of its edges' widths. |
@@ -210,8 +223,9 @@ centre. The default is the origin, the ENA convention.
 <qe-graph scale-points="false" center="content"></qe-graph>
 ```
 
-In R these are `qe_plot(scale_points =, point_scale =, center =)`; the Python and
-Julia adapters set them as `<qe-graph>` attributes for now.
+In R these are `qe_plot(scale_points =, point_scale =, center =)`; in Python
+`qeviz.plot(..., scale_points=, point_scale=, center=)` and in Julia
+`qe_plot(model; scale_points=, point_scale=, center=)`.
 
 Child element presence controls layer visibility — add `<qe-points>` to show unit dots, omit it to hide them.  A `MutationObserver` watches for child additions, removals, and attribute changes, so interactive controls can manipulate the DOM directly:
 
