@@ -11,6 +11,8 @@ qe_plot(
   height = 440,
   range = NULL,
   scale_points = TRUE,
+  point_scale = NULL,
+  center = c("origin", "content"),
   palette = NULL,
   ...
 )
@@ -35,6 +37,17 @@ ranges (rENA's \code{list(x =, y =)}) are not supported.}
 \item{scale_points}{Rescale unit points and means so the outermost point
 meets the outermost code node (default \code{TRUE}); \code{FALSE} plots raw
 coordinates, as rENA does.}
+
+\item{point_scale}{Multiply unit points and means by this factor instead
+(a positive number), overriding \code{scale_points}. \code{NULL} (default) keeps
+\code{scale_points}' behaviour. E.g. \code{1} for raw coordinates, or a factor
+matching another tool's plot.}
+
+\item{center}{Where the view is centred: \code{"origin"} (default; (0, 0), the
+ENA convention, where the points' mean sits) or \code{"content"}, the middle of
+the nodes' and points' bounding box, so a network that sits off to one side
+of the origin fills the plot. With \code{"content"}, \code{range = "network"} is
+measured from that centre.}
 
 \item{palette}{Group colours, assigned in order of appearance. Default:
 Paul Tol's colour-blind-safe "bright" scheme. See also \code{\link[=qe_colors]{qe_colors()}}.}

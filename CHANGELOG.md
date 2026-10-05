@@ -6,6 +6,24 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Added
+- **`center="content"`** on `<qe-graph>` (`qe_plot(center = "content")`):
+  centres the view on the middle of the nodes' and points' bounding box instead
+  of the origin, so a network that sits off to one side fills the plot.
+  `range="network"` is then measured from that centre; the axis lines, axis
+  labels, title and ring labels follow it. The default is still the origin.
+- **`point-scale="N"`** on `<qe-graph>` (`qe_plot(point_scale = N)`): an
+  explicit factor for unit points and means, overriding `scale-points` (e.g. `1`
+  for raw coordinates, or another tool's scaling). Unset by default: points are
+  scaled as before.
+
+### Fixed
+- A `<qe-graph>` inside another component's shadow DOM ignored its own
+  visual's model and drew nothing: it now checks the event's composed path
+  rather than its (retargeted) target.
+
 ## [0.5.0] - 2026-09-30
 
 Explicit-data inputs and plot output for rENA's qeviz backend

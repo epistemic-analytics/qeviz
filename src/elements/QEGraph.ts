@@ -395,8 +395,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const maxPointExtent = model.points?.rows ? getExtent(model.points.rows()) : 0;
       const maxTrajExtent  = model.trajectories?.rows ? getExtent(model.trajectories.rows()) : 0;
       const effectivePointExtent = maxPointExtent > 0 ? maxPointExtent : maxTrajExtent;
-      // point-scale="3.59": an explicit factor (e.g. to match another tool's
-      // rescaling) instead of fitting the outermost point to the outermost node
+      // point-scale="N" (optional, unset by default): an explicit factor, e.g.
+      // 1 for raw coordinates or another tool's rescaling, instead of fitting
+      // the outermost point to the outermost node
       const pointScale = config.pointScale !== null ? config.pointScale
         : (scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0)
         ? maxNodeExtent / effectivePointExtent

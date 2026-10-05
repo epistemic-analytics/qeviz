@@ -188,6 +188,31 @@ In the language adapters this is `fixed_size = TRUE` on `qe_points()` / `qe_grou
 (R), `fixed_size=True` on `.points()` / `.group()` (Python), and
 `fixed_size=true` on `qe_points` / `qe_group` (Julia).
 
+#### Point scaling and centring
+
+Unit points and means sit much closer to the origin than the code nodes, so
+by default qeviz rescales them to fill the plot. Two `<qe-graph>` attributes
+change how points are scaled and where the view is centred; both are optional
+and unset by default:
+
+| `<qe-graph>` attributes | Points are multiplied by |
+|---|---|
+| neither (default) | qeviz's fit: farthest node ÷ farthest point, so the outermost point meets the outermost node (the ENA Web Tool's default) |
+| `scale-points="false"` | 1: raw coordinates, where each point sits at its network's centroid |
+| `point-scale="N"` | N, overriding both, e.g. to match another tool's scaling |
+
+`center="content"` centres the view on the middle of the nodes' and points'
+bounding box instead of the origin (0, 0), so a network that sits off to one
+side of the origin fills the plot; `range="network"` is then measured from that
+centre. The default is the origin, the ENA convention.
+
+```html
+<qe-graph scale-points="false" center="content"></qe-graph>
+```
+
+In R these are `qe_plot(scale_points =, point_scale =, center =)`; the Python and
+Julia adapters set them as `<qe-graph>` attributes for now.
+
 Child element presence controls layer visibility — add `<qe-points>` to show unit dots, omit it to hide them.  A `MutationObserver` watches for child additions, removals, and attribute changes, so interactive controls can manipulate the DOM directly:
 
 ```js
