@@ -178,7 +178,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // MutationObserver in connectedCallback().
     return [
       'width', 'height', 'for',
-      'scale-points', 'center',
+      'scale-points', 'point-scale', 'center',
       'labels', 'label-nodes', 'label-means', 'label-points',
     ];
   }
@@ -395,7 +395,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const maxPointExtent = model.points?.rows ? getExtent(model.points.rows()) : 0;
       const maxTrajExtent  = model.trajectories?.rows ? getExtent(model.trajectories.rows()) : 0;
       const effectivePointExtent = maxPointExtent > 0 ? maxPointExtent : maxTrajExtent;
-      const pointScale = (scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0)
+      // point-scale="3.59": an explicit factor (e.g. to match another tool's
+      // rescaling) instead of fitting the outermost point to the outermost node
+      const pointScale = config.pointScale !== null ? config.pointScale
+        : (scalePointsEnabled && effectivePointExtent > 0 && maxNodeExtent > 0)
         ? maxNodeExtent / effectivePointExtent
         : 1;
 
@@ -1381,6 +1384,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     labelFont: { size: number | null; family: string | null; color: string | null };
     hideUnconnectedNodes: boolean;
     scalePoints: boolean;
+    pointScale: number | null;
     // Means
     showMeans: boolean;
     activeMeanGroups: string | null;
@@ -1460,6 +1464,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       })(),
       hideUnconnectedNodes: nodesEl?.getAttribute('unconnected')?.toLowerCase() === 'hide',
       scalePoints: this.getAttribute('scale-points') !== 'false',
+      pointScale: (() => {
+        const v = Number(this.getAttribute('point-scale'));
+        return this.hasAttribute('point-scale') && Number.isFinite(v) && v > 0 ? v : null;
+      })(),
       centerContent: this.getAttribute('center') === 'content',
 
       // Means — presence of <qe-means> = show; absence = hide.
@@ -1565,7 +1573,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
         'network', 'colors', 'threshold', 'name',
         'groups', 'confidence', 'label', 'intervals', 'outlier', 'set', 'unconnected',
-        'scale-points', 'edge-width', 'labels', 'range', 'center', 'plot-title',
+        'scale-points', 'point-scale', 'edge-width', 'labels', 'range', 'center', 'plot-title',
         'label-font-size', 'label-font-family', 'label-font-color', 'label-nodes', 'label-means', 'label-points',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
