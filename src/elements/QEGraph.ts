@@ -1217,11 +1217,15 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // ── Step 8: Create edge objects ───────────────────────────────────────
           // For directed models, TaperedWeightedMidpointEdge needs the combined
           // weight of both directions (A→B + B→A) so the apex can be positioned
-          // proportionally along the edge.  Build a lookup keyed by "A.B".
+          // proportionally along the edge.  Build a lookup keyed by "A.B" per
+          // drawn network: an `also` overlay draws two networks in one layer,
+          // and pooling them left every triangle short of its counterpart.
           const totalWeightByPair: Record<string, number> = {};
+          const pairKey = (layer: number, net: string | undefined, a: string, b: string) =>
+            `${layer}:${net ?? ''}:${a}.${b}`;
           if (isDirected) {
-            drawEdges.forEach(({ pair, weight, layer }) => {
-              const key = `${layer}:${pair[0]}.${pair[1]}`;
+            drawEdges.forEach(({ pair, weight, layer, name }) => {
+              const key = pairKey(layer, name, pair[0], pair[1]);
               totalWeightByPair[key] = (totalWeightByPair[key] ?? 0) + weight;
             });
           }
@@ -1253,8 +1257,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               // Set a placeholder weight; update() will overwrite it.
               (edgeLine as any).weight = 0;
             } else if (isDirected) {
-              const fwd = totalWeightByPair[`${layer}:${pair[0]}.${pair[1]}`] ?? weight;
-              const bwd = totalWeightByPair[`${layer}:${pair[1]}.${pair[0]}`] ?? 0;
+              const fwd = totalWeightByPair[pairKey(layer, name, pair[0], pair[1])] ?? weight;
+              const bwd = totalWeightByPair[pairKey(layer, name, pair[1], pair[0])] ?? 0;
               const totalweight = fwd + bwd;
               edgeLine = new TaperedWeightedMidpointEdge(
                 { weight, totalweight },

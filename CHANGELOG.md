@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Fixed
+- Directed networks overlaid with `<qe-edges group="A" also="B">` drew each
+  triangle short of its counterpart, leaving a gap mid-edge: the apex split
+  (A→B against B→A) pooled both groups' weights. Each overlaid network now
+  places its apexes from its own weights. Single-group and subtraction plots
+  are unchanged.
+
 ## [0.5.1] - 2026-10-05
 
 ### Added
