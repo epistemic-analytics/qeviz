@@ -6,6 +6,42 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [0.5.3] - 2026-10-05
+
+Python and Julia parity with the R package's 0.5 API. All three adapters now
+take the same arguments and, for the same calls, produce the same
+`<qe-graph>` markup and model data, checked by shared fixtures built with the
+R package (`tests/golden/`).
+
+### Added
+- **Python and Julia: explicit-data inputs and plot settings** (as R gained in
+  0.5.0–0.5.1). Networks from data (`weights`, `compare`, `colors`,
+  `threshold = (min, max)`, `name`; one layer per call); point sets (`units` /
+  `points`, `color`, `shape`, `labels`, `name`); the mean of any subset
+  (`points`, `label`, `color`, `shape`, `intervals`, `conf_level`,
+  `outlier`), each keeping its own intervals; `show = False` for means; node
+  `positions` and `labels`; plot `title`, `range`, `scale_points`,
+  `point_scale`, `center` and `palette`; per-group colours (Python
+  `.colors()`, Julia `qe_colors()`); `.range()` / `qe_range()`; label fonts
+  in pixels; `palette()` / `qe_palette()`; models without a group column.
+  Python's `from_pyena()` takes `dims`.
+- `tests/golden/`: cross-language parity fixtures (26 scenarios).
+
+### Changed
+- Python / Julia: label settings change only the arguments supplied (a bare
+  call still applies the defaults), as R's `qe_labels()` does since 0.5.0.
+- Python / Julia: `title` is also drawn above the plot, as in R.
+- Python: `plot(m).model` is a copy of `m`; chain methods that add data copy
+  the frames they change, so branched plots never share layers.
+
+### Fixed
+- Python and Julia confidence intervals: both used a t-quantile lookup table
+  that ignored `conf_level` and rounded the degrees of freedom up (df = 4 used
+  the df = 5 value). Both now compute the exact quantile (R's `qt()`, to about
+  1e-14) with no scipy or Distributions.jl.
+- Julia: `Project.toml` listed wrong UUIDs for DataFrames, JSON3 and Test, so
+  the package could not be installed.
+
 ## [0.5.2] - 2026-10-05
 
 ### Fixed
