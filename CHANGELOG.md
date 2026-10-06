@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [0.5.4] - 2026-10-06
+
+### Added
+- **Python README** (`py/README.md`): install, a pyENA-based quick start with a
+  rendered plot, the DataFrame route, the chain API, display and export. The
+  Python package now declares it (`readme = "README.md"`), so the qe-libs
+  project page shows it; before, the page had no description.
+- `tools/readme-demo/`: rebuilds the README demo images (qeviz's and pyENA's).
+
 ## [0.5.3] - 2026-10-05
 
 Python and Julia parity with the R package's 0.5 API. All three adapters now
