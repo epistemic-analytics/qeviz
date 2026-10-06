@@ -8,18 +8,24 @@ and a plot built here produces the same picture as one built in R.
 
 ## Install
 
+Install `qe-viz`, import `qeviz`:
+
 ```bash
-pip install qeviz --index-url https://qe-libs.org/py/simple/ --extra-index-url https://pypi.org/simple/
+uv add qe-viz --index qe-libs=https://qe-libs.org/py/simple/
+# or
+pip install qe-viz --extra-index-url https://qe-libs.org/py/simple/
 ```
+
+Previously published as `qeviz`; existing installs keep working.
 
 ## Quick start
 
-From a fitted [pyENA](https://qe-libs.org/py/project/pyena/) model of rENA's
+From a fitted [qe-ena](https://qe-libs.org/py/project/qe-ena/) model (`import ena`) of rENA's
 RS.data:
 
 ```python
 import pandas as pd
-from pyena import ENA
+from ena import ENA
 import qeviz
 
 rs = pd.read_csv("rs.data.csv")   # rENA's inst/extdata/rs.data.csv
@@ -29,7 +35,7 @@ rs["unit"]  = rs["Condition"] + "::" + rs["UserName"]
 rs["convo"] = rs["Condition"] + "::" + rs["GroupName"]
 model = ENA().fit(rs, "unit", "convo", codes, window_size=4)
 
-p = (qeviz.from_pyena(model, group_col="Condition", title="FirstGame")
+p = (qeviz.from_ena(model, group_col="Condition", title="FirstGame")
        .edges("FirstGame")      # the group's mean network
        .points()                # every unit, coloured by group
        .group("FirstGame"))     # the group mean and its 95% CI

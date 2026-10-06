@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Changed
+- **Python package renamed `qeviz` → `qe-viz`** on qe-libs.org (the import is
+  still `qeviz`). Install with `pip install qe-viz --extra-index-url
+  https://qe-libs.org/py/simple/`; already-published `qeviz` files stay
+  installable.
+- **`from_pyena()` is now `from_ena()`**, following rENA's Python package
+  (`qe-ena`, `import ena`). `from_pyena` remains as an alias.
+
 ## [0.5.4] - 2026-10-06
 
 ### Added

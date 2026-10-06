@@ -664,6 +664,10 @@ def _make_mock_pyena(n_units: int = 8, n_codes: int = 4,
     return m
 
 
+def test_from_pyena_is_alias_of_from_ena():
+    assert qeviz.from_pyena is qeviz.from_ena
+
+
 def test_from_pyena_returns_qeplot():
     p = qeviz.from_pyena(_make_mock_pyena(), group_col="Condition")
     assert isinstance(p, QEPlot)

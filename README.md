@@ -54,8 +54,8 @@ install.packages("qeviz", repos = c("https://cran.qe-libs.org", "https://cloud.r
 ```python
 import qeviz
 
-# From a fitted pyENA model
-p = qeviz.from_pyena(model, group_col="Condition")
+# From a fitted qe-ena model (import ena)
+p = qeviz.from_ena(model, group_col="Condition")
 
 # Chain API
 p.group("FirstGame").edges("FirstGame", also="SecondGame").points()
@@ -74,10 +74,10 @@ p
 p.export_html("output.html")
 ```
 
-Install from [py.qe-libs.org](https://py.qe-libs.org):
+Install `qe-viz` from [qe-libs.org](https://qe-libs.org/py/project/qe-viz/), import `qeviz`:
 
 ```sh
-pip install qeviz --extra-index-url https://py.qe-libs.org/simple
+pip install qe-viz --extra-index-url https://qe-libs.org/py/simple/
 ```
 
 ### Julia

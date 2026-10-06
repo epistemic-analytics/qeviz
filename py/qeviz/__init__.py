@@ -15,8 +15,8 @@ Quick start
     p                                       # auto-display in Jupyter
     p.group("FirstGame").points().show()    # chain + explicit display
 
-    # From a fitted pyENA model
-    p = qeviz.from_pyena(model, group_col="Condition")
+    # From a fitted qe-ena model (import ena)
+    p = qeviz.from_ena(model, group_col="Condition")
     p.edges("FirstGame", also="SecondGame")
     p.edges(unit="FirstGame::alice")
 
@@ -50,7 +50,7 @@ Dependencies
 ------------
 Required : pandas
 Optional : IPython (Jupyter inline display)
-           pyENA  (for :func:`from_pyena`)
+           qe-ena (for :func:`from_ena`)
 """
 
 from __future__ import annotations
@@ -349,7 +349,7 @@ class QEPlot:
     """
     A lazily-rendered qeviz plot.
 
-    Created by :func:`plot` or :func:`from_pyena`. Chain :meth:`edges`,
+    Created by :func:`plot` or :func:`from_ena`. Chain :meth:`edges`,
     :meth:`points`, :meth:`group`, :meth:`nodes`, :meth:`labels` and friends
     to build the view; they mirror the R package's ``qe_*()`` functions.
 
@@ -1456,7 +1456,7 @@ def plot(
                   center=center, palette=palette)
 
 
-def from_pyena(
+def from_ena(
     model,
     group_col: Optional[str] = None,
     directed:  bool = False,
@@ -1467,15 +1467,15 @@ def from_pyena(
     dims:      tuple[int, int] = (0, 1),
 ) -> QEPlot:
     """
-    Convert a fitted pyENA model to a :class:`QEPlot`.
+    Convert a fitted qe-ena model (``import ena``) to a :class:`QEPlot`.
 
     Python equivalent of R's ``qe_extract()`` — reads nodes, unit positions,
-    edge weights, and group metadata directly from a fitted ``pyena.ENA``
+    edge weights, and group metadata directly from a fitted ``ena.ENA``
     instance.
 
     Parameters
     ----------
-    model     A fitted ``pyena.ENA`` instance (after ``.fit()``).
+    model     A fitted ``ena.ENA`` instance (after ``.fit()``).
     group_col Grouping column name in ``model.accum_.meta``
               (e.g. ``"Condition"``).
     directed  ``True`` for ONA / directed networks.
@@ -1493,17 +1493,17 @@ def from_pyena(
     --------
     ::
 
-        p = qeviz.from_pyena(model, group_col="Condition")
+        p = qeviz.from_ena(model, group_col="Condition")
         p.edges("FirstGame", also="SecondGame").points()  # auto-displays in Jupyter
         p.export_html("output.html")
     """
-    # pyENA's attribute names (rotation_nodes_, line_weights_, unit_labels_,
+    # ena.ENA's attribute names (rotation_nodes_, line_weights_, unit_labels_,
     # meta_data_); the older names are accepted as fallbacks.
     def attr(*names):
         for n in names:
             if getattr(model, n, None) is not None:
                 return getattr(model, n)
-        raise AttributeError(f"from_pyena(): model has none of {names}; is it a fitted pyena.ENA?")
+        raise AttributeError(f"from_ena(): model has none of {names}; is it a fitted ena.ENA?")
 
     units     = [str(u) for u in attr("unit_labels_", "units_")]
     node_pos  = np.asarray(attr("rotation_nodes_", "positions_"), dtype=float)
@@ -1591,11 +1591,16 @@ def export_html(
     return p.export_html(path)
 
 
+
+# Name from when the Python ENA package was imported as ``pyena``.
+from_pyena = from_ena
+
 __all__ = [
     "QEPlot",
     "model_data",
     "plot",
     "palette",
+    "from_ena",
     "from_pyena",
     "export_html",
 ]
