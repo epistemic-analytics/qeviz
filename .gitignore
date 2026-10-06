@@ -29,3 +29,6 @@ julia/Manifest.toml
 
 # rENA vs pyENA side-by-side output
 tools/rena-pyena/out/
+
+# README demo image build output
+tools/readme-demo/out/
