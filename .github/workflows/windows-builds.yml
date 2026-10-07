@@ -1,0 +1,109 @@
+name: Windows builds
+
+# Builds the R Windows binary (.zip) that qe-libs.org serves to Windows users.
+# The R package (in R/) is pure R (no compiled code), so no Rtools or system
+# libraries are needed; this mirrors the R part of libqe's windows-builds.yml.
+#
+# Two modes:
+#   workflow_dispatch  cranqe's nightly (scripts/github_windows.py) dispatches
+#                      this with the URL of the *published* R source tarball on
+#                      qe-libs.org, waits for the run, downloads the artifacts
+#                      and publishes them. Building from the published tarball
+#                      means the binary carries exactly the released (or .9xxx
+#                      dev) version users install.
+#   push               CI check on main and version tags: builds from the
+#                      checkout. Artifacts are not published.
+#
+# Artifact names are a contract with cranqe's scripts/github_windows.py:
+#   r-windows-<R version>   <pkg>_<version>.zip
+
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('Windows builds [{0}]', inputs.request_id)
+      || format('Windows builds ({0})', github.ref_name) }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      r_tarball_url:
+        description: "Published R source tarball to build (empty: skip R)"
+        required: false
+        default: ""
+      r_versions:
+        description: 'R versions, JSON list (e.g. ["4.5","4.6"])'
+        required: false
+        default: '["4.5","4.6"]'
+      request_id:
+        description: "Caller's id, echoed in the run name so it can find the run"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Each dispatch is a separate request; only pushes supersede each other.
+  group: windows-builds-${{ inputs.request_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  r-windows:
+    name: R ${{ matrix.r }} Windows binary
+    if: github.event_name == 'push' || inputs.r_tarball_url != ''
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        r: ${{ fromJSON(inputs.r_versions || '["4.5","4.6"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push'
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+
+      - name: Build Windows binary
+        shell: Rscript {0}
+        env:
+          TARBALL_URL: ${{ inputs.r_tarball_url }}
+        run: |
+          url <- Sys.getenv("TARBALL_URL")
+          repos <- c(qe = "https://qe-libs.org/cran",
+                     CRAN = "https://packagemanager.posit.co/cran/latest")
+          if (nzchar(url)) {
+            # dispatch: the published tarball
+            tarball <- basename(url)
+            download.file(url, tarball, mode = "wb")
+            # A dev tarball (from qe-libs.org/cran-dev) may need sibling dev builds.
+            if (grepl("/cran-dev/", url, fixed = TRUE))
+              repos <- c(qe_dev = "https://qe-libs.org/cran-dev", repos)
+          } else {
+            # push: the checkout, which may depend on unreleased QE packages
+            repos <- c(qe_dev = "https://qe-libs.org/cran-dev", repos)
+            status <- system2("R", c("CMD", "build", "--no-build-vignettes",
+                                     "--no-manual", "R"))
+            if (status != 0) stop("R CMD build failed")
+            tarball <- list.files(".", "\\.tar\\.gz$")[1]
+          }
+          src <- file.path(tempdir(), "src")
+          untar(tarball, exdir = src)
+          pkg_dir <- list.dirs(src, recursive = FALSE)[1]
+          install.packages("remotes", repos = repos["CRAN"])
+          remotes::install_deps(pkg_dir, dependencies = c("Depends", "Imports", "LinkingTo"),
+                                repos = repos, upgrade = "never")
+          status <- system2("R", c("CMD", "INSTALL", "--build", tarball))
+          if (status != 0) stop("R CMD INSTALL --build failed")
+          dir.create("out", showWarnings = FALSE)
+          zips <- list.files(".", "\\.zip$")
+          file.rename(zips, file.path("out", zips))
+          print(list.files("out"))
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r-windows-${{ matrix.r }}
+          path: out/*.zip
+          if-no-files-found: error
