@@ -1,7 +1,8 @@
 # rENA plotting backend switch (qeviz)
 
-**Status:** phases 1–5 implemented; phase 6 (docs / NEWS) to do · **Repo / branch:** rENA
-`qeviz-widget` · **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
+**Status:** done. Phases 1–5 shipped in rENA 0.4.9 (merged from `qeviz-widget`);
+phase 6 finished with the `?rENA-plot-backends` help topic · **Repo:** rENA
+· **Depends on:** qeviz ≥ 0.5.0 (see `qeviz-0.5.0-spec.md`)
 
 rENA's existing plotting API (`ena.plot()`, `plot.ena.set()`, the
 `ena.plot.*()` layer functions and everything built on them) gains a
@@ -76,9 +77,11 @@ p$plot                                         # an htmlwidget on either backend
    use `ENAplot`). First run: the backend column passes every check (118
    render, 71 model data), including the two views where rENA's plotly output
    fails (crosshair CIs, outlier box), and its cross-plot edge scale is 1.000.
-6. **Tests and docs.** Tests for every mapped, ignored and unsupported
-   argument (qeviz tests skip without qeviz ≥ 0.5.0); a NEWS entry; a backend
-   section in the plotting docs.
+6. **Tests and docs** (done). Tests for every mapped, ignored and unsupported
+   argument in `tests/testthat/test-plot-backend.R` (skip without qeviz ≥
+   0.5.0); the 0.4.9 NEWS entry; the `?rENA-plot-backends` help topic
+   (`R/plot-backends.R`), linked from `ena.plot()`, `ena.plotter()` and
+   `ENAplot`.
 
 ## Argument mapping
 
