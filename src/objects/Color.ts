@@ -25,16 +25,45 @@ export class Color {
   }
 
   static parseColor(color: string): { r: number; g: number; b: number } {
-    // Parse hex color (e.g., "#RRGGBB")
-    if (color.startsWith("#")) {
-      const bigint = parseInt(color.slice(1), 16);
-      return {
-        r: (bigint >> 16) & 255,
-        g: (bigint >> 8) & 255,
-        b: bigint & 255,
-      };
+    const c = String(color).trim();
+    // "#RRGGBB" (fast path), "#RGB", "#RRGGBBAA" (alpha dropped)
+    if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(c)) {
+      const n = parseInt(c.slice(1, 7), 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
     }
-    throw new Error("Unsupported color format");
+    if (/^#[0-9a-f]{3}$/i.test(c)) {
+      const [r, g, b] = [1, 2, 3].map(i => parseInt(c[i] + c[i], 16));
+      return { r, g, b };
+    }
+    const m = c.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+    if (m) return { r: Math.round(+m[1]), g: Math.round(+m[2]), b: Math.round(+m[3]) };
+    // Anything else CSS understands ("red", "steelblue", hsl(), …), as the
+    // adapters pass colour names through: let the browser resolve it.
+    const resolved = Color.resolveCss(c);
+    if (resolved) return Color.parseColor(resolved);
+    throw new Error(`Unsupported color format: ${color}`);
+  }
+
+  private static _ctx: CanvasRenderingContext2D | null | undefined;
+  private static _cssCache = new Map<string, string | null>();
+
+  /** A CSS colour as "#rrggbb" / "rgba(...)", or null if it isn't one. */
+  static resolveCss(color: string): string | null {
+    if (Color._cssCache.has(color)) return Color._cssCache.get(color)!;
+    if (Color._ctx === undefined) {
+      Color._ctx = typeof document !== 'undefined'
+        ? document.createElement('canvas').getContext('2d') : null;
+    }
+    let out: string | null = null;
+    const ctx = Color._ctx;
+    if (ctx) {
+      // An invalid value leaves fillStyle unchanged, so test against two sentinels.
+      ctx.fillStyle = '#000000'; ctx.fillStyle = color; const a = ctx.fillStyle;
+      ctx.fillStyle = '#ffffff'; ctx.fillStyle = color; const b = ctx.fillStyle;
+      if (a === b) out = String(a);
+    }
+    Color._cssCache.set(color, out);
+    return out;
   }
 
   static rgb(r: number, g: number, b: number): string {

@@ -14,6 +14,10 @@ versioned together.
   number smaller than the network, e.g. rENA's `scale.to = "points"`). Their
   width now follows the displayed range; plots scaled to the network are
   unchanged.
+- **Colour names work everywhere a colour is accepted.** `qe_colors(FirstGame =
+  "red")` (and other non-hex colours: `"#f00"`, `rgb()`, any CSS colour) used to
+  stop the plot rendering with "Unsupported color format"; the browser now
+  resolves them. Hex colours behave as before.
 
 ## [0.5.5] - 2026-10-06
 
