@@ -6,7 +6,7 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
-## [Unreleased]
+## [0.5.6] - 2026-10-13
 
 ### Fixed
 - **Confidence and outlier interval lines are no longer drawn several times
@@ -18,6 +18,13 @@ versioned together.
   "red")` (and other non-hex colours: `"#f00"`, `rgb()`, any CSS colour) used to
   stop the plot rendering with "Unsupported color format"; the browser now
   resolves them. Hex colours behave as before.
+- **The Python demo data (`py/data/RS.data.csv`) is rENA's current RS.data.**
+  The old copy predated rENA's redaction of a participant's email address and
+  its current coding.
+
+### Changed
+- The R package's Windows binary is now built on GitHub Actions (dispatched by
+  cranqe's nightly run); pushes to `main` and tags build it as a check.
 
 ## [0.5.5] - 2026-10-06
 
