@@ -560,7 +560,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
           if (config.showMeans) {
           const pointsLayerSvg = pointsLayer.svg_element as SVGGElement | null;
-          const sw = (maxNodeExtent > 0 ? maxNodeExtent : 1) * 0.008;
+          // Interval stroke scales with the displayed range, so a plot zoomed to
+          // its points (range="points", or a number) keeps thin lines; with
+          // range="network" (= maxNodeExtent × 1.2) this is maxNodeExtent.
+          const ciExtent = this._rangeExtent ? this._rangeExtent / 1.2 : maxNodeExtent;
+          const sw = (ciExtent > 0 ? ciExtent : 1) * 0.008;
 
           if (hasGroupsFrame) {
             // ── Path A: groups frame ─────────────────────────────────────────

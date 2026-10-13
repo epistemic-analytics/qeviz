@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Fixed
+- **Confidence and outlier interval lines are no longer drawn several times
+  too thick when the plot is zoomed to its points** (`range = "points"` or a
+  number smaller than the network, e.g. rENA's `scale.to = "points"`). Their
+  width now follows the displayed range; plots scaled to the network are
+  unchanged.
+
 ## [0.5.5] - 2026-10-06
 
 ### Changed
