@@ -177,6 +177,64 @@ export class QELabel {
     this.svg_element.setAttribute('font-weight', '500');
     this.svg_element.setAttribute('text-anchor', anchor);
     this.svg_element.setAttribute('fill',        font.color ?? this.point.color?.toString() ?? '#333333');
+
+    // Keep the label inside the plot. A label the host placed (dragged, or
+    // custom coordinates) stays where it was put.
+    if (!this._offsetX && !this._offsetY && this.position !== Label.POSITION.CUSTOM) {
+      this.fitInside(x, y, anchor, offset, fontSize * 0.3);
+    }
+  }
+
+  /** The visible plot area in this label's coordinates (so zoom, pan and the
+   *  viewBox's letterboxing are accounted for), or null if not laid out. */
+  private visibleBounds(): { left: number; right: number; top: number; bottom: number } | null {
+    const el = this.svg_element as SVGTextElement;
+    const root = el.ownerSVGElement;
+    const ctm = el.getScreenCTM?.();
+    if (!root || !ctm) return null;
+    const r = root.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+    const inv = ctm.inverse();
+    const a = new DOMPoint(r.left, r.top).matrixTransform(inv);
+    const b = new DOMPoint(r.right, r.bottom).matrixTransform(inv);
+    return { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
+             top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) };
+  }
+
+  private bbox(): DOMRect | null {
+    try {
+      const b = (this.svg_element as SVGTextElement).getBBox();
+      return b.width > 0 ? b : null;
+    } catch { return null; }   // not rendered (e.g. detached)
+  }
+
+  /** If the label runs past an edge: put an outward label on the other side
+   *  of its point, and if it still doesn't fit, slide it back inside. */
+  private fitInside(x: number, y: number, anchor: string, offset: number, margin: number): void {
+    const view = this.visibleBounds();
+    let box = this.bbox();
+    if (!view || !box) return;
+    const left = view.left + margin, right = view.right - margin;
+    const top = view.top + margin, bottom = view.bottom - margin;
+    const over = (b: DOMRect) => Math.max(0, left - b.x) + Math.max(0, b.x + b.width - right);
+    const el = this.svg_element;
+
+    if (over(box) > 0 && this.position === Label.POSITION.OBJECT && anchor !== 'middle') {
+      const flipAnchor = anchor === 'end' ? 'start' : 'end';
+      const flipX = anchor === 'end' ? this.point.x + offset : this.point.x - offset;
+      el.setAttribute('text-anchor', flipAnchor);
+      el.setAttribute('x', flipX.toString());
+      const flipped = this.bbox();
+      if (flipped && over(flipped) < over(box)) { box = flipped; x = flipX; }
+      else { el.setAttribute('text-anchor', anchor); el.setAttribute('x', x.toString()); }
+    }
+    let dx = 0, dy = 0;
+    if (box.x < left) dx = left - box.x;
+    else if (box.x + box.width > right) dx = Math.max(right - (box.x + box.width), left - box.x);
+    if (box.y < top) dy = top - box.y;
+    else if (box.y + box.height > bottom) dy = Math.max(bottom - (box.y + box.height), top - box.y);
+    if (dx) el.setAttribute('x', (x + dx).toString());
+    if (dy) el.setAttribute('y', (y + dy).toString());
   }
 
   /** Make the label visible and position it immediately. */

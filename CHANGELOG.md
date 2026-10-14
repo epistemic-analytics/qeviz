@@ -6,6 +6,14 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Fixed
+- **Labels no longer run off the edge of the plot.** A node, mean or point
+  label that would extend past the visible area is placed on the other side of
+  its point, and if it still doesn't fit, moved back inside. Labels the host
+  has dragged or placed are left where they are.
+
 ## [0.5.6] - 2026-10-13
 
 ### Fixed
