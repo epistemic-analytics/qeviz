@@ -6,7 +6,7 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
-## [Unreleased]
+## [0.5.7] - 2026-10-14
 
 ### Fixed
 - **Labels no longer run off the edge of the plot.** A node, mean or point
