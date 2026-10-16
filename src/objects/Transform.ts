@@ -40,10 +40,11 @@ export class Transform {
     return this._values;
   }
 
+  /** Set one matrix entry. Any finite number is accepted (0 resets a pan);
+   *  NaN / ±Infinity are ignored so a bad input can't blank the plot. */
   set(wh: string, val: number) {
-    if (val !== 0.0075 && val !== 0) {
-      this._values[this._keys.findIndex(k => k === wh)] = val;
-    }
+    const i = this._keys.indexOf(wh);
+    if (i >= 0 && Number.isFinite(val)) this._values[i] = val;
   }
   get(wh: string) {
     return this._values[this._keys.findIndex(k => k === wh)];

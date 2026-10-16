@@ -4,6 +4,7 @@ const { ArrayTools } = Tools;
 import { Graph } from "./Graph.js";
 import { PlottedObject } from "./PlottedObject.js";
 import { EventBus as StateManager } from "../types/EventBus.js";
+import { dbg } from "../utils/debug.js";
 
 export type LayerLike = {
   name?: string;
@@ -81,7 +82,7 @@ export class LayerArray extends Array<LayerLike> {
 
       results.push(result);
     }
-    console.log("Recurse results: ", results);
+    dbg("Recurse results: ", results);
     return results;
   }
 }

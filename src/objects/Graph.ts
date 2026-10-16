@@ -8,6 +8,7 @@ import { Edge } from "./Edges";
 import { AxisPoint } from "./AxisPoint";
 import { DataFrame, DataFrameRow } from "../types/DataFrame";
 import { EventBus as StateManager } from "../types/EventBus";
+import { dbg } from "../utils/debug";
 
 export let DefaultGraphOptions = {
   GRAPH: {
@@ -170,7 +171,7 @@ export class Graph {
       );
       axis_y.ID = "axis-y";
       axisLineLayer.objects.set(axis_y.ID, axis_y);
-      console.log("Added axis lines to layer: ", axisLineLayer);
+      dbg("Added axis lines to layer: ", axisLineLayer);
     }
 
     // Define extremes based on options
