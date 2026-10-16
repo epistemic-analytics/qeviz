@@ -10,8 +10,10 @@ import { LayerLike } from "../objects/Layers";
 import { Color } from "../objects/Color";
 import { Extremes } from "../objects/Extremes";
 import { QELabel } from "./QELabel";
+import type { QEPoint } from "./QEPoint";
 import { DEFAULT_EDGE_WIDTH, OPACITY_RANGE, SATURATION_RANGE, UNCONNECTED_NODE_SIZE, nodeSizeForEdges, rampFor, widthPerWeight } from "../objects/Sizing";
 import "./QEChildElements.js";
+import { dbg } from "../utils/debug";
 
 // Accessible color palette for group assignment (Paul Tol's bright scheme)
 const GROUP_PALETTE = [
@@ -103,6 +105,49 @@ function readIntervalBounds(
 }
 
 /**
+ * Per-row label settings, read from a nodes / pointsets / groups row:
+ *   label          the text; "" draws no label; missing / NA → `fallback`
+ *   label.dx / .dy offset from the computed spot in graph units (y down), as
+ *                  qe-label-move reports it; NA → 0. `offset` is null when the
+ *                  frame has neither column, so a dragged label keeps its own.
+ *   label.pinned   shown whatever the layer's label mode
+ */
+type LabelSpec = { text: string | null; offset: { x: number; y: number } | null; pinned: boolean };
+
+function readLabelSpec(row: DataFrameRow | null | undefined, fallback: string): LabelSpec {
+  const raw = (k: string): any => {
+    if (!row) return undefined;
+    const i = row.names.indexOf(k);
+    return i >= 0 ? row[i] : undefined;
+  };
+  const isNA = (v: any) => v == null || v === 'NA' || (typeof v === 'number' && Number.isNaN(v));
+  const t = raw('label');
+  const text = isNA(t) ? fallback : String(t) === '' ? null : String(t);
+  const num = (k: string) => {
+    const v = raw(k);
+    const n = isNA(v) || v === '' ? 0 : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const hasOffset = !!row && (row.names.includes('label.dx') || row.names.includes('label.dy'));
+  const pin = raw('label.pinned');
+  return {
+    text,
+    offset: hasOffset ? { x: num('label.dx'), y: num('label.dy') } : null,
+    pinned: pin === true || pin === 1 || String(pin).toLowerCase() === 'true',
+  };
+}
+
+/** <qe-edges self-size>: "node" = half the code node's radius (sigma's ONA
+ *  dot), a number = that fraction of the radius; absent → sized by weight. */
+function parseSelfSize(attr: string | null): number | null {
+  const a = attr?.trim().toLowerCase();
+  if (!a) return null;
+  if (a === 'node') return 0.5;
+  const n = Number(a);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
  * <qe-edges color-scale>: the range that edge weights are rescaled from onto
  * webENA's saturation (0.25–1) and opacity (0.3–1) ramps.
  *   "model" (default) — min / max non-zero |weight| across the whole model
@@ -122,6 +167,8 @@ type EdgeLayerSpec = {
   colors: [string, string | null] | null;   // positive, negative (null → complement)
   threshold: [number, number] | null;       // min, max (max = Infinity when omitted)
   name: string | null;
+  selfSize: number | null;                  // self-dot radius ÷ node radius (null = by weight)
+  fixedSize: boolean;                       // thickness constant on screen at any zoom
 };
 
 function parseEdgeLayer(el: Element): EdgeLayerSpec {
@@ -134,6 +181,8 @@ function parseEdgeLayer(el: Element): EdgeLayerSpec {
     colors: cols.length ? [cols[0], cols[1] ?? null] : null,
     threshold: thr.length ? [thr[0], thr.length > 1 ? thr[1] : Infinity] : null,
     name: a('name'),
+    selfSize: parseSelfSize(a('self-size')),
+    fixedSize: el.hasAttribute('fixed-size'),
   };
 }
 
@@ -178,7 +227,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // MutationObserver in connectedCallback().
     return [
       'width', 'height', 'for',
-      'scale-points', 'point-scale', 'center',
+      'scale-points', 'point-scale', 'center', 'view-padding',
       'labels', 'label-nodes', 'label-means', 'label-points',
     ];
   }
@@ -200,6 +249,26 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       height: 100%;
       aspect-ratio: 1 / 1;
       background-color: #FFF;
+      /* Touch pans and pinch-zooms the plot, not the page; a double-click
+         zooms instead of selecting label text. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* Marks that emit qe-node-click / qe-edge-click: nodes, means, points,
+       edges, their hover lines and self-connection dots. Custom properties
+       cross the shadow boundary, so a host can set --qe-mark-cursor on
+       <qe-graph>. Labels keep their own grab / grabbing cursor. */
+    svg [data-point-id],
+    svg [data-edge-source] {
+      cursor: var(--qe-mark-cursor, pointer);
+    }
+
+    /* A directed edge's chevron sits on top of its triangle without the
+       edge's identity; let clicks and the cursor reach the triangle. */
+    svg [data-layer-name="edges"] path:not([data-edge-source]) {
+      pointer-events: none;
     }
   `;
 
@@ -236,6 +305,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _nodeLabels:  Map<string, QELabel> = new Map();
   private _meanLabels:  Map<string, QELabel> = new Map();
   private _pointLabels: Map<string, QELabel> = new Map();
+  // Point-set labels (<qe-points set>), keyed by point id ("<set>::<id>").
+  private _setLabels:   Map<string, QELabel> = new Map();
 
   // Axes (<qe-axes>): whether to show axis lines, and resolved label text
   // (null = no label for that axis). SVG <text> nodes are cached and positioned
@@ -253,11 +324,26 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _rangeMode: 'network' | 'points' | 'number' | null = null;
   /** center="content": centre the view on the drawn content, not the origin */
   private _centerContent = false;
+  /** Any <qe-edges fixed-size>: highlight glows keep a constant width too. */
+  private _edgesFixedSize = false;
+  /** <qe-means fixed-size>: interval boxes / crosshairs keep their zoom-1
+   *  stroke and dashes on screen. Their zoom-1 values, by element. */
+  private _meansFixedSize = false;
+  private _intervalBase = new WeakMap<SVGElement, { w: number; dash: number[] | null }>();
+  /** <qe-axes fixed-size>: axis lines and labels keep their zoom-1 size
+   *  (read by QELine for the axis lines). */
+  _axesFixedSize = false;
   private _plotTitle: string | null = null;
   private _titleEl: SVGTextElement | null = null;
   private _resizeObs: ResizeObserver | null = null;
   _labelFont: { size: number | null; family: string | null; color: string | null } =
     { size: null, family: null, color: null };
+
+  /** <qe-graph view-padding>: the view spans ±range × this (default 1.2). */
+  private _viewPadding(): number {
+    const v = Number(this.getAttribute('view-padding'));
+    return this.hasAttribute('view-padding') && Number.isFinite(v) && v > 0 ? v : 1.2;
+  }
 
   /** SVG user units per CSS pixel at the current size / zoom. */
   unitsPerPixel(): number {
@@ -277,7 +363,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     this.__name__ = this.__data__.name || "unnamed-graph";
     this.svg_element = this.create();
 
-    console.log("Created ena-graph svg element: ", this.svg_element);
+    dbg("Created qe-graph svg element: ", this.svg_element);
 
     // Listen for the model-updated CustomEvent dispatched by VisualQEElement.
     // The Model object is carried in event.detail, so ena-graph works whether it
@@ -295,12 +381,18 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const model = (e as CustomEvent).detail;
       if (!model) return;
 
-      // Tweening (opt-in via `animate`): snapshot current mark/edge positions
-      // BEFORE the rebuild so we can animate old→new after this.update().
+      // This render sees every attribute / child change made so far, so a
+      // re-render scheduled for those (see _scheduleRerender) is not needed.
+      this._renderPending = false;
+      this._childObserver?.takeRecords();
+
+      // Tweening (opt-in via `animate`): note what is on screen now (mid-tween,
+      // the in-between state) BEFORE the rebuild, to animate from it after.
       this._animateMs = this.hasAttribute('animate')
         ? (parseInt(this.getAttribute('animate') || '', 10) || 300)
         : 0;
-      const tweenFrom = (this._animateMs > 0 && this._hasModel) ? this._captureTween() : null;
+      const tweenFrom = (this._animateMs > 0 && this._hasModel) ? this._captureTweenState() : null;
+      this._stopTween();
 
       this._hasModel = true;
 
@@ -414,6 +506,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       this._rangeMode = config.range === 'network' || config.range === 'points' ? config.range
         : typeof config.range === 'number' ? 'number' : null;
       this._centerContent = config.centerContent;
+      this._edgesFixedSize = config.edgeLayers.some(l => l.fixedSize);
+      this._meansFixedSize = config.meanFixedSize;
+      this._axesFixedSize  = config.axesFixedSize;
       this._plotTitle = config.plotTitle;
       this._labelFont = config.labelFont;
 
@@ -457,10 +552,24 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // <qe-means> presence controls mean markers and CI boxes.
       const showUnitPoints = config.showPoints;
 
+      // ── Start the model-derived layers empty ────────────────────────────────
+      // Every render re-derives points, means, nodes and edges from the model.
+      // Anything not added back this pass (a unit or group no longer in the
+      // model, an edge that is now zero or under its threshold, a layer whose
+      // element was removed) is then dropped, instead of staying on screen at
+      // its old position. Marks added back under the same ID keep their SVG
+      // element: QELayer rebinds it to the new object.
+      const rebuiltLayers = ['points', 'nodes', 'edges', 'edgenodes']
+        .map(name => this.__children__.search('__children__', name) as QELayer | undefined)
+        .filter((l): l is QELayer => !!l);
+      rebuiltLayers.forEach(l => l.__data__.objects.clear());
+      this.__data__.points.clear();
+
       // ── Explicit point sets (qe_points(units =, points =)) ─────────────────
       // Each <qe-points set="…"> draws that set's rows of model.pointsets, on
       // the same point scale as the unit points.
       const pointSetFrame = (model as any).pointsets;
+      const setLabelRows: Array<{ pt: Point; spec: LabelSpec; mode: number; weight: string | null }> = [];
       if (config.pointSets.length && pointSetFrame?.rows) {
         const psLayer = this.__children__.search('__children__', 'points') as QELayer;
         const col = (r: DataFrameRow, k: string) => { const i = r.names.indexOf(k); return i >= 0 ? r[i] : null; };
@@ -486,8 +595,17 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             };
             this.__data__.points.set(pt.ID, pt);
             psLayer?.__data__.objects.set(pt.ID, pt);
+            setLabelRows.push({ pt, spec: readLabelSpec(row, id), mode: ps.labelMode, weight: ps.labelWeight });
           });
         });
+      }
+
+      // Point-set labels: text from the `label` column, else the id; mode
+      // from <qe-points set label>, else <qe-graph label-points>.
+      if (labelSvg) {
+        const keep = new Set(setLabelRows.map(r => r.pt.ID));
+        this._setLabels.forEach((lbl, id) => { if (!keep.has(id)) { lbl.remove(); this._setLabels.delete(id); } });
+        setLabelRows.forEach(r => this._syncLabel(this._setLabels, r.pt.ID, r.spec, r.pt, labelSvg, r.mode, r.weight));
       }
 
       if (model.points?.rows) {
@@ -632,6 +750,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 oel.setAttribute('stroke-width', sw.toString());
                 oel.setAttribute('stroke-opacity', '0.5');
                 oel.setAttribute('stroke-dasharray', `${sw * 2} ${sw * 2}`);
+                this._intervalStroke(oel, sw, [sw * 2, sw * 2]);
                 if (pointsLayerSvg && !oel.parentElement) pointsLayerSvg.insertBefore(oel, pointsLayerSvg.firstChild);
               }
 
@@ -663,6 +782,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 cel.setAttribute('fill', 'none');
                 cel.setAttribute('stroke', color);
                 cel.setAttribute('stroke-width', (sw * 1.25).toString());
+                this._intervalStroke(cel, sw * 1.25, null);
                 cel.setAttribute('stroke-opacity', '0.8');
                 if (pointsLayerSvg && !cel.parentElement) pointsLayerSvg.insertBefore(cel, pointsLayerSvg.firstChild);
               } else if (!bounds) {
@@ -690,6 +810,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 el.setAttribute('stroke-width',   sw.toString());
                 el.setAttribute('stroke-opacity', '0.8');
                 el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
+                this._intervalStroke(el, sw, [sw * 4, sw * 3]);
                 if (pointsLayerSvg && !el.parentElement) {
                   pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                 }
@@ -698,6 +819,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
           } else {
             // ── Path B: legacy — compute means from groupSums ────────────────
+            this._removeIntervals(this._ciCross);   // Path B draws no crosshairs
             // Add one mean point per group — larger (size=1.5) and same group color
             Object.entries(groupSums).forEach(([group, { x, y, n, color }]) => {
               const meanPt = new Point({
@@ -749,6 +871,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                   el.setAttribute('stroke-width',   sw.toString());
                   el.setAttribute('stroke-opacity', '0.8');
                   el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
+                  this._intervalStroke(el, sw, [sw * 4, sw * 3]);
                   if (pointsLayerSvg && !el.parentElement) {
                     pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                   }
@@ -779,11 +902,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                   el.setAttribute('stroke-width',   sw.toString());
                   el.setAttribute('stroke-opacity', '0.8');
                   el.setAttribute('stroke-dasharray', `${sw * 4} ${sw * 3}`);
+                  this._intervalStroke(el, sw, [sw * 4, sw * 3]);
                   if (pointsLayerSvg && !el.parentElement) {
                     pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                   }
                 });
               }
+            } else {
+              this._removeIntervals(this._ciRects);
             }
 
             // ── Outlier boxes (deprecated model.outlier frame) ───────────────
@@ -818,12 +944,18 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 el.setAttribute('stroke-width',   sw.toString());
                 el.setAttribute('stroke-opacity', '0.5');
                 el.setAttribute('stroke-dasharray', `${sw * 2} ${sw * 2}`);
+                this._intervalStroke(el, sw, [sw * 2, sw * 2]);
                 if (pointsLayerSvg && !el.parentElement) {
                   pointsLayerSvg.insertBefore(el, pointsLayerSvg.firstChild);
                 }
               });
+            } else {
+              this._removeIntervals(this._outlierRects);
             }
           } // end Path B
+          } else {
+            // No <qe-means>: take down the interval marks drawn with the means.
+            [this._ciRects, this._outlierRects, this._ciCross].forEach(m => this._removeIntervals(m));
           } // end config.showMeans
 
           // ── Labels ──────────────────────────────────────────────────────────
@@ -848,40 +980,34 @@ export class QEGraphElement extends DrawableElement implements QEElement {
                 // TODO: support a label-format attribute or callback so callers
                 // can supply a custom display string (e.g. strip a prefix,
                 // extract a sub-field from a compound ID, etc.)
-                const displayText = unitId;
-                let lbl = this._pointLabels.get(unitId);
-                if (!lbl) {
-                  lbl = new QELabel(displayText, pt, labelSvg, this, labelPoints);
-                  this._pointLabels.set(unitId, lbl);
-                } else {
-                  labelPoints === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
-                }
+                this._syncLabel(this._pointLabels, unitId, readLabelSpec(null, unitId), pt, labelSvg,
+                                labelPoints, config.labelWeightPoints);
               });
+            } else {
+              this._clearLabels(this._pointLabels);
             }
 
-            // Mean labels — use active groups frame rows if available, else groupSums keys
-            if (labelMeans !== 0) {
-              const meanGroupNames: string[] = hasGroupsFrame
-                ? activeGroupRows.map((r: DataFrameRow) => r.rowName ?? String(r[0]))
-                : Object.keys(groupSums);
-
-              meanGroupNames.forEach((group: string) => {
-                const meanId = `mean-${group}`;
-                const pt = pointsLayer.__data__.objects.get(meanId) as Point | undefined;
-                if (!pt) return;
-                let lbl = this._meanLabels.get(group);
-                if (!lbl) {
-                  lbl = new QELabel(group, pt, labelSvg, this, labelMeans);
-                  this._meanLabels.set(group, lbl);
-                } else {
-                  labelMeans === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
-                }
-              });
-            }
+            // Mean labels — use active groups frame rows if available, else
+            // groupSums keys. Rows of the groups frame may carry the label
+            // columns; with labels "off", only pinned ones are drawn.
+            const groupRows = new Map<string, DataFrameRow>(
+              activeGroupRows.map((r: DataFrameRow) => [r.rowName ?? String(r[0]), r]));
+            const meanGroupNames: string[] = hasGroupsFrame ? [...groupRows.keys()] : Object.keys(groupSums);
+            meanGroupNames.forEach((group: string) => {
+              const meanId = `mean-${group}`;
+              const pt = pointsLayer.__data__.objects.get(meanId) as Point | undefined;
+              if (!pt) return;
+              this._syncLabel(this._meanLabels, group, readLabelSpec(groupRows.get(group), group), pt,
+                              labelSvg, labelMeans, config.labelWeightMeans);
+            });
           }
 
           pointsLayer.__data__.__state__.setVariable('layer_updated', pointsLayer.__data__);
         }
+      } else {
+        // No points frame: still take down the marks of the previous render.
+        const pointsLayer = this.__children__.search('__children__', 'points') as QELayer | undefined;
+        pointsLayer?.__data__.__state__.setVariable('layer_updated', pointsLayer.__data__);
       }
 
       // ── Cognitive Trajectories Layer ──────────────────────────────────────────
@@ -975,12 +1101,19 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // (qe_nodes(labels =)); the code id stays the node's identity.
           const li = row.names.indexOf('label');
           const lv = li >= 0 ? row[li] : null;
+          // Optional `size` column: the node's diameter in CSS px at zoom 1,
+          // in place of the Σ-edge-width size (QEPoint converts it).
+          const si = row.names.indexOf('size');
+          const sv = si >= 0 && row[si] != null && row[si] !== '' ? Number(row[si]) : NaN;
           (pt as any).meta = { ...((pt as any).meta ?? {}), kind: 'node',
-                               name: lv != null && String(lv) !== 'NA' && String(lv) !== '' ? String(lv) : pt.ID };
+                               name: lv != null && String(lv) !== 'NA' && String(lv) !== '' ? String(lv) : pt.ID,
+                               sizePx: Number.isFinite(sv) && sv > 0 ? sv : undefined,
+                               // <qe-nodes fixed-size>: constant on-screen size at any zoom.
+                               zoomFixed: config.nodeFixedSize || undefined };
           nodeLayer.__data__.objects.set(pt.ID, pt);
         });
 
-        if (edgesEnabled && edgeLayer && model.edges?.rows) {
+        if (edgesEnabled && edgeLayer) {
           // ── Step 2: Build unit→group lookup from points data ─────────────────
           const unitGroupMap: Record<string, string> = {};
           if (groupColName && model.points?.rows) {
@@ -997,11 +1130,22 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             return idx >= 0 ? String(r[idx]) : '';
           }).filter(Boolean);
 
-          const edgePairs: Array<{ col: string; pair: [string, string] }> = [];
-          (model.edges.names ?? []).forEach((col: string) => {
-            const pair = parseEdgePair(col, codeNames);
-            if (pair) edgePairs.push({ col, pair });
-          });
+          const parsePairs = (names: string[]) => {
+            const pairs: Array<{ col: string; pair: [string, string] }> = [];
+            names.forEach((col: string) => {
+              const pair = parseEdgePair(col, codeNames);
+              if (pair) pairs.push({ col, pair });
+            });
+            return pairs;
+          };
+          // Unit / group layers read the edges frame. An explicit network
+          // reads its own columns from the networks frame, so a model with
+          // only `nodes` + `networks` draws, and a network may carry columns
+          // the edges frame lacks.
+          const edgeRows: DataFrameRow[] = model.edges?.rows ? model.edges.rows() : [];
+          const networksFrame = (model as any).networks;
+          const edgePairs    = parsePairs(model.edges?.names ?? []);
+          const networkPairs = parsePairs(networksFrame?.names ?? []);
 
           // ── Step 4: Edge-weight helpers ───────────────────────────────────────
           type EdgeWeights = Record<string, number>;
@@ -1009,7 +1153,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           /** Raw weights for a single unit row. */
           const getUnitEdges = (unitId: string): EdgeWeights => {
             const result: EdgeWeights = {};
-            model.edges.rows().forEach((row: DataFrameRow) => {
+            edgeRows.forEach((row: DataFrameRow) => {
               const qIdx = row.names.indexOf(unitIdCol);
               if (qIdx < 0 || String(row[qIdx]) !== unitId) return;
               edgePairs.forEach(({ col }) => {
@@ -1024,7 +1168,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           const getGroupEdges = (groupName: string): EdgeWeights => {
             const sums: EdgeWeights = {};
             let count = 0;
-            model.edges.rows().forEach((row: DataFrameRow) => {
+            edgeRows.forEach((row: DataFrameRow) => {
               const qIdx  = row.names.indexOf(unitIdCol);
               const unitId = qIdx >= 0 ? String(row[qIdx]) : null;
               const gColIdx = groupColName ? row.names.indexOf(groupColName) : -1;
@@ -1071,11 +1215,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           const drawEdges: DrawEdge[] = [];
 
           const networkRow = (name: string): EdgeWeights | null => {
-            const frame = (model as any).networks;
-            const row = frame?.rows?.().find((r: DataFrameRow) => r.rowName === name);
+            const row = networksFrame?.rows?.().find((r: DataFrameRow) => r.rowName === name);
             if (!row) return null;
             const w: EdgeWeights = {};
-            edgePairs.forEach(({ col }) => {
+            networkPairs.forEach(({ col }) => {
               const i = row.names.indexOf(col);
               if (i >= 0) { const v = Number(row[i]); if (Number.isFinite(v)) w[col] = v; }
             });
@@ -1106,7 +1249,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               if (!w) return;
               const [pos, neg] = signColors(PALETTE[0], PALETTE[1]);
               const meta = { name: L.name ?? L.network };
-              edgePairs.forEach(({ col, pair }) => {
+              networkPairs.forEach(({ col, pair }) => {
                 const v = w[col] ?? 0;
                 push(col, pair, v, v >= 0 ? pos : neg, meta);
               });
@@ -1160,17 +1303,20 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           // Colour (webENA ramps): each class (lines vs self-loops) rescales
           // |weight| from [min, max] onto saturation 0.25–1 / opacity 0.3–1.
           // The range comes from the whole model — every non-zero weight in
-          // the edges frame — so plots of one model share a colour scale;
-          // webENA takes it from each plotted network ("plot").
+          // the edges frame, or in the networks frame when there is no edges
+          // frame — so plots of one model share a colour scale; webENA takes
+          // it from each plotted network ("plot").
           const rangeOf = (ws: number[]): [number, number] => {
             const nz = ws.map(Math.abs).filter(v => v > 0);
             return nz.length ? [Math.min(...nz), Math.max(...nz)] : [0, 0];
           };
+          const [rangePairs, rangeFrame] = edgeRows.length
+            ? [edgePairs, model.edges] : [networkPairs, networksFrame];
           const modelRange = (self: boolean): [number, number] => {
             const vals: number[] = [];
-            edgePairs.forEach(({ col, pair }) => {
+            rangePairs.forEach(({ col, pair }) => {
               if ((pair[0] === pair[1]) !== self) return;
-              const column = model.edges.col(col);
+              const column = rangeFrame?.col(col);
               if (column) for (const v of column) vals.push(Number(v));
             });
             return rangeOf(vals);
@@ -1214,8 +1360,10 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             const unconnected = !(w > 0);
             pt.size = unconnected ? (config.hideUnconnectedNodes ? 0 : UNCONNECTED_NODE_SIZE)
                     : nodeSizeForEdges(w, widthFrac);
+            // An unconnected node stays a tiny dot (or hidden), `size` or not.
             (pt as any).meta = { ...((pt as any).meta ?? {}),
-                                 hidden: unconnected && config.hideUnconnectedNodes };
+                                 hidden: unconnected && config.hideUnconnectedNodes,
+                                 sizePx: unconnected ? undefined : (pt as any).meta?.sizePx };
           });
 
           // ── Step 8: Create edge objects ───────────────────────────────────────
@@ -1289,15 +1437,16 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               group,
               unit,
               layer:        name,
+              // <qe-edges self-size>: self dot radius as a fraction of its node's.
+              selfSize:     isSelf ? (config.edgeLayers[layer]?.selfSize ?? undefined) : undefined,
+              // <qe-edges fixed-size>: thickness keeps its zoom-1 on-screen size.
+              fixedSize:    config.edgeLayers[layer]?.fixedSize || undefined,
             };
             // Self-connections go in the `edgenodes` layer (above `nodes` in
             // draw order) so the dot is visible on top of the code node.
             const targetLayer = isSelf ? (edgenodeLayer ?? edgeLayer) : edgeLayer;
             targetLayer.__data__.objects.set(edgeLine.ID, edgeLine);
           });
-
-          edgeLayer.__data__.__state__.setVariable('layer_updated', edgeLayer.__data__);
-          if (edgenodeLayer) edgenodeLayer.__data__.__state__.setVariable('layer_updated', edgenodeLayer.__data__);
         }
 
         // ── Node visibility ──────────────────────────────────────────────────
@@ -1309,13 +1458,11 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         if (nodeLayer.svg_element) {
           (nodeLayer.svg_element as SVGElement).style.display = nodesVisible ? '' : 'none';
         }
-        if (!nodesVisible) {
-          this._nodeLabels.forEach(lbl => lbl.remove());
-          this._nodeLabels.clear();
-        }
+        if (!nodesVisible) this._clearLabels(this._nodeLabels);
 
         // ── Node labels ──────────────────────────────────────────────────────
-        if (labelSvg && labelNodes !== 0 && nodesVisible) {
+        // Every row is synced, so with labels "off" pinned ones still show.
+        if (labelSvg && nodesVisible) {
           // Clean up stale node labels
           this._nodeLabels.forEach((lbl, id) => {
             if (!nodeLayer.__data__.objects.get(id)) { lbl.remove(); this._nodeLabels.delete(id); }
@@ -1331,21 +1478,22 @@ export class QEGraphElement extends DrawableElement implements QEElement {
               this._nodeLabels.delete(id);
               return;
             }
-            const text = String((pt as any).meta?.name ?? id);
-            let lbl = this._nodeLabels.get(id);
-            if (lbl && lbl.text !== text) { lbl.remove(); this._nodeLabels.delete(id); lbl = undefined; }
-            if (!lbl) {
-              lbl = new QELabel(text, pt, labelSvg, this, labelNodes);
-              this._nodeLabels.set(id, lbl);
-            } else {
-              labelNodes === Label.DISPLAY_TYPES.ON ? lbl.show() : lbl.hide();
-            }
+            this._syncLabel(this._nodeLabels, id, readLabelSpec(row, String((pt as any).meta?.name ?? id)), pt,
+                            labelSvg, labelNodes, config.labelWeightNodes);
           });
         }
 
         // Fire after both positions and sizes are set
         nodeLayer.__data__.__state__.setVariable('layer_updated', nodeLayer.__data__);
+      } else {
+        nodeLayer?.__data__.__state__.setVariable('layer_updated', nodeLayer.__data__);
       }
+
+      // Edge layers update even when no edges were built this pass (edges
+      // hidden, no nodes, or every weight zero), so the previous render's
+      // edges are taken down rather than left at their old positions.
+      [edgeLayer, edgenodeLayer].forEach(l =>
+        l?.__data__.__state__.setVariable('layer_updated', l.__data__));
 
       // ── Axis lines / points ──────────────────────────────────────────────────
       const axisPointsLayer = this.__children__.search('__children__', 'axis_points');
@@ -1355,9 +1503,74 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
       this.update();
 
-      // Animate marks/edges from their pre-rebuild positions to the new ones.
-      if (tweenFrom) this._runTween(tweenFrom);
+      // Animate from what was on screen to the plot just built.
+      if (tweenFrom) this._startTween(tweenFrom);
     });
+  }
+
+  /**
+   * Keep one mark's label in step with this render. A reused label is rebound
+   * to the render's Point (each render builds new ones, so a label left on the
+   * old Point stays at the old coordinates); one whose text or display mode
+   * changed is rebuilt. A row with no text (label "") has no label, and with
+   * mode "off" only a pinned row does. "auto" / "click" labels keep the state
+   * hover or a click left them in, so a host that re-renders on hover doesn't
+   * undo it. The row's offset, pin and the layer's font weight are applied
+   * every render.
+   */
+  private _syncLabel(labels: Map<string, QELabel>, key: string, spec: LabelSpec, pt: Point,
+                     parent: SVGGElement, mode: number, weight: string | null): void {
+    let lbl = labels.get(key);
+    const wanted = spec.text != null && (mode !== Label.DISPLAY_TYPES.OFF || spec.pinned);
+    if (lbl && (!wanted || lbl.text !== spec.text || lbl.displayMode !== mode)) {
+      lbl.remove(); labels.delete(key); lbl = undefined;
+    }
+    if (!wanted) return;
+    if (!lbl) {
+      lbl = new QELabel(spec.text!, pt, parent, this, mode);
+      labels.set(key, lbl);
+    } else {
+      lbl.setPoint(pt);
+      if (mode === Label.DISPLAY_TYPES.ON) lbl.show();
+    }
+    if (spec.offset) lbl.setOffset(spec.offset.x, spec.offset.y);
+    lbl.fontWeight = weight;
+    lbl.setHostPinned(spec.pinned);
+  }
+
+  /** Rendered radius of a code node in graph units (for self-size), or null. */
+  _nodeRadius(id: string): number | null {
+    const layer = this.__children__.search('__children__', 'nodes') as QELayer | undefined;
+    const el = layer?.__children__.find((c: any) => c.__data__?.ID === id) as QEPoint | undefined;
+    return el ? el.computeRadius() : null;
+  }
+
+  /** Remember an interval mark's zoom-1 stroke width and dashes, and apply
+   *  them for the current zoom (see _applyIntervalStroke). */
+  private _intervalStroke(el: SVGElement, w: number, dash: number[] | null): void {
+    this._intervalBase.set(el, { w, dash });
+    this._applyIntervalStroke(el);
+  }
+
+  /** With <qe-means fixed-size>, divide by the zoom level (the zoom group
+   *  scales strokes and dashes by it); otherwise the zoom-1 values. Interval
+   *  marks are built once per render, so update() re-applies this on zoom. */
+  private _applyIntervalStroke(el: SVGElement): void {
+    const b = this._intervalBase.get(el);
+    if (!b) return;
+    const k = this._meansFixedSize ? (this.zoom_level || 1) : 1;
+    el.setAttribute('stroke-width', String(b.w / k));
+    if (b.dash) el.setAttribute('stroke-dasharray', b.dash.map(d => d / k).join(' '));
+  }
+
+  private _removeIntervals(marks: Map<string, SVGElement>): void {
+    marks.forEach(el => el.remove());
+    marks.clear();
+  }
+
+  private _clearLabels(labels: Map<string, QELabel>): void {
+    labels.forEach(lbl => lbl.remove());
+    labels.clear();
   }
 
   // ── Shared re-render scheduler ───────────────────────────────────────────────
@@ -1369,6 +1582,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     if (this._renderPending) return;
     this._renderPending = true;
     queueMicrotask(() => {
+      // A render since this was scheduled (setModelData in the same task)
+      // already picked the change up: one render, not two.
+      if (!this._renderPending) return;
       this._renderPending = false;
       this._vizena?.dispatchEvent(new CustomEvent('model-updated', {
         detail: this._vizena.model,
@@ -1385,6 +1601,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   private _readLayerConfig(): {
     // Nodes
     labelNodes: number;
+    labelWeightNodes: string | null;
+    nodeFixedSize: boolean;
     showNodes: boolean;
     edgeWidth: number;
     range: 'network' | 'points' | number | null;
@@ -1401,11 +1619,14 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     intervals: 'box' | 'crosshairs' | 'none';
     showOutlier: boolean;
     labelMeans: number;
+    labelWeightMeans: string | null;
     meanFixedSize: boolean;
     // Points
     showPoints: boolean;
-    pointSets: Array<{ set: string; size: number | null; fixedSize: boolean }>;
+    pointSets: Array<{ set: string; size: number | null; fixedSize: boolean;
+                       labelMode: number; labelWeight: string | null }>;
     labelPoints: number;
+    labelWeightPoints: string | null;
     pointSize: number | null;
     pointFixedSize: boolean;
     // Edges
@@ -1428,6 +1649,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     trajectoryOpacityRange: [number, number];
     // Axes
     showAxes: boolean;
+    axesFixedSize: boolean;
     axisXLabel: string | null;
     axisYLabel: string | null;
   } {
@@ -1453,6 +1675,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         nodesEl?.getAttribute('label') ?? this.getAttribute('label-nodes') ?? labelsShorthand,
         Label.DISPLAY_TYPES.ON
       ),
+      // label-font-weight on a layer element (e.g. "bold"); null = 500.
+      labelWeightNodes: nodesEl?.getAttribute('label-font-weight') || null,
+      nodeFixedSize: !!nodesEl && nodesEl.hasAttribute('fixed-size'),
       showNodes: !!nodesEl,
       range: (() => {
         const v = this.getAttribute('range');
@@ -1494,6 +1719,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         meansEl?.getAttribute('label') ?? this.getAttribute('label-means') ?? labelsShorthand,
         Label.DISPLAY_TYPES.ON
       ),
+      labelWeightMeans: meansEl?.getAttribute('label-font-weight') || null,
       // fixed-size keeps mean markers a constant on-screen px size (webENA parity).
       meanFixedSize: !!meansEl && meansEl.hasAttribute('fixed-size'),
 
@@ -1503,11 +1729,18 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         set: e.getAttribute('set')!,
         size: e.getAttribute('size') ? parseFloat(e.getAttribute('size')!) : null,
         fixedSize: e.hasAttribute('fixed-size'),
+        // Label mode: this set's `label`, else <qe-graph label-points>.
+        labelMode: parseLabelMode(
+          e.getAttribute('label') ?? this.getAttribute('label-points') ?? labelsShorthand,
+          Label.DISPLAY_TYPES.OFF
+        ),
+        labelWeight: e.getAttribute('label-font-weight') || null,
       })),
       labelPoints: parseLabelMode(
         pointsEl?.getAttribute('label') ?? this.getAttribute('label-points') ?? labelsShorthand,
         Label.DISPLAY_TYPES.OFF
       ),
+      labelWeightPoints: pointsEl?.getAttribute('label-font-weight') || null,
       pointSize: pointsEl?.getAttribute('size') ? parseFloat(pointsEl.getAttribute('size')!) : null,
       // fixed-size keeps unit dots a constant on-screen px size (webENA parity).
       pointFixedSize: !!pointsEl && pointsEl.hasAttribute('fixed-size'),
@@ -1541,6 +1774,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // to the dimension name (resolved later, where dims are known). null = no
       // label for that axis.
       showAxes:   !!axesEl,
+      axesFixedSize: !!axesEl && axesEl.hasAttribute('fixed-size'),
       axisXLabel: axesEl?.hasAttribute('x') ? (axesEl.getAttribute('x') ?? '') : null,
       axisYLabel: axesEl?.hasAttribute('y') ? (axesEl.getAttribute('y') ?? '') : null,
     };
@@ -1582,8 +1816,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         'group', 'unit', 'compare', 'also', 'color-scale', 'magnify',
         'network', 'colors', 'threshold', 'name',
         'groups', 'confidence', 'label', 'intervals', 'outlier', 'set', 'unconnected',
-        'scale-points', 'point-scale', 'edge-width', 'labels', 'range', 'center', 'plot-title',
-        'label-font-size', 'label-font-family', 'label-font-color', 'label-nodes', 'label-means', 'label-points',
+        'scale-points', 'point-scale', 'edge-width', 'labels', 'range', 'center', 'view-padding', 'plot-title',
+        'label-font-size', 'label-font-family', 'label-font-color', 'label-font-weight',
+        'label-nodes', 'label-means', 'label-points', 'self-size',
         'units', 'smooth', 'degree', 'points', 'tips', 'playhead',
         'line-style', 'stroke-width', 'stroke-width-range', 'opacity-range',
         'x', 'y', 'size', 'fixed-size',
@@ -1620,6 +1855,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   disconnectedCallback(): void {
+    this._stopTween();
     this._childObserver?.disconnect();
     this._childObserver = null;
     this._resizeObs?.disconnect();
@@ -1668,85 +1904,286 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       .filter(e => e.source != null && e.target != null);
   }
 
-  // ── Transition tweening (opt-in via the `animate` attribute; webENA P2.1) ───
+  // ── View: zoom / pan ─────────────────────────────────────────────────────────
+  /** <qe-graph zoom-min / zoom-max>: the zoom levels every zoom stays within
+   *  (1 = the fitted view); unbounded when absent. */
+  private _zoomLimits(): [number, number] {
+    const num = (a: string) => {
+      const v = Number(this.getAttribute(a));
+      return this.hasAttribute(a) && Number.isFinite(v) && v > 0 ? v : null;
+    };
+    return [num('zoom-min') ?? 0, num('zoom-max') ?? Infinity];
+  }
+
+  private _clampZoom(level: number): number {
+    const [lo, hi] = this._zoomLimits();
+    return Math.min(hi, Math.max(lo, level));
+  }
+
+  /** <qe-graph zoom-step>: the wheel's zoom factor per 100 px of scroll. */
+  private _zoomStep(): number {
+    const v = Number(this.getAttribute('zoom-step'));
+    return this.hasAttribute('zoom-step') && Number.isFinite(v) && v > 0 ? v : 1.1;
+  }
+
+  /** Client (CSS px) → root-svg user coordinates, the space the zoom / pan
+   *  transform maps into; null before layout. */
+  private _clientToRoot(x: number, y: number): [number, number] | null {
+    const m = (this.svg_element as SVGSVGElement).getScreenCTM?.();
+    if (!m) return null;
+    const p = new DOMPoint(x, y).matrixTransform(m.inverse());
+    return [p.x, p.y];
+  }
+
+  /** Zoom to `level` (within the limits), keeping the root-svg point
+   *  (ux, uy) where it is on screen. Every zoom goes through here. */
+  private _zoomAbout(level: number, ux: number, uy: number): void {
+    if (!(Number.isFinite(level) && level > 0)) return;
+    level = this._clampZoom(level);
+    const t = this.__data__.transform;
+    const k = level / (this.zoom_level || 1);
+    t.e = ux - k * (ux - t.e);
+    t.f = uy - k * (uy - t.f);
+    t.zoom(level);
+    this.zoom_level = level;
+    this.update();
+  }
+
+  private _zoomAnim: number | null = null;
+
+  private _stopZoomAnim(): void {
+    if (this._zoomAnim !== null) cancelAnimationFrame(this._zoomAnim);
+    this._zoomAnim = null;
+  }
+
+  /** Ease the zoom to `level` about (ux, uy) over `ms` (double-click). */
+  private _animateZoomAbout(level: number, ux: number, uy: number, ms: number): void {
+    this._stopZoomAnim();
+    const z0 = this.zoom_level || 1, z1 = this._clampZoom(level);
+    if (z1 === z0) return;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, Math.max(0, (now - t0) / ms));
+      this._zoomAbout(p >= 1 ? z1 : z0 * Math.pow(z1 / z0, 1 - Math.pow(1 - p, 3)), ux, uy);
+      this._zoomAnim = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    this._zoomAnim = requestAnimationFrame(step);
+  }
+
+  /**
+   * Zoom to an absolute level (1 = the fitted view, 2 = twice as close),
+   * about the centre of the view: whatever is under the centre stays there,
+   * pan included. Ignores levels that are not finite and > 0; clamped to
+   * zoom-min / zoom-max. Works with view-locked set.
+   */
+  zoomTo(level: number): void {
+    this._stopZoomAnim();
+    const { cx, cy } = this.__data__.extremes;
+    this._zoomAbout(level, cx, cy);
+  }
+
+  /** Zoom by a factor relative to the current level (> 1 in, < 1 out). */
+  zoomBy(factor: number): void {
+    if (!(Number.isFinite(factor) && factor > 0)) return;
+    this.zoomTo((this.zoom_level || 1) * factor);
+  }
+
+  /** Back to the fitted view: zoom 1 (or the nearest limit), no pan. */
+  resetView(): void {
+    this._stopZoomAnim();
+    const z = this._clampZoom(1);
+    const { cx, cy } = this.__data__.extremes;
+    this.zoom_level = z;
+    this.__data__.transform.values = z === 1 ? [1, 0, 0, 1, 0, 0] : [z, 0, 0, z, cx * (1 - z), cy * (1 - z)];
+    this.update();
+  }
+
+  // ── Transition tweening (opt-in via the `animate` attribute) ─────────────────
+  // A render with `animate` set glides from what is on screen to the new plot.
+  // Positions are tweened as data — the points layer (unit points, point-set
+  // points, means) and the code nodes — and each frame runs the normal
+  // update(), so edges (re-attached to their nodes), labels and the highlight
+  // are drawn from the in-between positions. Interval boxes and the view
+  // extent are interpolated alongside. The start is drawn in the same task as
+  // the render, so the first painted frame is where the tween begins.
   private _animateMs = 0;
   private _tweenRaf: number | null = null;
+  private _tween: {
+    t0: number; dur: number; k: number;
+    marks: Array<{ key: string; o: any; fx: number; fy: number; tx: number; ty: number }>;
+    boxes: Array<{ el: SVGElement; from: number[]; to: number[]; attrs: Record<string, string> }>;
+    view: { from: number[]; to: number[] };
+  } | null = null;
+  /** [x_max, y_max, cx, cy] that update_extremes() uses while tweening. */
+  private _tweenView: number[] | null = null;
 
   /** Matches every numeric token in an SVG path `d` string (ints, decimals,
    *  scientific notation, leading sign) while leaving command letters intact. */
   private static _PATH_NUM_RE = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
 
-  /** Marks (circles/rects), undirected edge lines, and directed / self-edge
-   *  triangle paths all participate in tweening. */
-  private _tweenTargets(): SVGElement[] {
-    return [...this.svg_element.querySelectorAll(
-      'circle[data-point-id], rect[data-point-id], line[data-edge-source], path[data-edge-source]'
-    )] as SVGElement[];
+  private static _ease(t: number): number {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
 
-  private _readCoords(el: SVGElement): any {
-    const tag = el.tagName.toLowerCase();
-    const n = (a: string) => parseFloat(el.getAttribute(a) || '0');
-    if (tag === 'circle') return { t: 'c', cx: n('cx'), cy: n('cy') };
-    if (tag === 'rect')   return { t: 'r', x: n('x'), y: n('y') };
-    if (tag === 'line')   return { t: 'l', x1: n('x1'), y1: n('y1'), x2: n('x2'), y2: n('y2') };
-    if (tag === 'path') {
-      const d = el.getAttribute('d') || '';
-      return { t: 'p', d, nums: (d.match(QEGraphElement._PATH_NUM_RE) || []).map(Number) };
+  /** Move a Point (or an edge end): QEPoint reads `dimensions`, others `x` / `y`. */
+  private static _setXY(o: any, x: number, y: number): void {
+    o.x = x; o.y = y;
+    if (o.dimensions) { o.dimensions[0] = x; o.dimensions[1] = y; }
+  }
+
+  private _layerObjects(name: string): Map<string, any> | undefined {
+    return (this.__children__.search('__children__', name) as QELayer | undefined)?.__data__.objects as any;
+  }
+
+  private _intervalMarks(): SVGElement[] {
+    return [...this._ciRects.values(), ...this._outlierRects.values(), ...this._ciCross.values()];
+  }
+
+  /** A box's x, y, width, height, or a crosshair path's numbers. */
+  private _boxGeom(el: SVGElement): number[] {
+    if (el.tagName.toLowerCase() === 'rect') {
+      return ['x', 'y', 'width', 'height'].map(a => parseFloat(el.getAttribute(a) || '0'));
     }
-    return null;
+    return ((el.getAttribute('d') || '').match(QEGraphElement._PATH_NUM_RE) || []).map(Number);
   }
 
-  /** Snapshot current tween-target positions keyed by element. */
-  private _captureTween(): Map<SVGElement, any> {
-    const m = new Map<SVGElement, any>();
-    this._tweenTargets().forEach(el => { const c = this._readCoords(el); if (c) m.set(el, c); });
-    return m;
+  /** The plot as drawn now — mid-tween, the in-between state — with the
+   *  running tween's clock and targets, so a new render can continue it. */
+  private _captureTweenState() {
+    const marks = new Map<string, [number, number]>();
+    for (const name of ['points', 'nodes']) {
+      this._layerObjects(name)?.forEach((o: any, id: string) => marks.set(`${name}:${id}`, [o.x, o.y]));
+    }
+    const boxes = new Map<SVGElement, number[]>();
+    this._intervalMarks().forEach(el => boxes.set(el, this._boxGeom(el)));
+    const ex = this.__data__.extremes;
+    const tw = this._tween;
+    return {
+      marks, boxes, view: [ex.x_max, ex.y_max, ex.cx, ex.cy],
+      running: tw ? {
+        t0: tw.t0, k: tw.k,
+        marks: new Map(tw.marks.map(m => [m.key, [m.tx, m.ty] as [number, number]])),
+        boxes: new Map(tw.boxes.map(b => [b.el, b.to])),
+        view: tw.view.to,
+      } : null,
+    };
   }
 
-  /** Animate each still-present element from its snapshot to its new position. */
-  private _runTween(from: Map<SVGElement, any>): void {
-    if (this._tweenRaf !== null) { cancelAnimationFrame(this._tweenRaf); this._tweenRaf = null; }
-    const to = new Map<SVGElement, any>();
-    this._tweenTargets().forEach(el => { if (from.has(el)) { const c = this._readCoords(el); if (c) to.set(el, c); } });
-    if (!to.size) return;
+  private _stopTween(): void {
+    if (this._tweenRaf !== null) cancelAnimationFrame(this._tweenRaf);
+    this._tweenRaf = null;
+    this._tween = null;
+    this._tweenView = null;
+  }
 
-    const dur = this._animateMs;
-    const t0 = performance.now();
-    const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+  /**
+   * Tween from `prev` (what was on screen) to the plot just rendered. A render
+   * that lands mid-tween with the same targets (the same model again, an
+   * attribute that moves nothing) continues on the running clock; one with
+   * new targets starts a fresh tween from the current, in-between positions.
+   */
+  private _startTween(prev: ReturnType<QEGraphElement['_captureTweenState']>): void {
+    type Mark = { key: string; o: any; tx: number; ty: number; cx: number; cy: number };
+    const now = performance.now();
+    const same = (a: number[], b: number[] | undefined) => !!b && a.length === b.length && a.every((v, i) => v === b[i]);
 
-    const step = (now: number) => {
-      const t = Math.min(1, (now - t0) / dur);
-      const k = ease(t);
-      to.forEach((nc, el) => {
-        const oc = from.get(el);
-        if (!oc || oc.t !== nc.t) return;
-        if (nc.t === 'c') {
-          el.setAttribute('cx', String(lerp(oc.cx, nc.cx, k)));
-          el.setAttribute('cy', String(lerp(oc.cy, nc.cy, k)));
-        } else if (nc.t === 'r') {
-          el.setAttribute('x', String(lerp(oc.x, nc.x, k)));
-          el.setAttribute('y', String(lerp(oc.y, nc.y, k)));
-        } else if (nc.t === 'l') {
-          el.setAttribute('x1', String(lerp(oc.x1, nc.x1, k)));
-          el.setAttribute('y1', String(lerp(oc.y1, nc.y1, k)));
-          el.setAttribute('x2', String(lerp(oc.x2, nc.x2, k)));
-          el.setAttribute('y2', String(lerp(oc.y2, nc.y2, k)));
-        } else {
-          // Directed / self-edge triangle path: interpolate the numeric tokens
-          // in `d` when the command structure is stable (equal token count).
-          // Otherwise leave the freshly-built `d` in place (graceful snap).
-          if (!oc.nums || oc.nums.length !== nc.nums.length) return;
-          let i = 0;
-          const d = nc.d.replace(QEGraphElement._PATH_NUM_RE,
-            () => String(lerp(oc.nums[i], nc.nums[i++], k)));
-          el.setAttribute('d', d);
-        }
+    const found: Mark[] = [];
+    for (const name of ['points', 'nodes']) {
+      this._layerObjects(name)?.forEach((o: any, id: string) => {
+        const key = `${name}:${id}`;
+        const p = prev.marks.get(key);
+        if (p) found.push({ key, o, tx: o.x, ty: o.y, cx: p[0], cy: p[1] });   // new marks appear in place
       });
-      this._tweenRaf = t < 1 ? requestAnimationFrame(step) : null;
+    }
+    const boxes = this._intervalMarks()
+      .map(el => ({ el, to: this._boxGeom(el), cur: prev.boxes.get(el) }))
+      .filter(b => b.cur && b.cur.length === b.to.length);
+    const ex = this.__data__.extremes;
+    const viewTo = [ex.x_max, ex.y_max, ex.cx, ex.cy];
+
+    // Continue the running clock when nothing's destination changed.
+    const r = prev.running;
+    const keep = !!r && r.k < 0.95 && same(viewTo, r.view)
+      && found.every(m => same([m.tx, m.ty], r.marks.get(m.key) ?? [m.cx, m.cy]))
+      && boxes.every(b => same(b.to, r.boxes.get(b.el) ?? b.cur!));
+    const e = keep ? r!.k : 0;
+    // On a clock at progress e, the start that puts the tween where it is
+    // drawn now: lerp(from, to, e) = current.
+    const from = (cur: number, to: number) => (e > 0 ? (cur - e * to) / (1 - e) : cur);
+
+    const marks = found
+      .map(m => ({ key: m.key, o: m.o, tx: m.tx, ty: m.ty, fx: from(m.cx, m.tx), fy: from(m.cy, m.ty) }))
+      .filter(m => m.fx !== m.tx || m.fy !== m.ty);
+    const tweenBoxes = boxes
+      .map(b => ({
+        el: b.el, to: b.to, from: b.cur!.map((v, i) => from(v, b.to[i])),
+        attrs: Object.fromEntries(['x', 'y', 'width', 'height', 'd']
+          .filter(a => b.el.hasAttribute(a)).map(a => [a, b.el.getAttribute(a)!])),
+      }))
+      .filter(b => !same(b.from, b.to));
+    const viewFrom = prev.view.map((v, i) => from(v, viewTo[i]));
+    if (!marks.length && !tweenBoxes.length && same(viewFrom, viewTo)) return;
+
+    this._tween = {
+      t0: keep ? r!.t0 : now, dur: this._animateMs, k: e,
+      marks, boxes: tweenBoxes, view: { from: viewFrom, to: viewTo },
+    };
+    this._tweenFrame(e);   // the start, drawn in this task: no frame of the end state first
+    const step = (t: number) => {
+      const tw = this._tween;
+      if (!tw) return;
+      const p = (t - tw.t0) / tw.dur;
+      if (p >= 1) { this._endTween(); return; }
+      // Never step back (a frame time can precede the start).
+      this._tweenFrame(Math.max(tw.k, QEGraphElement._ease(Math.max(0, p))));
+      this._tweenRaf = requestAnimationFrame(step);
     };
     this._tweenRaf = requestAnimationFrame(step);
+  }
+
+  /** Draw the tween at eased progress k (0 = start, 1 = end). */
+  private _tweenFrame(k: number): void {
+    const tw = this._tween;
+    if (!tw) return;
+    tw.k = k;
+    const lerp = (a: number, b: number) => a + (b - a) * k;
+    tw.marks.forEach(m => QEGraphElement._setXY(m.o, lerp(m.fx, m.tx), lerp(m.fy, m.ty)));
+    this._attachEdges();
+    tw.boxes.forEach(b => {
+      const g = b.from.map((v, i) => lerp(v, b.to[i]));
+      if ('d' in b.attrs) {
+        let i = 0;
+        b.el.setAttribute('d', b.attrs.d.replace(QEGraphElement._PATH_NUM_RE, () => String(g[i++])));
+      } else {
+        ['x', 'y', 'width', 'height'].forEach((a, i) => b.el.setAttribute(a, String(g[i])));
+      }
+    });
+    this._tweenView = tw.view.from.map((v, i) => lerp(v, tw.view.to[i]));
+    this.update();
+  }
+
+  /** Land exactly on the rendered plot and stop. */
+  private _endTween(): void {
+    const tw = this._tween;
+    if (!tw) return;
+    tw.marks.forEach(m => QEGraphElement._setXY(m.o, m.tx, m.ty));
+    this._attachEdges();
+    tw.boxes.forEach(b => Object.entries(b.attrs).forEach(([a, v]) => b.el.setAttribute(a, v)));
+    this._stopTween();
+    this.update();
+  }
+
+  /** Put each edge's ends on its nodes' current positions. */
+  private _attachEdges(): void {
+    const nodes = this._layerObjects('nodes');
+    if (!nodes) return;
+    for (const name of ['edges', 'edgenodes']) {
+      this._layerObjects(name)?.forEach((edge: any) => {
+        const s = nodes.get(edge.meta?.source), t = nodes.get(edge.meta?.target);
+        if (s && edge.from) QEGraphElement._setXY(edge.from, s.x, s.y);
+        if (t && edge.to)   QEGraphElement._setXY(edge.to, t.x, t.y);
+      });
+    }
   }
 
   /** Serialize the current plot as a standalone SVG string (webENA P2.3). */
@@ -1839,13 +2276,28 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       this._highlightGroup.setAttribute('data-layer-name', 'highlight');
       this._highlightGroup.setAttribute('pointer-events', 'none');
     }
-    // Keep the overlay on top.
-    this.svg_element.appendChild(this._highlightGroup);
+    // Keep the overlay on top, inside the zoom / pan group so rings and glows
+    // follow zoom and drag-pan. While nothing is highlighted the empty group
+    // stays last in the root svg, where it has always been, so a plot without
+    // highlights serializes as before.
+    const anyHighlight = this._highlight.edges.size > 0 || this._highlight.nodes.size > 0;
+    const zoomGroup = (this.__children__[0] as QELayer | undefined)?.svg_element;
+    (anyHighlight && zoomGroup ? zoomGroup : this.svg_element).appendChild(this._highlightGroup);
     const g = this._highlightGroup;
     g.textContent = '';
 
     const extent = (this.__data__ as Graph).extremes.x_max || 1;
     const HL = '#f5a623';
+    // Decoration around fixed-size marks keeps a constant on-screen size too
+    // (the overlay sits in the zoom group, which scales by the zoom level).
+    const zoom = this.zoom_level || 1;
+    const edgeK = this._edgesFixedSize ? zoom : 1;
+    const markK = (id: string): number => {
+      const find = (name: string) => (this.__children__.search('__children__', name) as QELayer | undefined)
+        ?.__data__.objects.get(id) as any;
+      const meta = (find('nodes') ?? find('points'))?.meta;
+      return meta?.zoomFixed || meta?.fixedSize ? zoom : 1;
+    };
     const mk = (tag: string, attrs: Record<string, string | number>) => {
       const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
       for (const k in attrs) el.setAttribute(k, String(attrs[k]));
@@ -1862,7 +2314,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         if (!A || !B) return;
         g.appendChild(mk('line', {
           x1: A.x, y1: A.y, x2: B.x, y2: B.y,
-          stroke: HL, 'stroke-width': extent * 0.02, 'stroke-opacity': 0.6, 'stroke-linecap': 'round',
+          stroke: HL, 'stroke-width': extent * 0.02 / edgeK, 'stroke-opacity': 0.6, 'stroke-linecap': 'round',
         }));
       });
     }
@@ -1884,7 +2336,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         r  = parseFloat(el.getAttribute('r') || '0');
       }
       g.appendChild(mk('circle', {
-        cx, cy, r: r * 1.7 + extent * 0.004, fill: 'none', stroke: HL, 'stroke-width': extent * 0.006,
+        cx, cy, r: r * 1.7 + extent * 0.004 / markK(id), fill: 'none', stroke: HL,
+        'stroke-width': extent * 0.006 / markK(id),
       }));
     });
   }
@@ -1950,28 +2403,85 @@ export class QEGraphElement extends DrawableElement implements QEElement {
   }
 
   attach_events() {
-    // Attach event for zooming
+    const locked = () => this.hasAttribute('view-locked');
+
+    // Wheel: zoom toward the pointer (the point under it stays put), by
+    // zoom-step per 100 px of scroll. A line-mode notch (Firefox: 3 lines)
+    // counts about as much as a pixel-mode one (100 px). ctrl + wheel is a
+    // trackpad pinch: e^(−Δ/100) follows the pinch's own scale.
     this.svg_element.addEventListener("wheel", (ev: WheelEvent) => {
-      console.log("Wheel event: ", ev);
+      if (locked()) return;                 // the page scrolls instead
       ev.preventDefault();
-      const delta = Math.sign(ev.deltaY);
-      if (delta < 0) {
-        this.zoom_level *= 1.1;
-      } else {
-        this.zoom_level /= 1.1;
-      }
-      this.__data__.transform.zoom(this.zoom_level);
-      this.update();
+      const unit = ev.deltaMode === 1 ? 33 : ev.deltaMode === 2 ? (this.svg_element.clientHeight || 800) : 1;
+      const dy = ev.deltaY * unit;
+      const factor = ev.ctrlKey ? Math.exp(-dy / 100) : Math.pow(this._zoomStep(), -dy / 100);
+      this._stopZoomAnim();
+      const p = this._clientToRoot(ev.clientX, ev.clientY);
+      if (p) this._zoomAbout((this.zoom_level || 1) * factor, p[0], p[1]);
+      else this.zoomBy(factor);
+    }, { passive: false });
+
+    // Double-click: zoom in 2.2× toward the pointer (sigma's ratio), eased.
+    // Both clicks still emit their qe-*-click; a label's double-click doesn't zoom.
+    this.svg_element.addEventListener("dblclick", (ev: MouseEvent) => {
+      if (locked() || (ev.target as Element | null)?.closest?.('text[data-label-for]')) return;
+      ev.preventDefault();
+      const p = this._clientToRoot(ev.clientX, ev.clientY);
+      if (p) this._animateZoomAbout((this.zoom_level || 1) * 2.2, p[0], p[1], 200);
     });
 
-    // Attach event for panning
+    // Touch (pointer events, touch only, so mouse and pen are unchanged):
+    // one finger pans, following it; two pinch-zoom about their midpoint
+    // and pan as it moves. A tap still clicks. Labels handle their own drags.
+    const touches = new Map<number, [number, number]>();
+    let gesture: { mid: [number, number]; dist: number; n: number } | null = null;
+    const measure = () => {
+      const [a, b] = [...touches.values()];
+      if (!a) return null;
+      return b ? { mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as [number, number], dist: Math.hypot(a[0] - b[0], a[1] - b[1]), n: 2 }
+               : { mid: a, dist: 0, n: 1 };
+    };
+    this.svg_element.addEventListener("pointerdown", (ev: PointerEvent) => {
+      if (ev.pointerType !== 'touch' || locked()) return;
+      touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      gesture = measure();
+      this._stopZoomAnim();
+    });
+    this.svg_element.addEventListener("pointermove", (ev: PointerEvent) => {
+      if (!touches.has(ev.pointerId)) return;
+      if (locked()) { touches.clear(); gesture = null; return; }
+      touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      const g = measure();
+      if (g && gesture && g.n === gesture.n) {
+        const a = this._clientToRoot(...gesture.mid), b = this._clientToRoot(...g.mid);
+        if (a && b) {
+          const t = this.__data__.transform;
+          t.pan(b[0] - a[0], b[1] - a[1]);
+          if (g.n === 2 && gesture.dist > 0 && g.dist > 0) {
+            this._zoomAbout((this.zoom_level || 1) * g.dist / gesture.dist, b[0], b[1]);
+          } else {
+            this.__children__[0].svg_element.setAttribute("transform", t.toString());
+          }
+        }
+      }
+      gesture = g;
+    });
+    const touchEnd = (ev: PointerEvent) => { if (touches.delete(ev.pointerId)) gesture = measure(); };
+    this.svg_element.addEventListener("pointerup", touchEnd);
+    this.svg_element.addEventListener("pointercancel", touchEnd);
+
+    // Mouse drag-pan: the grabbed graph point stays under the pointer at any
+    // zoom. Pointer moves are measured in root-svg units (where the zoom /
+    // pan transform applies) and accumulated, so moves between two frames
+    // are not dropped.
     let isPanning = false;
-    let startX: number, startY: number;
+    let lastX = 0, lastY = 0;
 
     this.svg_element.addEventListener("mousedown", (ev: MouseEvent) => {
+      if (locked()) return;
       isPanning = true;
-      startX = ev.clientX;
-      startY = ev.clientY;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
     });
     let panAnimationFrame: number | null = null;
     let pendingPan: { dx: number, dy: number } | null = null;
@@ -1987,14 +2497,13 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
     this.svg_element.addEventListener("mousemove", (ev: MouseEvent) => {
       if (!isPanning) return;
-      const 
-        dx = ev.clientX - startX,
-        dy = ev.clientY - startY
-      ;
-      pendingPan = { dx: dx / 100, dy: dy / 100 };
-      startX = ev.clientX;
-      startY = ev.clientY;
-      
+      // Released outside the plot: stop, rather than pan with no button held.
+      if (ev.buttons === 0) { isPanning = false; return; }
+      const a = this._clientToRoot(lastX, lastY), b = this._clientToRoot(ev.clientX, ev.clientY);
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      if (!a || !b) return;
+      pendingPan = { dx: (pendingPan?.dx ?? 0) + b[0] - a[0], dy: (pendingPan?.dy ?? 0) + b[1] - a[1] };
       if (panAnimationFrame === null) {
         panAnimationFrame = requestAnimationFrame(panUpdate);
       }
@@ -2010,6 +2519,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       const id = ev.detail?.pointData?.ID;
       if (!id) return;
       const lbl = this._pointLabels.get(id)
+               ?? this._setLabels.get(id)
                ?? this._meanLabels.get(id.replace('mean-', ''))
                ?? this._nodeLabels.get(id);
       if (lbl && lbl.displayMode === Label.DISPLAY_TYPES.CLICK) lbl.toggle();
@@ -2029,6 +2539,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
     const getAutoLabel = (id: string): QELabel | undefined => {
       return this._pointLabels.get(id)
+          ?? this._setLabels.get(id)
           ?? this._meanLabels.get(id.replace(/^mean-/, ''))
           ?? this._nodeLabels.get(id);
     };
@@ -2235,6 +2746,8 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     // second pass re-syncs the viewBox now that all element positions are final.
     this.update_extremes();
     this.update_layers();
+    [this._ciRects, this._outlierRects, this._ciCross]
+      .forEach(m => m.forEach(el => this._applyIntervalStroke(el)));
     this.update_labels();   // positions labels using the freshly-computed extent
     this.update_extremes(); // re-apply viewBox after label/layer repositioning
     this.update_axes();     // axis line visibility + labels (uses final extent)
@@ -2260,6 +2773,9 @@ export class QEGraphElement extends DrawableElement implements QEElement {
 
     const fontSize = extent * 0.06;
     const gap      = fontSize * 0.6;
+    // <qe-axes fixed-size>: axis labels keep their zoom-1 size on screen.
+    const axisFont = fontSize / (this._axesFixedSize ? (this.zoom_level || 1) : 1);
+    const axisGap  = axisFont * 0.6;
 
     const place = (axis: 'x' | 'y', text: string | null) => {
       let el = this._axisLabelEls.get(axis);
@@ -2275,20 +2791,20 @@ export class QEGraphElement extends DrawableElement implements QEElement {
         this._axisLabelEls.set(axis, el);
       }
       el.textContent = text;
-      el.setAttribute('font-size',   fontSize.toString());
+      el.setAttribute('font-size',   axisFont.toString());
       el.setAttribute('font-family', 'system-ui, sans-serif');
       el.setAttribute('font-weight', '600');
       el.setAttribute('fill',        '#556');
       if (axis === 'x') {
         // At the right (+x) tip, anchored end so any-length text grows inward
         // and never clips past the viewBox edge; nudged just above the axis.
-        el.setAttribute('x', (cx + extent - gap).toString());
-        el.setAttribute('y', (-gap).toString());
+        el.setAttribute('x', (cx + extent - axisGap).toString());
+        el.setAttribute('y', (-axisGap).toString());
         el.setAttribute('text-anchor', 'end');
       } else {
         // Just below the top (−y) tip, centered on the y-axis, inside the box.
-        el.setAttribute('x', (gap).toString());
-        el.setAttribute('y', (cy - extent + fontSize + gap).toString());
+        el.setAttribute('x', (axisGap).toString());
+        el.setAttribute('y', (cy - extent + axisFont + axisGap).toString());
         el.setAttribute('text-anchor', 'start');
       }
     };
@@ -2347,23 +2863,30 @@ export class QEGraphElement extends DrawableElement implements QEElement {
     this._nodeLabels.forEach(lbl  => lbl.update());
     this._meanLabels.forEach(lbl  => lbl.update());
     this._pointLabels.forEach(lbl => lbl.update());
+    this._setLabels.forEach(lbl   => lbl.update());
   }
 
   update_extremes() {
     const graph = this.__data__ as Graph;
-    graph.update_extremes(this._centerContent);
-    if (this._rangeExtent && this._rangeExtent > 0) {
-      // A centred view measures range="network" from its centre, not the origin
-      const { cx, cy } = graph.extremes;
-      const r = this._centerContent && this._rangeMode === 'network'
-        ? graph.nodeExtentFrom(cx, cy) * 1.2
-        : this._rangeExtent;
-      graph.extremes = new Extremes(r, r, cx, cy);
+    if (this._tweenView) {
+      // Mid-tween: the view glides between the old and new extents too.
+      const [xm, ym, cx, cy] = this._tweenView;
+      graph.extremes = new Extremes(xm, ym, cx, cy);
+    } else {
+      graph.update_extremes(this._centerContent);
+      if (this._rangeExtent && this._rangeExtent > 0) {
+        // A centred view measures range="network" from its centre, not the origin
+        const { cx, cy } = graph.extremes;
+        const r = this._centerContent && this._rangeMode === 'network'
+          ? graph.nodeExtentFrom(cx, cy) * 1.2
+          : this._rangeExtent;
+        graph.extremes = new Extremes(r, r, cx, cy);
+      }
     }
 
     const svgRect = this.svg_element?.getBoundingClientRect();
     if(this.svg_element && svgRect) {
-      console.log("SVG rect: ", svgRect);
+      dbg("SVG rect: ", svgRect);
       let w, h;
       if(svgRect.width === 0 || svgRect.height === 0) {
         w = 1;
@@ -2379,7 +2902,7 @@ export class QEGraphElement extends DrawableElement implements QEElement {
       // this.svg_element.setAttribute("transform", this.__data__.transform.toString());
       this.__children__[0].svg_element.setAttribute("transform", this.__data__.transform.toString());
 
-      this.svg_element.setAttribute("viewBox", (this.__data__ as Graph).extremes.as_viewBox());
+      this.svg_element.setAttribute("viewBox", (this.__data__ as Graph).extremes.as_viewBox(this._viewPadding()));
 
       let axisLineLayer: LayerLike | undefined = this.__data__.layers.search("layers", "axis_lines");
       if (axisLineLayer) {

@@ -40,9 +40,12 @@ export class QELine extends Drawable implements QEElement {
     el.setAttribute('data-edge-target', String(meta.target ?? ''));
     el.setAttribute('data-edge-weight', String(meta.weight ?? 0));
     el.setAttribute('data-edge-directed', meta.isDirected ? 'true' : 'false');
-    if (meta.isSelf) el.setAttribute('data-edge-self', 'true');
-    if (meta.group != null) el.setAttribute('data-edge-group', String(meta.group));
-    if (meta.unit  != null) el.setAttribute('data-edge-unit',  String(meta.unit));
+    // Optional fields are cleared when absent: the element outlives renders.
+    const opt = (name: string, v: any) =>
+      v != null && v !== false ? el.setAttribute(name, v === true ? 'true' : String(v)) : el.removeAttribute(name);
+    opt('data-edge-self',  !!meta.isSelf);
+    opt('data-edge-group', meta.group);
+    opt('data-edge-unit',  meta.unit);
   }
 
   constructor(
@@ -89,16 +92,32 @@ export class QELine extends Drawable implements QEElement {
     return line;
   }
 
+  /** Self and directed edges draw as a <path>, everything else as a <line>. */
+  private get drawsPath(): boolean {
+    return this.__data__ instanceof NodeEdge || this.__data__ instanceof TaperedEdge;
+  }
+
   update() {
     if (!this.svg_element) {
       this.create();
     }
+    // The layer rebinds __data__ on every render. If the edge changed kind
+    // (undirected <line> ↔ directed / self <path>), the old element cannot
+    // draw the new geometry and would stay where it was: rebuild it.
+    if ((this.svg_element.tagName.toLowerCase() === 'path') !== this.drawsPath) {
+      const old = this.svg_element;
+      this.create();
+      if (old.parentElement) old.replaceWith(this.svg_element);
+    }
+    if (this.drawsPath) { this._hit_el?.remove(); this._hit_el = null; }
     if (!this.svg_element.parentElement) {
       this.parent.appendChild(this.svg_element);
     }
 
     const extent = (this.graph.__data__ as any).extremes?.x_max ?? 1;
     const meta   = (this.__data__ as any).meta ?? {};
+    // Only directed tapered edges carry a chevron; drop one left from before.
+    let keepArrow = false;
 
     if (meta.isMeanEdge) {
       this._stampEdge(this.svg_element);
@@ -113,9 +132,14 @@ export class QELine extends Drawable implements QEElement {
       // Width = weight × the plot's shared width-per-weight (objects/Sizing.ts);
       // the fallback keeps edges visible if an edge arrives without one.
       const ext     = extent > 0 ? extent : 1;
-      const sw      = typeof meta.widthFrac === 'number'
+      // <qe-edges fixed-size>: the zoom group scales everything by the zoom
+      // level, so dividing thickness by it keeps the zoom-1 on-screen width
+      // (strokes, triangle bases and so their chevrons, self dots, hit
+      // lines). Positions, and so the triangles' apex split, still zoom.
+      const zoomDiv = meta.fixedSize ? ((this.graph as any).zoom_level || 1) : 1;
+      const sw      = (typeof meta.widthFrac === 'number'
         ? ext * meta.widthFrac * weight
-        : ext * EDGE_WIDTH_PER_EXTENT * (weight / (maxW || 1));
+        : ext * EDGE_WIDTH_PER_EXTENT * (weight / (maxW || 1))) / zoomDiv;
 
       // Build a WeightedColor from the stored base color + normalized weight so
       // that toString() produces hsla(h, s*w%, l%, w) — matching the Web ENA
@@ -131,7 +155,12 @@ export class QELine extends Drawable implements QEElement {
         // and nodes), matching ona. The node's diameter includes this self
         // weight, so the dot always fits inside it. Computed here because the
         // live extent is not known when the edge objects are built.
-        (this.__data__ as NodeEdge).weight = sw;
+        // <qe-edges self-size>: a fraction of the node's radius instead (sigma
+        // draws ONA self-connections at half the node); the weight then only
+        // sets the colour.
+        const frac = typeof meta.selfSize === 'number' && meta.selfSize > 0 ? meta.selfSize : null;
+        const nodeR = frac != null ? (this.graph as any)._nodeRadius?.(String(meta.source)) : null;
+        (this.__data__ as NodeEdge).weight = typeof nodeR === 'number' ? 2 * frac! * nodeR : sw;
         (this.svg_element as SVGPathElement).setAttribute('d', (this.__data__ as NodeEdge).path);
         this.svg_element.setAttribute('fill',   edgeColor);
         this.svg_element.setAttribute('stroke', 'none');
@@ -181,6 +210,7 @@ export class QELine extends Drawable implements QEElement {
               this._arrow_el.setAttribute('stroke-width', String(CHEVRON_HALO_PX));
               this._arrow_el.setAttribute('vector-effect', 'non-scaling-stroke');
               this._arrow_el.setAttribute('stroke-linejoin', 'round');
+              keepArrow = true;
             }
           } catch (_) {
             // EdgeArrow geometry degenerates for very short or zero-weight edges —
@@ -213,7 +243,7 @@ export class QELine extends Drawable implements QEElement {
         this._hit_el.setAttribute('y1', y1.toString());
         this._hit_el.setAttribute('x2', x2.toString());
         this._hit_el.setAttribute('y2', y2.toString());
-        this._hit_el.setAttribute('stroke-width', Math.max(sw, extent * 0.03).toString());
+        this._hit_el.setAttribute('stroke-width', Math.max(sw, extent * 0.03 / zoomDiv).toString());
         this._stampEdge(this._hit_el);
       }
     } else {
@@ -222,11 +252,23 @@ export class QELine extends Drawable implements QEElement {
       (this.svg_element as SVGLineElement).setAttribute('y1', this.__data__.from.y.toString());
       (this.svg_element as SVGLineElement).setAttribute('x2', this.__data__.to.x.toString());
       (this.svg_element as SVGLineElement).setAttribute('y2', this.__data__.to.y.toString());
-      const sw = (extent > 0 ? extent : 1) * 0.004 * this.get_size();
+      // <qe-axes fixed-size>: axis lines keep their zoom-1 width on screen.
+      const k  = (this.graph as any)._axesFixedSize && String(this.__data__.ID).startsWith('axis-')
+        ? ((this.graph as any).zoom_level || 1) : 1;
+      const sw = (extent > 0 ? extent : 1) * 0.004 * this.get_size() / k;
       this.svg_element.setAttribute('stroke-width',   sw.toString());
       this.svg_element.setAttribute('stroke-opacity', '1');
       this.svg_element.setAttribute('stroke',         this.__data__.color.toString());
     }
+
+    if (!keepArrow && this._arrow_el) { this._arrow_el.remove(); this._arrow_el = null; }
+  }
+
+  /** Take the edge off the plot, with its hit target and chevron. */
+  remove(): void {
+    this.svg_element?.remove();
+    this._hit_el?.remove();
+    this._arrow_el?.remove();
   }
 
   draw() {

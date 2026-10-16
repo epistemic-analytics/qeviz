@@ -6,6 +6,111 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Added
+- **Zoom and recentre from your own controls.** `<qe-graph>` has
+  `zoomBy(factor)`, `zoomTo(level)` and `resetView()` (zoom 1, no pan), so a
+  host's zoom buttons no longer have to reach into qeviz's internals. Zoom is
+  about the centre of the view.
+- **`<qe-graph view-padding>`** sets how far the view extends beyond `range`
+  (default `1.2`, as before). `view-padding="1"` makes the view match the range
+  exactly, for a host that frames the plot itself.
+- **A network can come from the `networks` frame alone.** `<qe-edges
+  network="…">` reads its edge columns from the `networks` frame, so a model
+  with just `nodes` and `networks` draws the network, and a network may include
+  edges the `edges` frame doesn't have. Without an `edges` frame, the default
+  `color-scale="model"` takes its range from the `networks` rows. Plots of
+  groups and units (`group`, `unit`, `compare`, `also`) are unchanged.
+- **Clickable marks show a pointing-hand cursor.** Code nodes, group means,
+  unit and point-set points, and edges (including self-connection dots) are
+  what `qe-node-click` / `qe-edge-click` report, and now look clickable.
+  Labels keep their grab cursor. A host can change it with the
+  `--qe-mark-cursor` CSS property on `<qe-graph>`. Clicking a directed
+  edge's arrow chevron now counts as clicking the edge.
+- **Per-row label control.** Rows of the `nodes`, `pointsets` and `groups`
+  frames can set their label: `label` (`""` now means no label for that row),
+  `label.dx` / `label.dy` (an offset in the units `qe-label-move` reports, so
+  a host can restore or mirror a dragged label) and `label.pinned` (always
+  shown, whatever the label mode, across re-renders).
+- **Point sets have labels.** `<qe-points set="…">` rows are labelled from
+  their `label` column (else the id), in the set's own `label` mode or
+  `<qe-graph label-points>`. In R, `qe_points(labels =)` now shows them on
+  hover, as documented.
+- **Node size from the data.** An optional `size` column on the `nodes` frame
+  sets a code node's diameter in CSS pixels at zoom 1; it zooms with the plot.
+- **`<qe-edges self-size="node">`** draws ONA self-connection dots at half
+  their node's radius (as webENA does), or at a given fraction of it; the self
+  weight then only sets the colour.
+- **`label-font-weight`** on `<qe-nodes>`, `<qe-means>` and `<qe-points>`,
+  e.g. bold code labels. The default is still 500.
+- **Edges and code nodes can keep their size while zooming.** With
+  `<qe-edges fixed-size>` and `<qe-nodes fixed-size>`, edge widths (lines,
+  directed triangles and their chevrons, self-connection dots, hover targets)
+  and node diameters stay at their zoom-1 on-screen size at any zoom, as in
+  webENA. Highlight rings and glows around them do the same. Without the
+  attributes they grow with the zoom as before.
+- **Zoom and pan like webENA's sigma plots.** The wheel zooms toward the
+  pointer, by an amount that follows the scroll (`<qe-graph zoom-step>`,
+  default 1.1 per mouse notch, so a trackpad is smooth), and a trackpad pinch
+  zooms through it. A double-click zooms in 2.2× toward the pointer. Touch
+  works: drag to pan, pinch to zoom, tap to click, drag labels with a finger.
+  `zoom-min` / `zoom-max` limit every kind of zoom, and `view-locked` turns
+  user zooming and panning off while the zoom methods keep working.
+- **Dragging pans with the pointer.** A mouse drag now keeps the grabbed point
+  under the pointer at any zoom, as a finger does; it used to move the plot at
+  a fixed rate that didn't match the pointer, and dropped moves that arrived
+  within one frame. Releasing the button outside the plot no longer leaves it
+  panning.
+- **Interval boxes and axes too.** `<qe-means fixed-size>` now also keeps the
+  confidence-interval boxes, crosshairs and outlier boxes at their zoom-1
+  stroke width and dash pattern, and the new `<qe-axes fixed-size>` does the
+  same for the axis lines and axis labels.
+
+### Fixed
+- **Labels follow their marks when the model is updated.** After a second
+  `setModelData` with new coordinates (e.g. a flipped axis), node, mean and
+  point labels stayed where they were while the marks moved. A label the user
+  dragged keeps its offset from its mark.
+- **Edges and marks that are no longer drawn are removed.** An edge whose
+  weight became zero or fell under the threshold, a unit or group that left
+  the model, or a whole layer whose `<qe-edges>` / `<qe-points>` /
+  `<qe-means>` element was removed stayed on the plot at its old position.
+  Edges that switch between undirected and directed (or marks that change
+  shape) are redrawn instead of staying put, and a removed edge no longer
+  leaves its invisible hover target or direction chevron behind.
+- **`animate` transitions move the whole plot, smoothly.** Updating the model
+  together with `<qe-graph>` attributes (e.g. a new `range`) used to snap the
+  marks instead of animating them, an animated update could show the new
+  positions for one frame before starting from the old ones, and labels,
+  interval boxes, the highlight and the view extent jumped while the marks
+  glided. Now everything — marks, nodes, edges (ONA triangles stay attached),
+  interval boxes, labels, the highlight and the view — moves together, the
+  first frame is the old plot, and an update that arrives mid-transition
+  continues from the current positions. Attribute and child changes made
+  just before `setModelData` (in the same task) no longer cause a second
+  render.
+- **Dragging a label while zoomed follows the pointer.** At zoom 2 a label
+  moved twice as far as the mouse. `qe-label-move` still reports graph units.
+- **The highlight follows zoom and pan.** `setHighlight()` rings and glows
+  stayed where they were drawn when the view was zoomed or dragged.
+- **Hover and click labels survive a re-render.** An `"auto"` label shown on
+  hover, or a `"click"` label opened, was hidden again by the next render, so
+  a host that re-renders on hover could never show one.
+- **Turning labels `off` removes them.** Setting a label mode to `"off"` on a
+  plot that already showed labels left them on screen; changing the mode
+  (e.g. `"on"` to `"click"`) now takes effect too.
+- **Panning can be reset to exactly 0.** The view's transform ignored any 0
+  (and 0.0075), so a pan could never return to the origin.
+- **No more debug output in the browser console.** Messages logged on every
+  plot and every render are now shown only with `globalThis.__QEVIZ_DEBUG__ =
+  true`.
+
+### Changed
+- The mouse wheel zooms toward the pointer (previously about the plot
+  origin), and by an amount that follows the scroll: one mouse notch is still
+  1.1×. `zoomBy()` / `zoomTo()` zoom about the centre of the view.
+
 ## [0.5.7] - 2026-10-14
 
 ### Fixed

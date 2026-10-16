@@ -78,8 +78,24 @@ export class QEPoint extends Drawable implements QEElement {
   }
 
   private baseRadius(): number {
+    const r = this.dataRadius();
+    // <qe-nodes fixed-size>: keep the zoom-1 on-screen size. The zoom group
+    // scales everything by the zoom level, so divide by it.
+    return (this.__data__ as any).meta?.zoomFixed ? r / ((this.graph as any).zoom_level || 1) : r;
+  }
+
+  private dataRadius(): number {
     const extent = (this.graph.__data__.extremes.x_max) || 1;
     const sizeScale = (this.__data__ as any).meta?.sizeScale ?? 1;
+    // Host-set diameter in CSS px at zoom 1 (the nodes frame's `size`
+    // column), converted at the current width like label-font-size; it then
+    // zooms with the plot, as the computed size does.
+    const sizePx = (this.__data__ as any).meta?.sizePx;
+    if (typeof sizePx === 'number' && sizePx > 0) {
+      const rect = (this.graph.svg_element as SVGSVGElement)?.getBoundingClientRect?.();
+      const unitsPerPx = rect && rect.width > 0 ? (2 * extent) / rect.width : extent * 0.004;
+      return (sizePx / 2) * unitsPerPx;
+    }
     // Fixed-on-screen mode (webENA size decoupling): keep a constant pixel size
     // regardless of data extent / container size / wheel-zoom, by converting a
     // target px into user units via the current px-per-unit and zoom. Otherwise
@@ -104,16 +120,22 @@ export class QEPoint extends Drawable implements QEElement {
     el.setAttribute('stroke-width', (this.computeRadius() * 0.22).toString());
   }
 
+  /** Identity for <qe-graph> delegation → qe-node-* interaction events.
+   *  Re-applied on update(), since the element outlives renders. */
+  private stampIdentity(el: SVGElement): void {
+    el.setAttribute('data-point-id', this.__data__.ID);
+    const meta = (this.__data__ as any).meta ?? {};
+    const opt = (name: string, v: any) => v != null && v !== '' ? el.setAttribute(name, String(v)) : el.removeAttribute(name);
+    opt('data-kind',  meta.kind);
+    opt('data-name',  meta.name);
+    opt('data-group', meta.group);
+    opt('data-unit',  meta.unit);
+  }
+
   create() {
     const el = document.createElementNS('http://www.w3.org/2000/svg', this.tag) as SVGElement;
 
-    el.setAttribute('data-point-id', this.__data__.ID);
-    // Identity for <qe-graph> delegation → qe-node-* interaction events.
-    const meta = (this.__data__ as any).meta ?? {};
-    if (meta.kind)  el.setAttribute('data-kind', meta.kind);
-    if (meta.name != null)  el.setAttribute('data-name',  String(meta.name));
-    if (meta.group != null) el.setAttribute('data-group', String(meta.group));
-    if (meta.unit != null)  el.setAttribute('data-unit',  String(meta.unit));
+    this.stampIdentity(el);
     el.setAttribute('fill', this.__data__.color.toString());
     this.applyStroke(el);
 
@@ -147,10 +169,19 @@ export class QEPoint extends Drawable implements QEElement {
     if (!this.svg_element) {
       (this.parent as any).__data__.__children__.push(this.create());
     }
+    // The layer rebinds __data__ on every render. A shape change that needs
+    // another element (circle ↔ rect ↔ path) would otherwise leave the old
+    // element at its old position: rebuild it in place.
+    if (this.svg_element.tagName.toLowerCase() !== this.tag) {
+      const old = this.svg_element;
+      this.create();
+      if (old.parentElement) old.replaceWith(this.svg_element);
+    }
     if (!this.svg_element.parentElement) {
       this.parent.appendChild(this.svg_element);
     }
 
+    this.stampIdentity(this.svg_element);
     this.svg_element.setAttribute('fill', this.__data__.color.toString());
     this.applyStroke(this.svg_element);
     this.setGeometry(this.svg_element, this.computeRadius());

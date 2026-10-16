@@ -137,9 +137,10 @@ export class QELayer implements QEElement {
       });
 
       removing.forEach((child: QEElement) => {
-        if (child.svg_element.parentElement) {
-          child.svg_element.parentElement.removeChild(child.svg_element);
-        }
+        // remove() also takes down companion elements (an edge's hit target
+        // and direction chevron); plain marks only have their own element.
+        if (typeof (child as any).remove === 'function') (child as any).remove();
+        else child.svg_element.parentElement?.removeChild(child.svg_element);
         const idx = this.__children__.indexOf(child);
         if (idx >= 0) this.__children__.splice(idx, 1);
       });

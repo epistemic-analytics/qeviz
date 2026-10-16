@@ -20,14 +20,24 @@ import { QEGraphElement } from "./QEGraph";
 export class QELabel {
   svg_element: SVGTextElement;
   private _visible: boolean = false;
-  // Drag offset (graph-space units) and pin state for host-repositionable labels.
+  // Offset from the computed spot (graph-space units: the zoom group's, y
+  // down), set by a drag or by the host (setOffset). `pinned` is set by a
+  // drag; `hostPinned` by the host (setHostPinned). Either keeps the label
+  // shown whatever its display mode.
   private _offsetX = 0;
   private _offsetY = 0;
   pinned = false;
+  private _hostPinned = false;
+  /** SVG font-weight; null = the default 500. */
+  fontWeight: string | null = null;
+
+  private _point: Point;
+  /** The mark this label follows. Rebound by setPoint() on every render. */
+  get point(): Point { return this._point; }
 
   constructor(
     public readonly text:        string,
-    public readonly point:       Point,
+    point:                       Point,
     public readonly parent:      SVGElement,
     public readonly graph:       QEGraphElement,
     public readonly displayMode: number = Label.DISPLAY_TYPES.ON,
@@ -35,6 +45,7 @@ export class QELabel {
     public customX?: number,
     public customY?: number,
   ) {
+    this._point = point;
     this.svg_element = this._create();
 
     // Set initial visibility without calling update() yet.
@@ -60,44 +71,103 @@ export class QELabel {
     return el;
   }
 
-  /** Drag to reposition; pins the label open and emits qe-label-move on drop. */
+  /**
+   * Follow a new Point for the same mark. Each render builds fresh Point
+   * objects, so a label reused across renders must be rebound or it keeps the
+   * old coordinates. A dragged label keeps its offset from the mark.
+   */
+  setPoint(point: Point): void {
+    this._point = point;
+    this.svg_element.setAttribute('data-label-for', point.ID);
+  }
+
+  /** Host-set offset (graph units, y down), as qe-label-move reports it. */
+  setOffset(x: number, y: number): void {
+    this._offsetX = Number.isFinite(x) ? x : 0;
+    this._offsetY = Number.isFinite(y) ? y : 0;
+  }
+
+  /** Keep the label shown whatever its display mode (or stop doing so). */
+  setHostPinned(pinned: boolean): void {
+    if (pinned === this._hostPinned) return;
+    this._hostPinned = pinned;
+    if (pinned) this.show();
+    else if (this.displayMode !== Label.DISPLAY_TYPES.ON) this.hide();
+  }
+
+  /** Drag to reposition (mouse, or a finger); pins the label open and
+   *  emits qe-label-move on drop. */
   private _attachDrag(el: SVGTextElement): void {
     el.addEventListener('mousedown', (ev: MouseEvent) => {
       ev.preventDefault();
       ev.stopPropagation();                       // don't start a graph pan
-      const svg = el.ownerSVGElement;
-      if (!svg) return;
-      const toUser = (cx: number, cy: number) => {
-        const p = svg.createSVGPoint(); p.x = cx; p.y = cy;
-        const m = svg.getScreenCTM();
-        return m ? p.matrixTransform(m.inverse()) : ({ x: 0, y: 0 } as DOMPoint);
-      };
-      const start = toUser(ev.clientX, ev.clientY);
-      const baseX = this._offsetX, baseY = this._offsetY;
-      el.style.cursor = 'grabbing';
+      this._drag(el, ev.clientX, ev.clientY, 'mouse');
+    });
+    // Touch only: mouse and pen arrive through mousedown above.
+    el.addEventListener('pointerdown', (ev: PointerEvent) => {
+      if (ev.pointerType !== 'touch') return;
+      ev.preventDefault();                        // no emulated mouse drag as well
+      ev.stopPropagation();                       // no touch pan / pinch of the graph
+      this._drag(el, ev.clientX, ev.clientY, ev.pointerId);
+    });
+  }
 
-      const onMove = (e: MouseEvent) => {
-        const p = toUser(e.clientX, e.clientY);
-        this._offsetX = baseX + (p.x - start.x);
-        this._offsetY = baseY + (p.y - start.y);
-        this.pinned = true;                       // keep it shown once moved
-        this._visible = true;
-        this.svg_element.setAttribute('display', 'block');
-        this.update();
-      };
+  private _drag(el: SVGTextElement, clientX: number, clientY: number, who: 'mouse' | number): void {
+    // Measure in the label's parent (inside the zoom / pan group), where
+    // the offset is applied: in root-svg units a drag at zoom k moved the
+    // label k times as far as the pointer.
+    const frame = (el.parentNode as SVGGraphicsElement | null) ?? el.ownerSVGElement;
+    const svg = el.ownerSVGElement;
+    if (!svg || !frame) return;
+    const toUser = (cx: number, cy: number) => {
+      const p = svg.createSVGPoint(); p.x = cx; p.y = cy;
+      const m = frame.getScreenCTM();
+      return m ? p.matrixTransform(m.inverse()) : ({ x: 0, y: 0 } as DOMPoint);
+    };
+    const start = toUser(clientX, clientY);
+    const baseX = this._offsetX, baseY = this._offsetY;
+    el.style.cursor = 'grabbing';
+
+    const move = (x: number, y: number) => {
+      const p = toUser(x, y);
+      this._offsetX = baseX + (p.x - start.x);
+      this._offsetY = baseY + (p.y - start.y);
+      this.pinned = true;                         // keep it shown once moved
+      this._visible = true;
+      this.svg_element.setAttribute('display', 'block');
+      this.update();
+    };
+    const done = () => {
+      el.style.cursor = 'grab';
+      // Public event so the host can persist / mirror across coordinated plots.
+      this.graph.dispatchEvent(new CustomEvent('qe-label-move', {
+        detail: { id: this.point.ID, transform: { x: this._offsetX, y: this._offsetY } },
+        bubbles: true, composed: true,
+      }));
+    };
+
+    if (who === 'mouse') {
+      const onMove = (e: MouseEvent) => move(e.clientX, e.clientY);
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        el.style.cursor = 'grab';
-        // Public event so the host can persist / mirror across coordinated plots.
-        this.graph.dispatchEvent(new CustomEvent('qe-label-move', {
-          detail: { id: this.point.ID, transform: { x: this._offsetX, y: this._offsetY } },
-          bubbles: true, composed: true,
-        }));
+        done();
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
-    });
+    } else {
+      const onMove = (e: PointerEvent) => { if (e.pointerId === who) move(e.clientX, e.clientY); };
+      const onUp = (e: PointerEvent) => {
+        if (e.pointerId !== who) return;
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        done();
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    }
   }
 
   /**
@@ -168,13 +238,16 @@ export class QELabel {
 
     this.svg_element.setAttribute('x',           x.toString());
     this.svg_element.setAttribute('y',           y.toString());
-    // Host drag offset (graph-space units) composes on top of the computed spot.
+    // Drag / host offset (graph-space units) composes on top of the computed
+    // spot; a zero offset clears a previous one.
     if (this._offsetX || this._offsetY) {
       this.svg_element.setAttribute('transform', `translate(${this._offsetX}, ${this._offsetY})`);
+    } else {
+      this.svg_element.removeAttribute('transform');
     }
     this.svg_element.setAttribute('font-size',   fontSize.toString());
     this.svg_element.setAttribute('font-family', font.family ?? 'system-ui, sans-serif');
-    this.svg_element.setAttribute('font-weight', '500');
+    this.svg_element.setAttribute('font-weight', this.fontWeight ?? '500');
     this.svg_element.setAttribute('text-anchor', anchor);
     this.svg_element.setAttribute('fill',        font.color ?? this.point.color?.toString() ?? '#333333');
 
@@ -245,7 +318,7 @@ export class QELabel {
   }
 
   hide(): void {
-    if (this.pinned) return;   // a dragged/pinned label stays visible
+    if (this.pinned || this._hostPinned) return;   // a dragged / pinned label stays visible
     this._visible = false;
     this.svg_element.setAttribute('display', 'none');
   }
