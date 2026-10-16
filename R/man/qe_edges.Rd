@@ -17,7 +17,9 @@ qe_edges(
   show = TRUE,
   color_scale = c("model", "plot", "absolute"),
   edge_width = NULL,
-  magnify = NULL
+  magnify = NULL,
+  fixed_size = NULL,
+  self_size = NULL
 )
 }
 \arguments{
@@ -81,6 +83,18 @@ unchanged), e.g. to make a faint subtraction readable. Whenever it is set
 — including \code{1} — the plot is labelled "(scaled N.Nx)", so exported plots
 state their scaling (webENA labels its side plots "(scaled 1.0x)" for the
 same reason). \code{NULL} (default) means no magnification and no label.}
+
+\item{fixed_size}{Logical. \code{TRUE} keeps edge widths (lines, directed
+triangles, self-connection dots, hover targets) at their zoom-1 on-screen
+width when the plot is zoomed; \code{FALSE} lets them grow with the zoom (the
+default behaviour). Applies to every network of the plot. \code{NULL}
+(default) leaves the current setting unchanged.}
+
+\item{self_size}{Size of ONA self-connection dots: \code{"node"} draws each at
+half its code node's radius (as webENA does), so the self weight only
+sets its colour; a positive number is that fraction of the node radius.
+Applies to every network of the plot. \code{NULL} (default) leaves the current
+setting unchanged (initially: sized by weight, like the edges).}
 }
 \value{
 The modified \code{qe_plot} object.

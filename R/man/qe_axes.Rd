@@ -4,7 +4,7 @@
 \alias{qe_axes}
 \title{Show or hide the axes}
 \usage{
-qe_axes(p, x = FALSE, y = FALSE, show = TRUE)
+qe_axes(p, x = FALSE, y = FALSE, show = TRUE, fixed_size = FALSE)
 }
 \arguments{
 \item{p}{A \code{qe_plot} object.}
@@ -15,6 +15,9 @@ custom text, or \code{FALSE} for no x-axis label.  Default \code{FALSE}.}
 \item{y}{Same as \code{x}, for the y-axis.  Default \code{FALSE}.}
 
 \item{show}{Logical. \code{FALSE} suppresses the axes entirely.  Default \code{TRUE}.}
+
+\item{fixed_size}{Logical. \code{TRUE} keeps the axis lines and labels at their
+zoom-1 on-screen size when the plot is zoomed. Default \code{FALSE}.}
 }
 \value{
 The modified \code{qe_plot} object.

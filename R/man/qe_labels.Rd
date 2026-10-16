@@ -11,7 +11,8 @@ qe_labels(
   points = "auto",
   font_size = NULL,
   font_family = NULL,
-  font_color = NULL
+  font_color = NULL,
+  font_weight = NULL
 )
 }
 \arguments{
@@ -31,6 +32,10 @@ rENA). Default: scales with the plot. The title is drawn at 1.35×.}
 
 \item{font_color}{Label (and title) colour. Default: each label's own colour
 (group colours for means).}
+
+\item{font_weight}{Label font weight, e.g. \code{"bold"} or \code{600}: one value for
+node, mean and point labels, or a named vector for some of them
+(\code{c(nodes = "bold")}). \code{NULL} clears it. Default: 500.}
 }
 \value{
 The modified \code{qe_plot} object.

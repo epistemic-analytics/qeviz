@@ -9,7 +9,9 @@ qe_nodes(
   show = c("auto", "always", "never"),
   unconnected = c("dot", "hide"),
   positions = NULL,
-  labels = NULL
+  labels = NULL,
+  sizes = NULL,
+  fixed_size = FALSE
 )
 }
 \arguments{
@@ -32,7 +34,17 @@ follow the new positions.}
 
 \item{labels}{Display text per code: a named character vector
 (\code{c(Technical.Constraints = "Tech. constraints")}). The code stays the
-node's identity (events, edges); only the drawn label changes.}
+node's identity (events, edges); only the drawn label changes. \code{""}
+draws no label for that code.}
+
+\item{sizes}{Node diameters in CSS pixels at zoom 1, per code: a named
+numeric vector (\code{c(Data = 24)}), in place of the size from the node's
+edge weights. Codes not listed keep the computed size; unconnected nodes
+stay a tiny dot (or hidden).}
+
+\item{fixed_size}{Logical. \code{TRUE} keeps node diameters at their zoom-1
+on-screen size when the plot is zoomed. Default \code{FALSE} (nodes grow with
+the zoom).}
 }
 \value{
 The modified \code{qe_plot} object.

@@ -74,6 +74,8 @@
     means_parts <- c(means_parts, "outlier")
   means_label <- opts[["label-means"]] %||% "on"
   means_parts <- c(means_parts, sprintf('label="%s"', means_label))
+  if (!is.null(opts[["label-weight-means"]]))
+    means_parts <- c(means_parts, sprintf('label-font-weight="%s"', opts[["label-weight-means"]]))
   if (isTRUE(opts[["mean-fixed-size"]]))
     means_parts <- c(means_parts, "fixed-size")
   if (!isFALSE(opts[["means-show"]]))
@@ -84,6 +86,8 @@
   if (isTRUE(opts[["points"]])) {
     pt_label <- opts[["label-points"]] %||% "auto"
     pt_parts <- sprintf('label="%s"', pt_label)
+    if (!is.null(opts[["label-weight-points"]]))
+      pt_parts <- c(pt_parts, sprintf('label-font-weight="%s"', opts[["label-weight-points"]]))
     if (!is.null(opts[["point-size"]]))
       pt_parts <- c(pt_parts, sprintf('size="%s"', opts[["point-size"]]))
     if (isTRUE(opts[["point-fixed-size"]]))
@@ -95,6 +99,8 @@
   for (ps in opts[["point-sets"]] %||% list()) {
     pt_parts <- c(sprintf('set="%s"', ps$set),
                   sprintf('label="%s"', opts[["label-points"]] %||% "auto"),
+                  if (!is.null(opts[["label-weight-points"]]))
+                    sprintf('label-font-weight="%s"', opts[["label-weight-points"]]),
                   if (!is.null(ps$size)) sprintf('size="%s"', ps$size),
                   if (isTRUE(ps$fixed)) "fixed-size")
     children <- c(children,
@@ -127,6 +133,13 @@
         layers[[1]] <- c(layers[[1]], sprintf('magnify="%s"', opts[["edge-magnify"]]))
       if (!is.null(opts[["edge-color-scale"]]))
         layers[[1]] <- c(layers[[1]], sprintf('color-scale="%s"', opts[["edge-color-scale"]]))
+    }
+    # Edge sizing (qe_edges(fixed_size =, self_size =)) applies to every layer.
+    for (i in seq_along(layers)) {
+      if (isTRUE(opts[["edge-fixed-size"]]))
+        layers[[i]] <- c(layers[[i]], "fixed-size")
+      if (!is.null(opts[["edge-self-size"]]))
+        layers[[i]] <- c(layers[[i]], sprintf('self-size="%s"', opts[["edge-self-size"]]))
     }
     for (parts in layers)
       children <- c(children,
@@ -169,6 +182,7 @@
     else if (is.character(ax))          axis_parts <- c(axis_parts, sprintf('x="%s"', ax))
     if (isTRUE(ay))                     axis_parts <- c(axis_parts, "y")
     else if (is.character(ay))          axis_parts <- c(axis_parts, sprintf('y="%s"', ay))
+    if (isTRUE(opts[["axes-fixed-size"]])) axis_parts <- c(axis_parts, "fixed-size")
     children <- c(children,
       sprintf('    <qe-axes%s></qe-axes>',
               if (length(axis_parts)) paste0(" ", paste(axis_parts, collapse = " ")) else ""))
@@ -180,8 +194,13 @@
   if (node_show == "always" || (node_show == "auto" && has_network)) {
     node_label <- opts[["label-nodes"]] %||% "on"
     unconn     <- if (identical(opts[["nodes-unconnected"]], "hide")) ' unconnected="hide"' else ""
+    extra      <- paste0(
+      if (!is.null(opts[["label-weight-nodes"]]))
+        sprintf(' label-font-weight="%s"', opts[["label-weight-nodes"]]) else "",
+      if (isTRUE(opts[["nodes-fixed-size"]])) " fixed-size" else "")
     children <- append(children,
-      sprintf('    <qe-nodes label="%s"%s></qe-nodes>', node_label, unconn), after = nodes_at - 1L)
+      sprintf('    <qe-nodes label="%s"%s%s></qe-nodes>', node_label, unconn, extra),
+      after = nodes_at - 1L)
   }
 
   children_str <- paste(children, collapse = "\n")
@@ -189,7 +208,7 @@
   esc <- function(v) gsub('"', "&quot;", gsub("<", "&lt;", gsub("&", "&amp;", as.character(v), fixed = TRUE),
                                           fixed = TRUE), fixed = TRUE)
   gattr <- c("edge-width", "plot-title", "range", "center", "scale-points", "point-scale",
-             "label-font-size", "label-font-family", "label-font-color")
+             "view-padding", "label-font-size", "label-font-family", "label-font-color")
   ga <- paste0(vapply(gattr, function(k)
     if (is.null(opts[[k]])) "" else sprintf(' %s="%s"', k, esc(opts[[k]])), ""), collapse = "")
   sprintf('<qe-graph width="%s" height="%s"%s>\n%s\n  </qe-graph>', w, h, ga, children_str)
@@ -266,6 +285,9 @@ document.getElementById("vis").setModelData(model);
 #'   measured from that centre.
 #' @param palette Group colours, assigned in order of appearance. Default:
 #'   Paul Tol's colour-blind-safe "bright" scheme. See also [qe_colors()].
+#' @param view_padding How far the view extends beyond `range`: the view shows
+#'   ±range × `view_padding`. `NULL` (default) uses qeviz's 1.2; `1` makes the
+#'   view match the range exactly, e.g. to frame the plot yourself.
 #' @param ...     Additional arguments forwarded to [qe_extract()] when `x` is a
 #'   raw set (e.g. `group_col = "Condition"`, `dims = c("SVD1", "SVD3")`).
 #'   Directionality is detected automatically from the set class.
@@ -281,8 +303,12 @@ document.getElementById("vis").setModelData(model);
 #' @export
 qe_plot <- function(x, title = NULL, width = "100%", height = 440,
                     range = NULL, scale_points = TRUE, point_scale = NULL,
-                    center = c("origin", "content"), palette = NULL, ...) {
+                    center = c("origin", "content"), palette = NULL,
+                    view_padding = NULL, ...) {
   center <- match.arg(center)
+  if (!is.null(view_padding) && !(is.numeric(view_padding) && length(view_padding) == 1L &&
+                                  is.finite(view_padding) && view_padding > 0))
+    stop("qe_plot(): view_padding must be a positive number.", call. = FALSE)
   if (!is.null(point_scale) && !(is.numeric(point_scale) && length(point_scale) == 1L &&
                                  is.finite(point_scale) && point_scale > 0))
     stop("qe_plot(): point_scale must be a positive number.", call. = FALSE)
@@ -304,6 +330,7 @@ qe_plot <- function(x, title = NULL, width = "100%", height = 440,
   if (isFALSE(scale_points)) p$graph_opts[["scale-points"]] <- "false"
   if (center == "content") p$graph_opts[["center"]] <- "content"
   p$graph_opts[["point-scale"]] <- point_scale
+  p$graph_opts[["view-padding"]] <- view_padding
   if (!is.null(palette)) p$model$palette <- as.list(palette)
   p
 }
@@ -539,6 +566,16 @@ qe_group <- function(p, ..., points = NULL, label = NULL, color = NULL, shape = 
 #'   — including `1` — the plot is labelled "(scaled N.Nx)", so exported plots
 #'   state their scaling (webENA labels its side plots "(scaled 1.0x)" for the
 #'   same reason). `NULL` (default) means no magnification and no label.
+#' @param fixed_size Logical. `TRUE` keeps edge widths (lines, directed
+#'   triangles, self-connection dots, hover targets) at their zoom-1 on-screen
+#'   width when the plot is zoomed; `FALSE` lets them grow with the zoom (the
+#'   default behaviour). Applies to every network of the plot. `NULL`
+#'   (default) leaves the current setting unchanged.
+#' @param self_size Size of ONA self-connection dots: `"node"` draws each at
+#'   half its code node's radius (as webENA does), so the self weight only
+#'   sets its colour; a positive number is that fraction of the node radius.
+#'   Applies to every network of the plot. `NULL` (default) leaves the current
+#'   setting unchanged (initially: sized by weight, like the edges).
 #'
 #' @return The modified `qe_plot` object.
 #'
@@ -584,7 +621,7 @@ qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
                      compare = NULL, also = NULL,
                      colors = NULL, threshold = NULL, name = NULL, show = TRUE,
                      color_scale = c("model", "plot", "absolute"), edge_width = NULL,
-                     magnify = NULL) {
+                     magnify = NULL, fixed_size = NULL, self_size = NULL) {
   if (!is.null(group) && !is.null(unit))
     stop("qe_edges(): supply either 'group' or 'unit', not both.", call. = FALSE)
   if (!is.null(weights) && (!is.null(group) || !is.null(unit)))
@@ -611,12 +648,20 @@ qe_edges <- function(p, group = NULL, unit = NULL, weights = NULL,
   if (!is.null(magnify) && !(is.numeric(magnify) && length(magnify) == 1L &&
                              is.finite(magnify) && magnify > 0))
     stop("qe_edges(): magnify must be a positive number.", call. = FALSE)
+  if (!is.null(fixed_size) && !(is.logical(fixed_size) && length(fixed_size) == 1L && !is.na(fixed_size)))
+    stop("qe_edges(): fixed_size must be TRUE or FALSE.", call. = FALSE)
+  if (!is.null(self_size) && !(identical(self_size, "node") ||
+                               (is.numeric(self_size) && length(self_size) == 1L &&
+                                is.finite(self_size) && self_size > 0)))
+    stop("qe_edges(): self_size must be \"node\" or a positive number.", call. = FALSE)
   layer_attrs <- .qe_layer_attrs(colors, threshold)
 
   p$graph_opts$edges   <- TRUE
   p$graph_opts[["edge-color-scale"]] <- if (color_scale == "model") NULL else color_scale
   if (!is.null(edge_width)) p$graph_opts[["edge-width"]] <- edge_width
   if (!is.null(magnify))    p$graph_opts[["edge-magnify"]] <- magnify
+  if (!is.null(fixed_size)) p$graph_opts[["edge-fixed-size"]] <- fixed_size
+  if (!is.null(self_size))  p$graph_opts[["edge-self-size"]] <- self_size
 
   # ── Explicit data: append one layer per network ────────────────────────────
   if (!is.null(weights)) {
@@ -916,7 +961,15 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
 #'   follow the new positions.
 #' @param labels Display text per code: a named character vector
 #'   (`c(Technical.Constraints = "Tech. constraints")`). The code stays the
-#'   node's identity (events, edges); only the drawn label changes.
+#'   node's identity (events, edges); only the drawn label changes. `""`
+#'   draws no label for that code.
+#' @param sizes Node diameters in CSS pixels at zoom 1, per code: a named
+#'   numeric vector (`c(Data = 24)`), in place of the size from the node's
+#'   edge weights. Codes not listed keep the computed size; unconnected nodes
+#'   stay a tiny dot (or hidden).
+#' @param fixed_size Logical. `TRUE` keeps node diameters at their zoom-1
+#'   on-screen size when the plot is zoomed. Default `FALSE` (nodes grow with
+#'   the zoom).
 #' @return The modified `qe_plot` object.
 #' @examples
 #' \dontrun{
@@ -925,15 +978,17 @@ qe_points <- function(p, show = TRUE, units = NULL, points = NULL,
 #' }
 #' @export
 qe_nodes <- function(p, show = c("auto", "always", "never"),
-                     unconnected = c("dot", "hide"), positions = NULL, labels = NULL) {
+                     unconnected = c("dot", "hide"), positions = NULL, labels = NULL,
+                     sizes = NULL, fixed_size = FALSE) {
   if (isTRUE(show))  show <- "always"
   if (isFALSE(show)) show <- "never"
   show <- match.arg(show)
   unconnected <- match.arg(unconnected)
   p$graph_opts[["nodes-show"]] <- show
   p$graph_opts[["nodes-unconnected"]] <- if (unconnected == "hide") "hide" else NULL
+  p$graph_opts[["nodes-fixed-size"]] <- isTRUE(fixed_size)
 
-  if (!is.null(positions) || !is.null(labels)) {
+  if (!is.null(positions) || !is.null(labels) || !is.null(sizes)) {
     m     <- p$model
     nodes <- .qe_frame_df(m$nodes)
     idc   <- m$node_id_col
@@ -967,6 +1022,14 @@ qe_nodes <- function(p, show = c("auto", "always", "never"),
       if (is.null(nodes$label)) nodes$label <- NA_character_
       nodes$label[match(names(labels), codes)] <- unname(labels)
     }
+    if (!is.null(sizes)) {
+      if (!is.numeric(sizes) || is.null(names(sizes)) || any(!is.finite(sizes) | sizes <= 0))
+        stop("qe_nodes(): 'sizes' must be a named vector of positive numbers (code = diameter in px).",
+             call. = FALSE)
+      check(names(sizes), "sizes")
+      if (is.null(nodes$size)) nodes$size <- NA_real_
+      nodes$size[match(names(sizes), codes)] <- unname(sizes)
+    }
     p$model$nodes <- qe_frame(nodes)
   }
   p
@@ -983,9 +1046,11 @@ qe_nodes <- function(p, show = c("auto", "always", "never"),
 #'   custom text, or `FALSE` for no x-axis label.  Default `FALSE`.
 #' @param y    Same as `x`, for the y-axis.  Default `FALSE`.
 #' @param show Logical. `FALSE` suppresses the axes entirely.  Default `TRUE`.
+#' @param fixed_size Logical. `TRUE` keeps the axis lines and labels at their
+#'   zoom-1 on-screen size when the plot is zoomed. Default `FALSE`.
 #' @return The modified `qe_plot` object.
 #' @export
-qe_axes <- function(p, x = FALSE, y = FALSE, show = TRUE) {
+qe_axes <- function(p, x = FALSE, y = FALSE, show = TRUE, fixed_size = FALSE) {
   if (!show) {
     p$graph_opts$axes <- FALSE
     return(p)
@@ -993,6 +1058,7 @@ qe_axes <- function(p, x = FALSE, y = FALSE, show = TRUE) {
   p$graph_opts$axes <- TRUE
   p$graph_opts[["axis-x"]] <- x
   p$graph_opts[["axis-y"]] <- y
+  p$graph_opts[["axes-fixed-size"]] <- isTRUE(fixed_size)
   p
 }
 
@@ -1087,22 +1153,43 @@ qe_trajectories <- function(p, units = NULL, smooth = c("none", "poly"),
 #' @param font_family Label (and title) font family, e.g. `"Georgia"`.
 #' @param font_color  Label (and title) colour. Default: each label's own colour
 #'   (group colours for means).
+#' @param font_weight Label font weight, e.g. `"bold"` or `600`: one value for
+#'   node, mean and point labels, or a named vector for some of them
+#'   (`c(nodes = "bold")`). `NULL` clears it. Default: 500.
 #' @return The modified `qe_plot` object.
 #' @export
 qe_labels <- function(p, nodes = "on", means = "on", points = "auto",
-                      font_size = NULL, font_family = NULL, font_color = NULL) {
+                      font_size = NULL, font_family = NULL, font_color = NULL,
+                      font_weight = NULL) {
   if (!is.null(font_size) && !(is.numeric(font_size) && length(font_size) == 1L && font_size > 0))
     stop("qe_labels(): font_size must be a positive number of pixels.", call. = FALSE)
   set <- function(key, value, given) if (given) p$graph_opts[[key]] <<- value
   # A bare qe_labels() still applies the defaults, as before.
   bare <- missing(nodes) && missing(means) && missing(points) &&
-          missing(font_size) && missing(font_family) && missing(font_color)
+          missing(font_size) && missing(font_family) && missing(font_color) &&
+          missing(font_weight)
   set("label-nodes",  nodes,  bare || !missing(nodes))
   set("label-means",  means,  bare || !missing(means))
   set("label-points", points, bare || !missing(points))
   set("label-font-size",   font_size,   !missing(font_size))
   set("label-font-family", font_family, !missing(font_family))
   set("label-font-color",  font_color,  !missing(font_color))
+  if (!missing(font_weight)) {
+    layers <- c("nodes", "means", "points")
+    if (is.null(font_weight)) {
+      fw <- stats::setNames(vector("list", 3), layers)
+    } else {
+      if (!(is.character(font_weight) || is.numeric(font_weight)) || anyNA(font_weight) ||
+          (is.null(names(font_weight)) && length(font_weight) != 1L) ||
+          (!is.null(names(font_weight)) && !all(names(font_weight) %in% layers)))
+        stop("qe_labels(): font_weight must be one weight (e.g. \"bold\") or a named vector ",
+             "for nodes / means / points.", call. = FALSE)
+      fw <- if (is.null(names(font_weight)))
+        stats::setNames(as.list(rep(as.character(font_weight), 3)), layers)
+      else as.list(stats::setNames(as.character(font_weight), names(font_weight)))
+    }
+    for (k in names(fw)) p$graph_opts[[paste0("label-weight-", k)]] <- fw[[k]]
+  }
   p
 }
 

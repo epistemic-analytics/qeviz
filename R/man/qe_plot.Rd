@@ -14,6 +14,7 @@ qe_plot(
   point_scale = NULL,
   center = c("origin", "content"),
   palette = NULL,
+  view_padding = NULL,
   ...
 )
 }
@@ -51,6 +52,10 @@ measured from that centre.}
 
 \item{palette}{Group colours, assigned in order of appearance. Default:
 Paul Tol's colour-blind-safe "bright" scheme. See also \code{\link[=qe_colors]{qe_colors()}}.}
+
+\item{view_padding}{How far the view extends beyond \code{range}: the view shows
+±range × \code{view_padding}. \code{NULL} (default) uses qeviz's 1.2; \code{1} makes the
+view match the range exactly, e.g. to frame the plot yourself.}
 
 \item{...}{Additional arguments forwarded to \code{\link[=qe_extract]{qe_extract()}} when \code{x} is a
 raw set (e.g. \code{group_col = "Condition"}, \code{dims = c("SVD1", "SVD3")}).

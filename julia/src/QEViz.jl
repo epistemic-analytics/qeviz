@@ -115,7 +115,8 @@ end
 
 """
     qe_plot(model; title=nothing, width=700, height=500, range=nothing,
-            scale_points=true, point_scale=nothing, center="origin", palette=nothing)
+            scale_points=true, point_scale=nothing, center="origin", palette=nothing,
+            view_padding=nothing)
 
 Create a [`QEPlot`](@ref) from a ModelData `Dict` (R's `qe_plot()`).
 
@@ -124,7 +125,8 @@ Create a [`QEPlot`](@ref) from a ModelData `Dict` (R's `qe_plot()`).
 `range` sets the symmetric axis range (`"network"`, `"points"` or a number);
 `scale_points=false` draws points and means at raw coordinates, `point_scale`
 sets an explicit factor; `center="content"` centres the view on the nodes and
-points; `palette` replaces the default colours.
+points; `palette` replaces the default colours; `view_padding` is how far the
+view extends beyond `range` (±range × it; default 1.2, `1` matches the range).
 
 # Examples
 
@@ -141,8 +143,11 @@ function qe_plot(model::Dict{String,Any};
                  scale_points::Bool = true,
                  point_scale::Union{Real,Nothing} = nothing,
                  center::AbstractString = "origin",
-                 palette::Union{AbstractVector,Nothing} = nothing)::QEPlot
+                 palette::Union{AbstractVector,Nothing} = nothing,
+                 view_padding::Union{Real,Nothing} = nothing)::QEPlot
     center in ("origin", "content") || error("qe_plot(): center must be \"origin\" or \"content\".")
+    isnothing(view_padding) || (!(view_padding isa Bool) && isfinite(view_padding) && view_padding > 0) ||
+        error("qe_plot(): view_padding must be a positive number.")
     isnothing(point_scale) || (isfinite(point_scale) && point_scale > 0) ||
         error("qe_plot(): point_scale must be a positive number.")
     _check_range(range, "qe_plot")
@@ -157,6 +162,7 @@ function qe_plot(model::Dict{String,Any};
     scale_points || (p.opts["scale-points"] = "false")
     center == "content" && (p.opts["center"] = "content")
     isnothing(point_scale) || (p.opts["point-scale"] = point_scale)
+    isnothing(view_padding) || (p.opts["view-padding"] = view_padding)
     p
 end
 
@@ -600,7 +606,8 @@ end
 """
     qe_edges(p; group=nothing, unit=nothing, weights=nothing, compare=nothing,
              also=nothing, colors=nothing, threshold=nothing, name=nothing,
-             show=true, color_scale="model", edge_width=nothing, magnify=nothing)
+             show=true, color_scale="model", edge_width=nothing, magnify=nothing,
+             fixed_size=nothing, self_size=nothing)
 
 Draw an edge network: a group's or unit's (by name), or explicit weights
 (R's `qe_edges()`).
@@ -614,6 +621,10 @@ matrix (averaged over rows), or a `Vector` of those (one layer each) — and
 adds a layer; one with the same `name` replaces it. `colors` (one or two),
 `threshold` (`min` or `(min, max)`: |w| < min not drawn, |w| > max drawn at
 max) and `name` apply to the layer. `show=false` removes all networks.
+`fixed_size=true` keeps edge widths at their zoom-1 on-screen width when the
+plot is zoomed; `self_size="node"` (or a fraction) sizes ONA self-connection
+dots by their node's radius. Both apply to every network and are left
+unchanged when `nothing`.
 
 # Examples
 
@@ -632,7 +643,9 @@ function qe_edges(p::QEPlot;
                   show::Bool = true,
                   color_scale::AbstractString = "model",
                   edge_width::Union{Real,Nothing} = nothing,
-                  magnify::Union{Real,Nothing} = nothing)::QEPlot
+                  magnify::Union{Real,Nothing} = nothing,
+                  fixed_size::Union{Bool,Nothing} = nothing,
+                  self_size::Union{AbstractString,Real,Nothing} = nothing)::QEPlot
     !isnothing(group) && !isnothing(unit) &&
         error("qe_edges(): supply either `group` or `unit`, not both.")
     !isnothing(weights) && (!isnothing(group) || !isnothing(unit)) &&
@@ -650,12 +663,17 @@ function qe_edges(p::QEPlot;
         error("qe_edges(): color_scale must be \"model\", \"plot\", or \"absolute\".")
     isnothing(edge_width) || 0 < edge_width <= 1 || error("qe_edges(): edge_width must be a number in (0, 1].")
     isnothing(magnify) || (isfinite(magnify) && magnify > 0) || error("qe_edges(): magnify must be a positive number.")
+    isnothing(self_size) || self_size == "node" ||
+        (self_size isa Real && !(self_size isa Bool) && isfinite(self_size) && self_size > 0) ||
+        error("qe_edges(): self_size must be \"node\" or a positive number.")
     layer_attrs = _layer_attrs(colors, threshold)
 
     p.opts["edges"] = true
     _set!(p, "edge-color-scale", color_scale == "model" ? nothing : String(color_scale))
     isnothing(edge_width) || (p.opts["edge-width"] = edge_width)
     isnothing(magnify) || (p.opts["edge-magnify"] = magnify)
+    isnothing(fixed_size) || (p.opts["edge-fixed-size"] = fixed_size)
+    isnothing(self_size) || (p.opts["edge-self-size"] = self_size isa AbstractString ? String(self_size) : self_size)
 
     # ── Explicit data: append one layer per network ─────────────────────────
     if !isnothing(weights)
@@ -759,7 +777,7 @@ function qe_points(p::QEPlot; show::Bool = true, units = nothing, points = nothi
         isnothing(v) && return nothing
         vals = v isa AbstractString ? [v] : collect(v)
         length(vals) in (1, n) || error("qe_points(): `$(arg)` must have length 1 or $(n).")
-        String[string(x) for x in (length(vals) == 1 ? fill(vals[1], n) : vals)]
+        Any[_is_na(x) ? nothing : string(x) for x in (length(vals) == 1 ? fill(vals[1], n) : vals)]
     end
     cols = per_point(color, "color")
     shapes = per_point(isnothing(shape) ? nothing : _shape(shape, "qe_points"), "shape")
@@ -782,18 +800,24 @@ function qe_points(p::QEPlot; show::Bool = true, units = nothing, points = nothi
 end
 
 """
-    qe_nodes(p; show="auto", unconnected="dot", positions=nothing, labels=nothing)
+    qe_nodes(p; show="auto", unconnected="dot", positions=nothing, labels=nothing,
+             sizes=nothing, fixed_size=false)
 
 Code nodes: when to draw them, and where (R's `qe_nodes()`). `"auto"`
 (default) draws nodes only with an edge network, matching rENA; `"always"` /
 `true` and `"never"` / `false` override that. `unconnected="hide"` hides nodes
 with no drawn edges. `positions` (a DataFrame with a code column and x / y
-columns) moves nodes; `labels` (a `Dict` code => text) relabels them.
+columns) moves nodes; `labels` (a `Dict` code => text) relabels them (`""`
+draws no label). `sizes` (a `Dict` code => px) sets node diameters in CSS
+pixels at zoom 1 in place of the edge-weight size; `fixed_size=true` keeps node
+diameters constant on screen when the plot is zoomed.
 """
 function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto",
                   unconnected::AbstractString = "dot",
                   positions::Union{DataFrame,Nothing} = nothing,
-                  labels::Union{AbstractDict,Nothing} = nothing)::QEPlot
+                  labels::Union{AbstractDict,Nothing} = nothing,
+                  sizes::Union{AbstractDict,Nothing} = nothing,
+                  fixed_size::Bool = false)::QEPlot
     s = show === true ? "always" : show === false ? "never" : String(show)
     s in ("auto", "always", "never") ||
         throw(ArgumentError("qe_nodes(): show must be \"auto\", \"always\", or \"never\"."))
@@ -802,7 +826,8 @@ function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto",
     p = _copy(p)
     p.opts["nodes-show"] = s
     _set!(p, "nodes-unconnected", unconnected == "hide" ? "hide" : nothing)
-    if !isnothing(positions) || !isnothing(labels)
+    p.opts["nodes-fixed-size"] = fixed_size
+    if !isnothing(positions) || !isnothing(labels) || !isnothing(sizes)
         m = p.model
         idc = something(get(m, "node_id_col", nothing), "code")
         rows = _frame_rows(m["nodes"])
@@ -837,6 +862,18 @@ function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto",
             end
             "label" in cols || (cols = vcat(cols, "label"))
         end
+        if !isnothing(sizes)
+            all(v -> v isa Real && !(v isa Bool) && isfinite(v) && v > 0, values(sizes)) ||
+                error("qe_nodes(): `sizes` must map codes to positive numbers (diameter in px).")
+            check([string(k) for k in keys(sizes)], "sizes")
+            for r in rows
+                haskey(r, "size") || (r["size"] = nothing)
+            end
+            for (code, px) in sizes
+                rows[findfirst(==(string(code)), codes)]["size"] = Float64(px)
+            end
+            "size" in cols || (cols = vcat(cols, "size"))
+        end
         m["nodes"] = _frame_from_rows(rows, String[c for c in cols])
         m["nodes"]["_order"] = cols
     end
@@ -844,14 +881,16 @@ function qe_nodes(p::QEPlot; show::Union{Bool,AbstractString} = "auto",
 end
 
 """
-    qe_axes(p; x=false, y=false, show=true)
+    qe_axes(p; x=false, y=false, show=true, fixed_size=false)
 
 Show or hide the axes (a `<qe-axes>` layer). Axis labels are opt-in: `x` / `y`
 default to `false` (no label); `true` uses the dimension name (e.g. `"SVD1"`),
 a `String` sets custom text. `show=false` suppresses the axes entirely.
+`fixed_size=true` keeps the axis lines and labels constant on screen when zoomed.
 """
 function qe_axes(p::QEPlot; x::Union{Bool,AbstractString} = false,
-                 y::Union{Bool,AbstractString} = false, show::Bool = true)::QEPlot
+                 y::Union{Bool,AbstractString} = false, show::Bool = true,
+                 fixed_size::Bool = false)::QEPlot
     p = _copy(p)
     if !show
         p.opts["axes"] = false
@@ -860,6 +899,7 @@ function qe_axes(p::QEPlot; x::Union{Bool,AbstractString} = false,
     p.opts["axes"] = true
     p.opts["axis-x"] = x isa AbstractString ? String(x) : x
     p.opts["axis-y"] = y isa AbstractString ? String(y) : y
+    p.opts["axes-fixed-size"] = fixed_size
     p
 end
 
@@ -924,20 +964,24 @@ function qe_trajectories(p::QEPlot;
 end
 
 """
-    qe_labels(p; nodes, means, points, font_size, font_family, font_color)
+    qe_labels(p; nodes, means, points, font_size, font_family, font_color, font_weight)
 
 Label visibility and font (R's `qe_labels()`). `nodes` / `means` / `points`
 take `"on"`, `"off"`, `"click"` or `"auto"`; `font_size` is in pixels (the
 title is drawn at 1.35×); `font_family` and `font_color` apply to labels and
-the title. Only the arguments supplied change; a bare `qe_labels(p)` applies
-the defaults (`"on"`, `"on"`, `"auto"`).
+the title. `font_weight` (e.g. `"bold"` or `600`) is one weight for node, mean
+and point labels, or a `Dict` / `NamedTuple` for some of them
+(`(nodes = "bold",)`); `nothing` clears it (default 500). Only the arguments
+supplied change; a bare `qe_labels(p)` applies the defaults (`"on"`, `"on"`,
+`"auto"`).
 """
 function qe_labels(p::QEPlot; nodes = _UNSET, means = _UNSET, points = _UNSET,
-                   font_size = _UNSET, font_family = _UNSET, font_color = _UNSET)::QEPlot
+                   font_size = _UNSET, font_family = _UNSET, font_color = _UNSET,
+                   font_weight = _UNSET)::QEPlot
     font_size isa _Unset || isnothing(font_size) || (font_size isa Real && font_size > 0) ||
         error("qe_labels(): font_size must be a positive number of pixels.")
     p = _copy(p)
-    bare = all(v -> v isa _Unset, (nodes, means, points, font_size, font_family, font_color))
+    bare = all(v -> v isa _Unset, (nodes, means, points, font_size, font_family, font_color, font_weight))
     for (key, val, default) in (("label-nodes", nodes, "on"), ("label-means", means, "on"),
                                 ("label-points", points, "auto"))
         if !(val isa _Unset)
@@ -949,6 +993,25 @@ function qe_labels(p::QEPlot; nodes = _UNSET, means = _UNSET, points = _UNSET,
     for (key, val) in (("label-font-size", font_size), ("label-font-family", font_family),
                        ("label-font-color", font_color))
         val isa _Unset || _set!(p, key, val isa AbstractString ? String(val) : val)
+    end
+    if !(font_weight isa _Unset)
+        layers = ("nodes", "means", "points")
+        bad() = error("qe_labels(): font_weight must be one weight (e.g. \"bold\") or a Dict / " *
+                      "NamedTuple for nodes / means / points.")
+        fw = if isnothing(font_weight)
+            Dict{String,Any}(k => nothing for k in layers)
+        elseif font_weight isa Union{AbstractDict,NamedTuple}
+            d = Dict{String,Any}(string(k) => v for (k, v) in pairs(font_weight))
+            all(k -> k in layers, keys(d)) && !any(isnothing, values(d)) || bad()
+            Dict{String,Any}(k => _fmt(v) for (k, v) in d)
+        elseif (font_weight isa AbstractString || font_weight isa Real) && !(font_weight isa Bool)
+            Dict{String,Any}(k => _fmt(font_weight) for k in layers)
+        else
+            bad()
+        end
+        for (k, v) in fw
+            _set!(p, "label-weight-" * k, v)
+        end
     end
     p
 end
@@ -1022,19 +1085,22 @@ function _build_graph_element(p::QEPlot)::String
     !isnothing(o("intervals")) && o("intervals") != "box" && push!(means_parts, "intervals=\"$(o("intervals"))\"")
     o("mean-outlier") === true && push!(means_parts, "outlier")
     push!(means_parts, "label=\"$(something(o("label-means"), "on"))\"")
+    isnothing(o("label-weight-means")) || push!(means_parts, "label-font-weight=\"$(o("label-weight-means"))\"")
     o("mean-fixed-size") === true && push!(means_parts, "fixed-size")
     o("means-show") === false || push!(children, "    <qe-means $(join(means_parts, " "))></qe-means>")
 
     # <qe-points>: all unit points, then explicit point sets.
     pt_label = something(o("label-points"), "auto")
+    pt_weight = isnothing(o("label-weight-points")) ? String[] :
+                ["label-font-weight=\"$(o("label-weight-points"))\""]
     if o("points") === true
-        pt = ["label=\"$(pt_label)\""]
+        pt = vcat(["label=\"$(pt_label)\""], pt_weight)
         isnothing(o("point-size")) || push!(pt, "size=\"$(_fmt(o("point-size")))\"")
         o("point-fixed-size") === true && push!(pt, "fixed-size")
         push!(children, "    <qe-points $(join(pt, " "))></qe-points>")
     end
     for ps in something(o("point-sets"), [])
-        pt = ["set=\"$(ps["set"])\"", "label=\"$(pt_label)\""]
+        pt = vcat(["set=\"$(ps["set"])\"", "label=\"$(pt_label)\""], pt_weight)
         isnothing(ps["size"]) || push!(pt, "size=\"$(_fmt(ps["size"]))\"")
         ps["fixed"] === true && push!(pt, "fixed-size")
         push!(children, "    <qe-points $(join(pt, " "))></qe-points>")
@@ -1052,6 +1118,11 @@ function _build_graph_element(p::QEPlot)::String
         if !isempty(layers)
             isnothing(o("edge-magnify")) || push!(layers[1], "magnify=\"$(_fmt(o("edge-magnify")))\"")
             isnothing(o("edge-color-scale")) || push!(layers[1], "color-scale=\"$(o("edge-color-scale"))\"")
+        end
+        # Edge sizing (qe_edges(fixed_size=, self_size=)) applies to every layer.
+        for parts in layers
+            o("edge-fixed-size") === true && push!(parts, "fixed-size")
+            isnothing(o("edge-self-size")) || push!(parts, "self-size=\"$(_fmt(o("edge-self-size")))\"")
         end
         for parts in layers
             push!(children, "    <qe-edges $(join(parts, " "))></qe-edges>")
@@ -1088,6 +1159,7 @@ function _build_graph_element(p::QEPlot)::String
             val === true ? push!(axis_parts, attr) :
                 val isa AbstractString && push!(axis_parts, "$(attr)=\"$(val)\"")
         end
+        o("axes-fixed-size") === true && push!(axis_parts, "fixed-size")
         push!(children, "    <qe-axes" * (isempty(axis_parts) ? "" : " " * join(axis_parts, " ")) * "></qe-axes>")
     end
 
@@ -1095,11 +1167,13 @@ function _build_graph_element(p::QEPlot)::String
     node_show = something(o("nodes-show"), "auto")
     if node_show == "always" || (node_show == "auto" && has_network)
         unconn = o("nodes-unconnected") == "hide" ? " unconnected=\"hide\"" : ""
-        pushfirst!(children, "    <qe-nodes label=\"$(something(o("label-nodes"), "on"))\"$(unconn)></qe-nodes>")
+        extra = (isnothing(o("label-weight-nodes")) ? "" : " label-font-weight=\"$(o("label-weight-nodes"))\"") *
+                (o("nodes-fixed-size") === true ? " fixed-size" : "")
+        pushfirst!(children, "    <qe-nodes label=\"$(something(o("label-nodes"), "on"))\"$(unconn)$(extra)></qe-nodes>")
     end
 
     gattr = ("edge-width", "plot-title", "range", "center", "scale-points", "point-scale",
-             "label-font-size", "label-font-family", "label-font-color")
+             "view-padding", "label-font-size", "label-font-family", "label-font-color")
     ga = join([" $(k)=\"$(_esc(o(k)))\"" for k in gattr if !isnothing(o(k))])
     "<qe-graph width=\"$(p.width)\" height=\"$(p.height)\"$(ga)>\n" * join(children, "\n") * "\n  </qe-graph>"
 end

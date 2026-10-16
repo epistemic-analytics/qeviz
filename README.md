@@ -113,16 +113,16 @@ model data (checked by the shared fixtures in `tests/golden/`):
 
 | Operation | R | Python | Julia |
 |---|---|---|---|
-| Create | `qe_plot(set, title=, range=, scale_points=, point_scale=, center=, palette=)` | `qeviz.plot(model, title=, range=, ...)` | `qe_plot(model; title=, range=, ...)` |
+| Create | `qe_plot(set, title=, range=, scale_points=, point_scale=, center=, palette=, view_padding=)` | `qeviz.plot(model, title=, range=, ...)` | `qe_plot(model; title=, range=, ...)` |
 | Group means | `qe_group(p, ...)` | `p.group(...)` | `qe_group(p, ...)` |
 | Mean of a subset | `qe_group(p, points=, label=, color=, shape=, intervals=, outlier=)` | `p.group(points=, ...)` | `qe_group(p; points=, ...)` |
 | Edge network | `qe_edges(p, group=, unit=, compare=, also=)` | `p.edges(group=, unit=, ...)` | `qe_edges(p; group=, unit=, ...)` |
 | Network from data | `qe_edges(p, weights=, compare=, colors=, threshold=, name=)` | `p.edges(weights=, ...)` | `qe_edges(p; weights=, ...)` |
 | Unit points | `qe_points(p)` | `p.points()` | `qe_points(p)` |
 | Point set | `qe_points(p, units=/points=, color=, shape=, labels=, name=)` | `p.points(units=/points=, ...)` | `qe_points(p; units=/points=, ...)` |
-| Nodes | `qe_nodes(p, show, unconnected=, positions=, labels=)` | `p.nodes(show, positions=, labels=)` | `qe_nodes(p; show=, positions=, labels=)` |
-| Axes | `qe_axes(p, x=, y=)` | `p.axes(x=, y=)` | `qe_axes(p; x=, y=)` |
-| Labels | `qe_labels(p, nodes=, means=, points=, font_size=, font_family=, font_color=)` | `p.labels(...)` | `qe_labels(p; ...)` |
+| Nodes | `qe_nodes(p, show, unconnected=, positions=, labels=, sizes=, fixed_size=)` | `p.nodes(show, positions=, labels=, sizes=, fixed_size=)` | `qe_nodes(p; show=, positions=, labels=, sizes=, fixed_size=)` |
+| Axes | `qe_axes(p, x=, y=, fixed_size=)` | `p.axes(x=, y=, fixed_size=)` | `qe_axes(p; x=, y=, fixed_size=)` |
+| Labels | `qe_labels(p, nodes=, means=, points=, font_size=, font_family=, font_color=, font_weight=)` | `p.labels(...)` | `qe_labels(p; ...)` |
 | Group colours | `qe_colors(p, A = "#hex")` | `p.colors(A="#hex")` | `qe_colors(p, "A" => "#hex")` |
 | Axis range | `qe_range(p, range)` | `p.range(range)` | `qe_range(p, range)` |
 | Default palette | `qe_palette()` | `qeviz.palette()` | `qe_palette()` |
@@ -145,8 +145,18 @@ model data (checked by the shared fixtures in `tests/golden/`):
 | `color_scale` | Colour mapping (webENA ramps: saturation 0.25–1, opacity 0.3–1). `"model"` (default) rescales across the whole model, so plots of one model share a colour scale; `"plot"` rescales within the plot (webENA); `"absolute"` uses saturation = opacity = weight. |
 | `edge_width` | Width of a weight-1 edge as a fraction of the plot width (default 0.04). Width is absolute — equal weights draw equally wide — and each node's diameter is the sum of its edges' widths. |
 | `magnify` | Multiply this plot's widths and node sizes (not colour), e.g. for a faint subtraction. When set (even `1`), the plot is labelled "(scaled N.Nx)". |
+| `fixed_size` | `TRUE` keeps edge widths (lines, directed triangles, self-connection dots, hover targets) at their zoom-1 on-screen width when the plot is zoomed. Applies to every network; kept until given again. |
+| `self_size` | ONA self-connection dots: `"node"` draws each at half its node's radius (as webENA does), a number is that fraction; the self weight then only sets the colour. Applies to every network; kept until given again. |
 
-Label modes: `"on"`, `"off"`, `"click"`, `"auto"`.
+Label modes: `"on"`, `"off"`, `"click"`, `"auto"`. `qe_labels(font_weight =)`
+takes one weight for node, mean and point labels (`"bold"`, `600`) or a named
+vector / dict for some of them (`c(nodes = "bold")`, `{"nodes": "bold"}`,
+`(nodes = "bold",)`).
+
+`qe_nodes(sizes =)` sets node diameters in CSS pixels at zoom 1 per code
+(`c(Data = 24)`, `{"Data": 24}`, `Dict("Data" => 24)`), and `fixed_size`
+keeps node diameters constant on screen when zoomed. `qe_plot(view_padding =)`
+is how far the view extends beyond `range` (default 1.2; `1` matches it).
 
 ### `qe_axes` / `.axes()` parameters
 
@@ -159,6 +169,7 @@ draws the lines with no labels. Each label is controlled independently:
 | `x` | `FALSE` (default) omits the x-axis label, `TRUE` labels it with its dimension name (e.g. `SVD1`), a string sets custom text. |
 | `y` | Same as `x`, for the y-axis. |
 | `show` / `show=false` | Suppress the axes entirely. |
+| `fixed_size` | `TRUE` keeps the axis lines and labels at their zoom-1 on-screen size when the plot is zoomed. |
 
 ```r
 qe_plot(set) |> qe_edges("FirstGame") |> qe_axes(x = "Task focus", y = TRUE)

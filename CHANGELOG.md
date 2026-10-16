@@ -67,6 +67,12 @@ versioned together.
   stroke width and dash pattern, and the new `<qe-axes fixed-size>` does the
   same for the axis lines and axis labels.
 
+- **R, Python and Julia can use the new options.** `qe_plot(view_padding =)`;
+  `fixed_size` on `qe_nodes()`, `qe_edges()` and `qe_axes()` (sizes stay
+  constant on screen when zoomed); `qe_edges(self_size =)` for ONA
+  self-connection dots; `qe_labels(font_weight =)`, one weight or one per
+  layer (e.g. bold code labels); and `qe_nodes(sizes =)` for node diameters in
+  pixels. Same argument names in all three languages.
 ### Fixed
 - **Labels follow their marks when the model is updated.** After a second
   `setModelData` with new coordinates (e.g. a flipped axis), node, mean and
@@ -106,6 +112,9 @@ versioned together.
   plot and every render are now shown only with `globalThis.__QEVIZ_DEBUG__ =
   true`.
 
+- **A missing point-set label stays missing in Python and Julia.** A `None` /
+  `nothing` in `points(labels =)` was drawn as the text "None" / "nothing";
+  like R's `NA`, it now falls back to the point's id.
 ### Changed
 - The mouse wheel zooms toward the pointer (previously about the plot
   origin), and by an amount that follows the scroll: one mouse notch is still

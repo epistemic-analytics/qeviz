@@ -81,6 +81,27 @@ const SCENARIOS = Dict{String,Function}(
                                                     nodes = "off", means = "click");
                                           font_size = 12, font_family = "Georgia", font_color = "#333333"),
 
+    "opts_060"         => () -> qe_labels(
+                                     qe_axes(
+                                       qe_nodes(
+                                         qe_edges(gbase(; view_padding = 1); group = "OA",
+                                                  fixed_size = true, self_size = "node");
+                                         show = "always", sizes = Dict("Data" => 24, "Tech" => 12.5),
+                                         fixed_size = true);
+                                       x = true, fixed_size = true);
+                                     font_weight = (nodes = "bold",)),
+    "opts_060_layers"  => () -> begin
+        p = qe_points(qe_points(gbase(); size = 3); points = g_points[1:2, :], name = "one")
+        p = qe_labels(qe_labels(p; font_weight = 600); font_weight = Dict("means" => "bold"))
+        qe_edges(qe_edges(p; weights = g_w_oa, name = "a", self_size = 0.3);
+                 weights = scaled(g_w_oa, 0.5), name = "b")
+    end,
+    "opts_060_clear"   => () -> qe_edges(qe_edges(qe_labels(qe_labels(gbase(); font_weight = "bold");
+                                                            font_weight = nothing);
+                                                  group = "OA", fixed_size = true);
+                                         group = "OB", fixed_size = false),
+    "ps_label_na"      => () -> qe_points(gbase(); units = ["OA.alice", "OB.eve"], labels = ["A", nothing]),
+
     "nogroup_explicit" => () -> begin
         sub = g_points[1:4, ["ENA_UNIT", "x", "y"]]
         p = qe_group(qe_plot(g_m0; width = "100%", height = "440"); show = false)

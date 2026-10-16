@@ -83,6 +83,26 @@ scenarios <- list(
                                            qe_labels(font_size = 12, font_family = "Georgia",
                                                      font_color = "#333333"),
 
+  # ── 0.6 options ─────────────────────────────────────────────────────────────
+  opts_060         = function() base(view_padding = 1) |>
+                                  qe_edges("OA", fixed_size = TRUE, self_size = "node") |>
+                                  qe_nodes("always", sizes = c(Data = 24, Tech = 12.5),
+                                           fixed_size = TRUE) |>
+                                  qe_axes(x = TRUE, fixed_size = TRUE) |>
+                                  qe_labels(font_weight = c(nodes = "bold")),
+  opts_060_layers  = function() base() |> qe_points(size = 3) |>
+                                  qe_points(points = points[1:2, ], name = "one") |>
+                                  qe_labels(font_weight = 600) |>
+                                  qe_labels(font_weight = c(means = "bold")) |>
+                                  qe_edges(weights = w_oa, name = "a", self_size = 0.3) |>
+                                  qe_edges(weights = w_oa * 0.5, name = "b"),
+  opts_060_clear   = function() base() |> qe_labels(font_weight = "bold") |>
+                                  qe_labels(font_weight = NULL) |>
+                                  qe_edges("OA", fixed_size = TRUE) |>
+                                  qe_edges("OB", fixed_size = FALSE),
+  ps_label_na      = function() base() |> qe_points(units = c("OA.alice", "OB.eve"),
+                                                    labels = c("A", NA)),
+
   # ── no group column (rENA backend style) ────────────────────────────────────
   nogroup_explicit = function() qe_plot(m0, width = "100%", height = 440) |>
                                   qe_group(show = FALSE) |>

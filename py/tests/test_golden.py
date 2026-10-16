@@ -84,6 +84,22 @@ SCENARIOS = {
                                           .labels(font_size=12, font_family="Georgia",
                                                   font_color="#333333"),
 
+    "opts_060":         lambda: base(view_padding=1)
+                                     .edges("OA", fixed_size=True, self_size="node")
+                                     .nodes("always", sizes={"Data": 24, "Tech": 12.5},
+                                            fixed_size=True)
+                                     .axes(x=True, fixed_size=True)
+                                     .labels(font_weight={"nodes": "bold"}),
+    "opts_060_layers":  lambda: base().points(size=3)
+                                     .points(points=points.iloc[0:2], name="one")
+                                     .labels(font_weight=600)
+                                     .labels(font_weight={"means": "bold"})
+                                     .edges(weights=w_oa, name="a", self_size=0.3)
+                                     .edges(weights=w_oa * 0.5, name="b"),
+    "opts_060_clear":   lambda: base().labels(font_weight="bold").labels(font_weight=None)
+                                     .edges("OA", fixed_size=True).edges("OB", fixed_size=False),
+    "ps_label_na":      lambda: base().points(units=["OA.alice", "OB.eve"], labels=["A", None]),
+
     "nogroup_explicit": lambda: qeviz.plot(m0, width="100%", height=440)
                                      .group(show=False)
                                      .edges(weights=w_oa)

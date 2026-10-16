@@ -812,3 +812,33 @@ def test_from_pyena_dims():
     p = qeviz.from_pyena(fake, dims=(0, 2))
     assert p.model["nodes"]["data"][0]["y"] == pytest.approx(float(fake.rotation_nodes_[0, 2]))
     assert p.model["points"]["data"][0]["y"] == pytest.approx(float(fake.points_[0, 2]))
+
+
+def test_060_options_markup_and_validation():
+    p = (qeviz.plot(_make_plot().model, view_padding=1)
+         .edges("A", fixed_size=True, self_size="node")
+         .nodes("always", sizes={CODES[0]: 24}, fixed_size=True)
+         .axes(fixed_size=True)
+         .labels(font_weight={"nodes": "bold"}))
+    g = p._build_graph_element()
+    assert 'view-padding="1"' in g
+    assert '<qe-edges group="A" fixed-size self-size="node">' in g
+    assert '<qe-nodes label="on" label-font-weight="bold" fixed-size>' in g
+    assert "<qe-axes fixed-size>" in g
+    assert [r.get("size") for r in p.model["nodes"]["data"]][0] == 24
+    assert "label-font-weight" not in p.labels(font_weight=None)._build_graph_element()
+    assert 'self-size="node"' in p.edges("B")._build_graph_element()     # kept until given
+    with pytest.raises(ValueError, match="view_padding"):
+        qeviz.plot(_make_plot().model, view_padding=0)
+    with pytest.raises(ValueError, match="self_size"):
+        p.edges("A", self_size="big")
+    with pytest.raises(ValueError, match="sizes"):
+        p.nodes(sizes={CODES[0]: -1})
+    with pytest.raises(ValueError, match="font_weight"):
+        p.labels(font_weight={"edges": "bold"})
+
+
+def test_point_labels_keep_missing_values_missing():
+    p = _make_plot().points(units=[r["QEUNIT"] for r in _make_plot().model["points"]["data"][:2]],
+                            labels=["A", None])
+    assert [r.get("label") for r in p.model["pointsets"]["data"]] == ["A", None]

@@ -377,6 +377,7 @@ class QEPlot:
         point_scale: Optional[float] = None,
         center: str = "origin",
         palette: Optional[Sequence[str]] = None,
+        view_padding: Optional[float] = None,
     ) -> None:
         if center not in ("origin", "content"):
             raise ValueError('plot(): center must be "origin" or "content".')
@@ -385,6 +386,11 @@ class QEPlot:
         ):
             raise ValueError("plot(): point_scale must be a positive number.")
         _check_range(range, "plot")
+        if view_padding is not None and not (
+            isinstance(view_padding, (int, float)) and not isinstance(view_padding, bool)
+            and math.isfinite(view_padding) and view_padding > 0
+        ):
+            raise ValueError("plot(): view_padding must be a positive number.")
         if palette is not None and (isinstance(palette, str) or not len(palette)):
             raise ValueError("plot(): palette must be a list of colours.")
         self._model = dict(model)
@@ -405,6 +411,8 @@ class QEPlot:
             self._opts["center"] = "content"
         if point_scale is not None:
             self._opts["point-scale"] = point_scale
+        if view_padding is not None:
+            self._opts["view-padding"] = view_padding
 
     # ── Model access ───────────────────────────────────────────────────────────
 
@@ -679,6 +687,8 @@ class QEPlot:
         color_scale: str = "model",
         edge_width: Optional[float] = None,
         magnify: Optional[float] = None,
+        fixed_size: Optional[bool] = None,
+        self_size: Union[str, float, None] = None,
     ) -> "QEPlot":
         """
         Draw an edge network: a group's or unit's (by name), or explicit weights.
@@ -726,6 +736,12 @@ class QEPlot:
             raise ValueError("edges(): edge_width must be a number in (0, 1].")
         if magnify is not None and not (math.isfinite(magnify) and magnify > 0):
             raise ValueError("edges(): magnify must be a positive number.")
+        if fixed_size is not None and not isinstance(fixed_size, bool):
+            raise ValueError("edges(): fixed_size must be True or False.")
+        if self_size is not None and not (self_size == "node" or (
+                isinstance(self_size, (int, float)) and not isinstance(self_size, bool)
+                and math.isfinite(self_size) and self_size > 0)):
+            raise ValueError('edges(): self_size must be "node" or a positive number.')
         layer_attrs = _layer_attrs(colors, threshold)
 
         p._opts["edges"] = True
@@ -734,6 +750,10 @@ class QEPlot:
             p._opts["edge-width"] = edge_width
         if magnify is not None:
             p._opts["edge-magnify"] = magnify
+        if fixed_size is not None:
+            p._opts["edge-fixed-size"] = fixed_size
+        if self_size is not None:
+            p._opts["edge-self-size"] = self_size
 
         # ── Explicit data: append one layer per network ──────────────────────
         if weights is not None:
@@ -849,7 +869,7 @@ class QEPlot:
             vals = [v] if isinstance(v, str) else list(v)
             if len(vals) not in (1, n):
                 raise ValueError(f"points(): '{arg}' must have length 1 or {n}.")
-            return [str(x) for x in (vals * n if len(vals) == 1 else vals)]
+            return [None if _is_na(x) else str(x) for x in (vals * n if len(vals) == 1 else vals)]
 
         cols = per_point(color, "color")
         shapes = per_point(None if shape is None else _shape(shape, "points"), "shape")
@@ -880,6 +900,8 @@ class QEPlot:
         *,
         positions: Any = None,
         labels: Optional[dict] = None,
+        sizes: Optional[dict] = None,
+        fixed_size: bool = False,
     ) -> "QEPlot":
         """
         Code nodes: when to draw them, and where.
@@ -888,7 +910,10 @@ class QEPlot:
         rENA; ``"always"`` / ``True`` and ``"never"`` / ``False`` override that.
         ``unconnected="hide"`` hides nodes with no drawn edges. ``positions``
         (a DataFrame with a code column or index, and x / y columns) moves
-        nodes; ``labels`` (``{code: text}``) relabels them. Mirrors R's
+        nodes; ``labels`` (``{code: text}``) relabels them (``""`` draws no
+        label). ``sizes`` (``{code: px}``) sets node diameters in CSS pixels at
+        zoom 1 in place of the edge-weight size; ``fixed_size=True`` keeps
+        node diameters constant on screen when the plot is zoomed. Mirrors R's
         ``qe_nodes()``.
         """
         if show is True:
@@ -902,8 +927,9 @@ class QEPlot:
         p = self._copy()
         p._opts["nodes-show"] = show
         p._set("nodes-unconnected", "hide" if unconnected == "hide" else None)
+        p._opts["nodes-fixed-size"] = fixed_size is True
 
-        if positions is not None or labels is not None:
+        if positions is not None or labels is not None or sizes is not None:
             m = p._model
             idc = m.get("node_id_col") or "code"
             rows = _frame_rows(m["nodes"])
@@ -943,8 +969,21 @@ class QEPlot:
                     r.setdefault("label", None)
                 for code, text in labels.items():
                     rows[codes.index(str(code))]["label"] = str(text)
-            m["nodes"] = _frame_from_rows(rows, list(m["nodes"]["types"]) + (
-                ["label"] if labels is not None and "label" not in m["nodes"]["types"] else []))
+            if sizes is not None:
+                if not isinstance(sizes, dict) or not all(
+                        isinstance(v, (int, float)) and not isinstance(v, bool)
+                        and math.isfinite(v) and v > 0 for v in sizes.values()):
+                    raise ValueError("nodes(): 'sizes' must be a dict of positive numbers "
+                                     "(code -> diameter in px).")
+                check([str(k) for k in sizes], "sizes")
+                for r in rows:
+                    r.setdefault("size", None)
+                for code, px in sizes.items():
+                    rows[codes.index(str(code))]["size"] = float(px)
+            types = list(m["nodes"]["types"])
+            types += [c for c, given in (("label", labels), ("size", sizes))
+                      if given is not None and c not in types]
+            m["nodes"] = _frame_from_rows(rows, types)
         return p
 
     def axes(
@@ -953,13 +992,15 @@ class QEPlot:
         y: Union[bool, str] = False,
         *,
         show: bool = True,
+        fixed_size: bool = False,
     ) -> "QEPlot":
         """
         Show or hide the axes (a ``<qe-axes>`` layer).
 
         Axis labels are opt-in. ``x`` / ``y`` default to ``False`` (no label);
         ``True`` uses the dimension name (e.g. ``"SVD1"``), a string sets custom
-        text. ``show=False`` suppresses the axes entirely.
+        text. ``show=False`` suppresses the axes entirely. ``fixed_size=True``
+        keeps the axis lines and labels constant on screen when zoomed.
         """
         p = self._copy()
         if not show:
@@ -968,6 +1009,7 @@ class QEPlot:
         p._opts["axes"] = True
         p._opts["axis-x"] = x
         p._opts["axis-y"] = y
+        p._opts["axes-fixed-size"] = fixed_size is True
         return p
 
     def trajectories(
@@ -1039,6 +1081,7 @@ class QEPlot:
         font_size: Optional[float] = _UNSET,
         font_family: Optional[str] = _UNSET,
         font_color: Optional[str] = _UNSET,
+        font_weight: Union[str, int, dict, None] = _UNSET,
     ) -> "QEPlot":
         """
         Label visibility and font.
@@ -1046,7 +1089,10 @@ class QEPlot:
         ``nodes`` / ``means`` / ``points`` take ``"on"``, ``"off"``,
         ``"click"`` or ``"auto"``; ``font_size`` is in pixels (the title is
         drawn at 1.35×), ``font_family`` and ``font_color`` apply to labels and
-        the title. Only the arguments supplied change; a bare ``labels()``
+        the title. ``font_weight`` (e.g. ``"bold"`` or ``600``) is one weight
+        for node, mean and point labels, or a dict for some of them
+        (``{"nodes": "bold"}``); ``None`` clears it (default 500). Only the
+        arguments supplied change; a bare ``labels()``
         applies the defaults (``"on"``, ``"on"``, ``"auto"``). Mirrors R's
         ``qe_labels()``.
         """
@@ -1055,7 +1101,8 @@ class QEPlot:
         ):
             raise ValueError("labels(): font_size must be a positive number of pixels.")
         p = self._copy()
-        bare = all(v is _UNSET for v in (nodes, means, points, font_size, font_family, font_color))
+        bare = all(v is _UNSET for v in (nodes, means, points, font_size, font_family, font_color,
+                                         font_weight))
         for key, val, default in (("label-nodes", nodes, "on"), ("label-means", means, "on"),
                                   ("label-points", points, "auto")):
             if val is not _UNSET:
@@ -1066,6 +1113,22 @@ class QEPlot:
                          ("label-font-color", font_color)):
             if val is not _UNSET:
                 p._set(key, val)
+        if font_weight is not _UNSET:
+            layers = ("nodes", "means", "points")
+            if font_weight is None:
+                fw: dict = {k: None for k in layers}
+            elif isinstance(font_weight, dict):
+                if not set(font_weight) <= set(layers) or any(v is None for v in font_weight.values()):
+                    raise ValueError("labels(): font_weight must be one weight (e.g. \"bold\") or a "
+                                     "dict for nodes / means / points.")
+                fw = {k: _fmt(v) for k, v in font_weight.items()}
+            elif isinstance(font_weight, (str, int, float)) and not isinstance(font_weight, bool):
+                fw = {k: _fmt(font_weight) for k in layers}
+            else:
+                raise ValueError("labels(): font_weight must be one weight (e.g. \"bold\") or a "
+                                 "dict for nodes / means / points.")
+            for k, v in fw.items():
+                p._set(f"label-weight-{k}", v)
         return p
 
     def colors(self, mapping: Optional[dict] = None, **colors: str) -> "QEPlot":
@@ -1122,6 +1185,8 @@ class QEPlot:
         if opts.get("mean-outlier") is True:
             means_parts.append("outlier")
         means_parts.append(f'label="{opts.get("label-means", "on")}"')
+        if opts.get("label-weight-means") is not None:
+            means_parts.append(f'label-font-weight="{opts["label-weight-means"]}"')
         if opts.get("mean-fixed-size") is True:
             means_parts.append("fixed-size")
         if opts.get("means-show") is not False:
@@ -1129,15 +1194,17 @@ class QEPlot:
 
         # <qe-points>: all unit points, then explicit point sets.
         pt_label = opts.get("label-points", "auto")
+        pt_weight = ([f'label-font-weight="{opts["label-weight-points"]}"']
+                     if opts.get("label-weight-points") is not None else [])
         if opts.get("points") is True:
-            pt_parts = [f'label="{pt_label}"']
+            pt_parts = [f'label="{pt_label}"'] + pt_weight
             if opts.get("point-size") is not None:
                 pt_parts.append(f'size="{_fmt(opts["point-size"])}"')
             if opts.get("point-fixed-size") is True:
                 pt_parts.append("fixed-size")
             children.append(f'    <qe-points {" ".join(pt_parts)}></qe-points>')
         for ps in opts.get("point-sets") or []:
-            pt_parts = [f'set="{ps["set"]}"', f'label="{pt_label}"']
+            pt_parts = [f'set="{ps["set"]}"', f'label="{pt_label}"'] + pt_weight
             if ps.get("size") is not None:
                 pt_parts.append(f'size="{_fmt(ps["size"])}"')
             if ps.get("fixed"):
@@ -1160,6 +1227,12 @@ class QEPlot:
                     layers[0].append(f'magnify="{_fmt(opts["edge-magnify"])}"')
                 if opts.get("edge-color-scale") is not None:
                     layers[0].append(f'color-scale="{opts["edge-color-scale"]}"')
+            # Edge sizing (edges(fixed_size=, self_size=)) applies to every layer.
+            for parts in layers:
+                if opts.get("edge-fixed-size") is True:
+                    parts.append("fixed-size")
+                if opts.get("edge-self-size") is not None:
+                    parts.append(f'self-size="{_fmt(opts["edge-self-size"])}"')
             for parts in layers:
                 children.append(f'    <qe-edges {" ".join(parts)}></qe-edges>')
         has_network = any(c.startswith("    <qe-edges") for c in children)
@@ -1195,6 +1268,8 @@ class QEPlot:
                     axis_parts.append(attr)
                 elif isinstance(val, str):
                     axis_parts.append(f'{attr}="{val}"')
+            if opts.get("axes-fixed-size") is True:
+                axis_parts.append("fixed-size")
             children.append("    <qe-axes" + (" " + " ".join(axis_parts) if axis_parts else "")
                             + "></qe-axes>")
 
@@ -1202,10 +1277,13 @@ class QEPlot:
         node_show = opts.get("nodes-show", "auto")
         if node_show == "always" or (node_show == "auto" and has_network):
             unconn = ' unconnected="hide"' if opts.get("nodes-unconnected") == "hide" else ""
-            children.insert(0, f'    <qe-nodes label="{opts.get("label-nodes", "on")}"{unconn}></qe-nodes>')
+            extra = ((f' label-font-weight="{opts["label-weight-nodes"]}"'
+                      if opts.get("label-weight-nodes") is not None else "")
+                     + (" fixed-size" if opts.get("nodes-fixed-size") is True else ""))
+            children.insert(0, f'    <qe-nodes label="{opts.get("label-nodes", "on")}"{unconn}{extra}></qe-nodes>')
 
         gattr = ("edge-width", "plot-title", "range", "center", "scale-points", "point-scale",
-                 "label-font-size", "label-font-family", "label-font-color")
+                 "view-padding", "label-font-size", "label-font-family", "label-font-color")
         ga = "".join(f' {k}="{_esc(opts[k])}"' for k in gattr if opts.get(k) is not None)
         return (f'<qe-graph width="{self._width}" height="{self._height}"{ga}>\n'
                 + "\n".join(children) + "\n  </qe-graph>")
@@ -1408,6 +1486,7 @@ def plot(
     point_scale:  Optional[float] = None,
     center:    str = "origin",
     palette:   Optional[Sequence[str]] = None,
+    view_padding: Optional[float] = None,
     **model_kwargs,
 ) -> QEPlot:
     """
@@ -1440,6 +1519,9 @@ def plot(
                 nodes' and points' bounding box).
     palette     Colours for groups / sets / networks with none given
                 (default: :func:`palette`).
+    view_padding
+                How far the view extends beyond ``range`` (it shows ±range ×
+                this); default 1.2, ``1`` matches the range exactly.
     **model_kwargs
                 Additional keyword arguments forwarded to :func:`model_data`
                 (e.g. ``id_col``, ``x_col``, ``directed``).
@@ -1453,7 +1535,7 @@ def plot(
                        group_col=group_col, **model_kwargs)
     return QEPlot(m, title=title, width=width, height=height, range=range,
                   scale_points=scale_points, point_scale=point_scale,
-                  center=center, palette=palette)
+                  center=center, palette=palette, view_padding=view_padding)
 
 
 def from_ena(

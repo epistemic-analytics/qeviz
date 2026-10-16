@@ -555,3 +555,35 @@ test_that("qe_range() sets the axis range of an existing plot", {
   expect_error(qe_range(p, list(x = 1)), "symmetric")
   expect_error(qe_range(p, -1), "positive")
 })
+
+test_that("0.6 options reach the markup and the nodes frame", {
+  p <- qe_plot(model, view_padding = 1) |>
+    qe_edges("OA", fixed_size = TRUE, self_size = "node") |>
+    qe_nodes("always", sizes = c(Data = 24), fixed_size = TRUE) |>
+    qe_axes(fixed_size = TRUE) |>
+    qe_labels(font_weight = c(nodes = "bold"))
+  g <- .graph_el(p)
+  expect_match(g, 'view-padding="1"', fixed = TRUE)
+  expect_match(g, '<qe-edges group="OA" fixed-size self-size="node">', fixed = TRUE)
+  expect_match(g, '<qe-nodes label="on" label-font-weight="bold" fixed-size>', fixed = TRUE)
+  expect_match(g, "<qe-axes fixed-size>", fixed = TRUE)
+  expect_false(grepl('qe-means[^>]*label-font-weight', g))
+  sizes <- vapply(p$model$nodes$data, function(r) if (is.null(r$size) || is.na(r$size)) NA_real_ else r$size, 0)
+  expect_identical(sizes[[1]], 24)
+  expect_true(all(is.na(sizes[-1])))
+  # fixed_size / self_size are kept until given again; font_weight = NULL clears
+  p2 <- qe_edges(p, "OB")
+  expect_match(.graph_el(p2), '<qe-edges group="OB" fixed-size self-size="node">', fixed = TRUE)
+  expect_false(grepl("label-font-weight", .graph_el(qe_labels(p, font_weight = NULL))))
+})
+
+test_that("0.6 options are validated", {
+  p <- qe_plot(model)
+  expect_error(qe_plot(model, view_padding = 0), "view_padding")
+  expect_error(qe_edges(p, "OA", self_size = "big"), "self_size")
+  expect_error(qe_edges(p, "OA", fixed_size = "yes"), "fixed_size")
+  expect_error(qe_nodes(p, sizes = c(Data = -1)), "sizes")
+  expect_error(qe_nodes(p, sizes = c(Nope = 10)), "codes not in the model")
+  expect_error(qe_labels(p, font_weight = c(edges = "bold")), "font_weight")
+  expect_error(qe_labels(p, font_weight = c("bold", "normal")), "font_weight")
+})
