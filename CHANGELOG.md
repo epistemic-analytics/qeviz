@@ -6,7 +6,11 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
-## [Unreleased]
+## [0.6.0] - 2026-10-16
+
+Everything webENA needs to draw its network plots with qeviz instead of
+sigma.js: per-row label control, zoom and pan like sigma's camera, fixed
+on-screen sizes, whole-plot transitions, and in-place re-renders.
 
 ### Added
 - **Zoom and recentre from your own controls.** `<qe-graph>` has
@@ -119,10 +123,13 @@ versioned together.
 - **A missing point-set label stays missing in Python and Julia.** A `None` /
   `nothing` in `points(labels =)` was drawn as the text "None" / "nothing";
   like R's `NA`, it now falls back to the point's id.
-### Changed
-- The mouse wheel zooms toward the pointer (previously about the plot
+### Changed (breaking)
+- **The mouse wheel zooms toward the pointer** (previously about the plot
   origin), and by an amount that follows the scroll: one mouse notch is still
   1.1×. `zoomBy()` / `zoomTo()` zoom about the centre of the view.
+- **A `label` of `""` hides that row's label.** In the `nodes`, `pointsets`
+  and `groups` frames an empty label used to fall back to the id; missing or
+  `NA` labels still do.
 
 ## [0.5.7] - 2026-10-14
 
