@@ -105,6 +105,14 @@ p
 qe_export_html(p, "output.html")
 ```
 
+Install `QEViz` from the QE package registry:
+
+```julia
+using Pkg
+Pkg.Registry.add(RegistrySpec(url = "https://gitlab.com/epistemic-analytics/qe-packages/cranqe.git#julia"))
+Pkg.add("QEViz")
+```
+
 ## Chain API
 
 All three languages share the same chain operations, with the same argument

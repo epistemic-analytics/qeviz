@@ -4,8 +4,12 @@ Julia adapter for the [qeviz](https://gitlab.com/epistemic-analytics/qe-packages
 
 ## Installation
 
+QEViz.jl is in the QE package registry:
+
 ```julia
-] add QEViz
+using Pkg
+Pkg.Registry.add(RegistrySpec(url = "https://gitlab.com/epistemic-analytics/qe-packages/cranqe.git#julia"))
+Pkg.add("QEViz")
 ```
 
 Or from a local development checkout:

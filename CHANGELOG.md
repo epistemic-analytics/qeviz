@@ -73,6 +73,10 @@ versioned together.
   self-connection dots; `qe_labels(font_weight =)`, one weight or one per
   layer (e.g. bold code labels); and `qe_nodes(sizes =)` for node diameters in
   pixels. Same argument names in all three languages.
+- **QEViz.jl is in the QE package registry.** Julia users can now
+  `Pkg.Registry.add(RegistrySpec(url =
+  "https://gitlab.com/epistemic-analytics/qe-packages/cranqe.git#julia"))` and
+  `Pkg.add("QEViz")`, as for ENA.jl and TMA.jl.
 ### Fixed
 - **Labels follow their marks when the model is updated.** After a second
   `setModelData` with new coordinates (e.g. a flipped axis), node, mean and
