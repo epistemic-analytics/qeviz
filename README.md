@@ -201,6 +201,34 @@ In the language adapters this is `fixed_size = TRUE` on `qe_points()` / `qe_grou
 (R), `fixed_size=True` on `.points()` / `.group()` (Python), and
 `fixed_size=true` on `qe_points` / `qe_group` (Julia).
 
+Edges and code nodes take `fixed-size` too, but there it only undoes the zoom:
+they keep the on-screen size they have at zoom 1 (which still follows the data
+and the plot size) at any zoom level, as webENA's sigma plots do:
+
+```html
+<qe-nodes fixed-size></qe-nodes>
+<qe-edges network="n1" fixed-size></qe-edges>
+```
+
+- `<qe-edges fixed-size>`: the thickness of everything in that edge layer stays
+  constant on screen: lines, directed triangles (their base, and so their
+  chevrons), self-connection dots sized by weight, and the invisible hover
+  lines. Positions and the triangles' apex split still zoom; a chevron's width
+  follows the triangle where it sits, so it can change slightly.
+- `<qe-nodes fixed-size>`: code-node diameters, including a `size` column,
+  stay constant on screen. `self-size="node"` dots follow their node.
+- `setHighlight()` rings and glows around fixed-size marks and edges stay
+  constant on screen as well.
+- `<qe-means fixed-size>` also keeps the confidence-interval boxes and
+  crosshairs and the outlier boxes at their zoom-1 stroke width and dash
+  lengths.
+- `<qe-axes fixed-size>`: the axis lines and axis labels keep their zoom-1
+  size on screen.
+
+Labels sized with `label-font-size` (CSS px) are constant on screen at any
+zoom already; without it they scale with the plot. Trajectory strokes still
+grow with the zoom.
+
 #### Point scaling and centring
 
 Unit points and means sit much closer to the origin than the code nodes, so
@@ -227,6 +255,23 @@ In R these are `qe_plot(scale_points =, point_scale =, center =)`; in Python
 `qeviz.plot(..., scale_points=, point_scale=, center=)` and in Julia
 `qe_plot(model; scale_points=, point_scale=, center=)`.
 
+#### View range and padding
+
+`range` sets the symmetric axis range the view is framed on: `"network"`
+(± the farthest node × 1.2), `"points"` (± the farthest drawn point × 1.2) or a
+number. Without it, the range is 1.3 × the farthest drawn mark. The view then
+shows `range × view-padding` in every direction; `view-padding` defaults to
+`1.2`, and `view-padding="1"` makes the view match the range exactly, for a
+host that does its own framing:
+
+```html
+<qe-graph range="0.8" view-padding="1"></qe-graph>   <!-- view spans ±0.8 -->
+```
+
+Pixel-based sizes (`label-font-size`, the plot title, `fixed-size` marks) are
+converted against the range, so they come out at `size ÷ view-padding` CSS
+pixels: exact with `view-padding="1"`, 1/1.2 of the size at the default.
+
 Child element presence controls layer visibility — add `<qe-points>` to show unit dots, omit it to hide them.  A `MutationObserver` watches for child additions, removals, and attribute changes, so interactive controls can manipulate the DOM directly:
 
 ```js
@@ -235,6 +280,67 @@ const edges = graph.querySelector("qe-edges");
 edges.setAttribute("compare", "SecondGame");
 edges.removeAttribute("also");
 ```
+
+Each render is rebuilt from the model, so calling `setModelData` again (new
+coordinates, other units, different weights) updates the plot in place: labels
+follow their marks, and marks, edges or labels that are no longer in the model
+or no longer drawn are removed.
+
+#### Explicit networks
+
+`<qe-edges network="name">` draws the row `name` of the model's `networks`
+frame (signed weights; one column per edge, e.g. `"Data.Design"`). Its edge
+columns are read from the `networks` frame itself, so a model with just `nodes`
+and `networks` is enough:
+
+```js
+vis.setModelData({
+  nodes:    { data: [{ code: "A", x: 0.9, y: 0.3 }, { code: "B", x: -0.6, y: 0.8 }],
+              types: { code: "character" } },
+  networks: { data: [{ name: "n1", "A.B": 0.8 }], types: { name: "character" } },
+});
+// <qe-graph><qe-nodes></qe-nodes><qe-edges network="n1"></qe-edges></qe-graph>
+```
+
+With the default `color-scale="model"`, the colour range comes from the `edges`
+frame when the model has one, and otherwise from every row of `networks`.
+
+#### Per-row labels and node sizes
+
+Rows of the `nodes`, `pointsets` and `groups` frames can carry these optional
+columns, applied on every render:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `label` | character | Label text. `""` draws no label for that row; missing or `NA` uses the id (the group name for means). |
+| `label.dx`, `label.dy` | numeric | Offset of the label from its computed spot, in graph units with y down: the units of `qe-label-move`'s `detail.transform`, so a host can write a drag back. `NA` = 0, and 0 clears an earlier offset. When the frame has neither column, a dragged label keeps its own offset. |
+| `label.pinned` | logical | `TRUE` always shows the label, whatever the layer's label mode (even `"off"`), across re-renders. |
+| `size` (`nodes` only) | numeric | The code node's diameter in CSS px at zoom 1, in place of the Σ-edge-width size. It zooms with the plot like the computed size. Unconnected nodes stay a tiny dot (or hidden). |
+
+Frames are rectangular: give every row every column (`null` where unset).
+
+Labels in `"auto"` and `"click"` modes keep the state hover or a click left
+them in when the plot re-renders, so a host may re-render on hover.
+
+Point sets (`<qe-points set="…">`) are labelled too: the text comes from the
+`label` column, else the point id, and the mode from the element's own `label`
+attribute, else `<qe-graph label-points>` (default `"off"`). Their labels, and
+`qe-label-move`, use the point id `<set>::<id>`.
+
+Label weight and ONA self-connections:
+
+```html
+<qe-nodes label-font-weight="bold"></qe-nodes>   <!-- also on <qe-means>, <qe-points>; default 500 -->
+<qe-edges network="n1" self-size="node"></qe-edges>
+```
+
+`self-size="node"` draws each self-connection dot at half its code node's
+radius (as webENA's sigma plots do), so the self weight only sets its colour;
+a number is that fraction of the node radius. Without it the dot is sized by
+its weight.
+
+Pixel sizes (`size`, like `label-font-size`) are converted against the range,
+so with the default `view-padding` they come out at size ÷ 1.2.
 
 ### Events
 
@@ -250,7 +356,17 @@ DOM. Each event's `detail` also carries the `originalEvent`.
 
 Labels are **draggable** (drag to reposition; the label pins open and stays
 visible), emitting `qe-label-move` on drop so the host can persist the position
-or mirror it across coordinated plots.
+or mirror it across coordinated plots, e.g. by sending it back in the
+`label.dx` / `label.dy` columns. The drag follows the pointer at any zoom, and
+`detail.transform` is in graph units whatever the zoom.
+
+Marks that emit these events (nodes, means, points, edges) show a pointer
+cursor. The plot lives in `<qe-graph>`'s shadow root, so to change it set the
+`--qe-mark-cursor` custom property on the element:
+
+```css
+qe-graph { --qe-mark-cursor: crosshair; }
+```
 
 For a quick built-in tooltip on hover — `source – target (weight)` over edges,
 the mark name over nodes — add the `tooltip` attribute to `<qe-graph>`. It is
@@ -292,6 +408,36 @@ graph.getPoints();                 // [{ id, group, x, y }, …] (unit points)
 graph.pointsInRect({ x, y, w, h }); // ids of unit points in a graph-space rect
 ```
 
+The user zooms and pans as on webENA's sigma plots:
+
+- **Wheel:** zooms toward the pointer, so the point under it stays put, by
+  `zoom-step` per 100 px of scroll (default `1.1`; a mouse notch is about
+  100 px). A trackpad pinch (ctrl + wheel) follows the pinch.
+- **Double-click:** zooms in 2.2× toward the pointer, eased over 200 ms. Both
+  clicks still emit their `qe-*-click`; a double-click on a label doesn't zoom.
+- **Drag:** pans, keeping the grabbed point under the mouse or finger at any
+  zoom; two fingers pinch-zoom about their midpoint and pan as it moves. A tap clicks like a mouse click,
+  and a finger drags labels as the mouse does.
+
+| `<qe-graph>` attribute | Meaning |
+|---|---|
+| `zoom-step="1.5"` | Wheel zoom factor per 100 px of scroll (webENA's sigma: 1.5). |
+| `zoom-min`, `zoom-max` | Zoom levels (1 = the fitted view) that every zoom stays within: wheel, double-click, pinch, `zoomBy`, `zoomTo`, `resetView`. Unbounded by default. |
+| `view-locked` | While present, the user can't zoom or pan (wheel, double-click, drag, touch); the wheel scrolls the page instead. Clicks, hovers, label drags and the methods below still work. |
+
+Drive the view from host controls (zoom buttons, a "recentre" action). These
+zoom about the centre of the view, so a panned view keeps what it is showing
+in the middle:
+
+```js
+graph.zoomBy(1.25);     // zoom in by a factor (< 1 zooms out)
+graph.zoomTo(2);        // absolute level; 1 = the fitted view
+graph.resetView();      // zoom 1, no pan
+graph.zoom_level;       // current level
+```
+
+Levels or factors that are not finite and > 0 are ignored.
+
 ### Transitions & export
 
 Opt into animated transitions with the `animate` attribute — on the next
@@ -301,6 +447,22 @@ snapping (default 300 ms; `animate="500"` sets the duration):
 ```html
 <qe-graph animate>…</qe-graph>
 ```
+
+Everything travels together: points, point-set points and means, code nodes,
+edges (their ends stay on their nodes, ONA triangles and self-connection dots
+included), the interval and outlier boxes around the means, labels (with their
+offsets) and the highlight. When the view changes too (a new `range`, or an
+extent that follows the data), the view eases to the new one instead of
+jumping. The first frame drawn is the old plot, so nothing flashes at its new
+place first. Marks that appear or disappear do so at once; sizes and colours
+change at the start.
+
+A render while a transition runs starts from where the marks are at that
+moment: the same update again carries on smoothly, and a new one turns them
+towards their new places. Attribute and child-element changes made in the
+same task as `setModelData` (before it) are drawn by that call's render;
+changes made after it in the same task take one more render, which carries on
+the same transition.
 
 Snapshot the current plot for download or embedding:
 
@@ -312,7 +474,7 @@ await graph.toPNG(2);   // PNG data URL (2× resolution)
 ### Selection / highlight
 
 Drive selection styling from the host without touching qeviz's internal DOM. The
-highlight is an overlay that survives model updates:
+highlight is an overlay that survives model updates and follows zoom and pan:
 
 ```js
 graph.setHighlight({ edges: [{ source: "Data", target: "Design" }], nodes: ["Data"] });
