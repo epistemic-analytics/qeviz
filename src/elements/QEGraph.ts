@@ -1334,16 +1334,19 @@ export class QEGraphElement extends DrawableElement implements QEElement {
           };
 
           // Weight accumulated at each node:
-          //   Undirected: every edge touching the node (both endpoints).
+          //   Undirected: every edge touching the node (both endpoints); a
+          //               self-connection (accumulated with the diagonal,
+          //               e.g. rENA self_connections = TRUE) counts once.
           //   Directed:   only edges directed *at* the node (pair[1] is the
           //               target; its wide end is drawn there), including the
           //               node's self-connection.
+          // Either way the node's diameter includes its self dot, so the dot
+          // always fits inside the node.
           const nodeWeightSum: Record<string, number> = {};
           drawEdges.forEach(({ pair, weight }) => {
             const isSelf = pair[0] === pair[1];
-            if (isSelf && !isDirected) return;  // skip illegal undirected diagonals
             const add = (id: string) => { nodeWeightSum[id] = (nodeWeightSum[id] ?? 0) + Math.abs(weight); };
-            if (isDirected) { add(pair[1]); return; }
+            if (isDirected || isSelf) { add(pair[1]); return; }
             add(pair[0]); add(pair[1]);
           });
 
@@ -1388,7 +1391,6 @@ export class QEGraphElement extends DrawableElement implements QEElement {
             if (!fromNode || !toNode) return;
 
             const isSelf  = pair[0] === pair[1];
-            if (isSelf && !isDirected) return;  // undirected ENA has zero diagonal
 
             // Colour ramps rescale within each visual class (lines vs
             // self-loops), since self-weights are typically smaller.

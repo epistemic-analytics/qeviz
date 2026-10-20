@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Added
+- **Self-connections in undirected networks.** An undirected model whose edge
+  columns include the diagonal (`A.A`, e.g. rENA / tma accumulated with
+  `self_connections = TRUE`) now draws each self-connection as a dot on its
+  node, sized and coloured like ONA's. The self weight counts once toward its
+  node's size, so the dot always fits inside the node. Previously undirected
+  diagonals were skipped.
+
 ## [0.6.0] - 2026-10-16
 
 Everything webENA needs to draw its network plots with qeviz instead of
