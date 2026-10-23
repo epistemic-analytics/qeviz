@@ -6,6 +6,17 @@ follow [Semantic Versioning](https://semver.org/) (in 0.x, breaking changes bump
 the minor version). The TypeScript core and the R / Python / Julia adapters are
 versioned together.
 
+## [Unreleased]
+
+### Fixed
+- **`setModelData()` without `updated`.** A model passed without an `updated`
+  field (hand-built ModelData, as in the README's examples) rendered only the
+  "Define the model on the left." placeholder; `<qe-visual>` now stamps one.
+
+### Documentation
+- Runnable README examples (`js run`): on qe-libs.org/npm/qe-libs-qeviz/ they
+  run in the browser, one fitting an ENA model with rena-wasm first.
+
 ## [0.6.1] - 2026-10-23
 
 ### Added

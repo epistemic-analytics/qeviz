@@ -205,6 +205,53 @@ The `<qe-visual>` and `<qe-graph>` elements can be used directly in any HTML pag
 </script>
 ```
 
+On [qe-libs.org/npm/qe-libs-qeviz/](https://qe-libs.org/npm/qe-libs-qeviz/)
+the `js run` examples have a **Run** button and draw under the example;
+`demo.show(element)` puts an element there and exists only on that page. This
+one fits an ENA model in the browser with
+[`@qe-libs/rena-wasm`](https://qe-libs.org/npm/qe-libs-rena-wasm/) (WebAssembly)
+on its demo copy of rENA's `RS.data`, and plots it:
+
+```js run
+import '@qe-libs/qeviz';                    // defines <qe-visual>, <qe-graph>, ...
+import loadENA from '@qe-libs/rena-wasm';
+
+const ena  = await loadENA();
+const rows = await demo.csv('@qe-libs/rena-wasm/demo/RS.csv');
+const m = ena.fit(rows, {
+  codes: ['Data', 'Technical.Constraints', 'Performance.Parameters',
+          'Client.and.Consultant.Requests', 'Design.Reasoning', 'Collaboration'],
+  units: ['Condition', 'UserName'], conversations: ['Condition', 'GroupName'], window: 4,
+});
+
+// rena-wasm model → ModelData (as qeviz.from_ena does in Python)
+const frame = data => ({ data, types: Object.fromEntries(Object.entries(data[0])
+  .map(([k, v]) => [k, typeof v === 'number' ? 'numeric' : 'character'])) });
+const d = m.dims, nc = m.nConnections, units = m.model.unitLabels;
+const condition = u => u.split('__')[0];
+const cols = m.connectionNames.map(n => n.replace(' & ', '.'));
+const model = {
+  nodes:  frame(m.rotation.codes.map((code, i) =>
+            ({ code, x: m.rotation.nodes[i * d], y: m.rotation.nodes[i * d + 1] }))),
+  points: frame(units.map((unit, i) =>
+            ({ unit, x: m.points[i * d], y: m.points[i * d + 1], Condition: condition(unit) }))),
+  edges:  frame(units.map((unit, i) => Object.fromEntries([['unit', unit],
+            ...cols.map((c, j) => [c, m.lineWeights[i * nc + j]]), ['Condition', condition(unit)]]))),
+  id_col: 'unit', node_id_col: 'code', group_col: 'Condition',
+};
+
+const vis = document.createElement('qe-visual');
+vis.innerHTML = `
+  <qe-graph width="100%" height="440">
+    <qe-nodes label="on"></qe-nodes>
+    <qe-means confidence label="on"></qe-means>
+    <qe-points></qe-points>
+    <qe-edges group="FirstGame" also="SecondGame"></qe-edges>
+    <qe-axes x y></qe-axes>
+  </qe-graph>`;
+demo.show(vis).setModelData(model);
+```
+
 By default, all marks (nodes, mean markers, unit dots) size in graph-coordinate
 units and scale with the data extent and wheel-zoom. Add `fixed-size` to
 `<qe-points>` or `<qe-means>` to keep those markers a constant on-screen pixel
@@ -319,6 +366,23 @@ vis.setModelData({
   networks: { data: [{ name: "n1", "A.B": 0.8 }], types: { name: "character" } },
 });
 // <qe-graph><qe-nodes></qe-nodes><qe-edges network="n1"></qe-edges></qe-graph>
+```
+
+Runnable:
+
+```js run
+import '@qe-libs/qeviz';
+
+const vis = document.createElement('qe-visual');
+vis.innerHTML = `<qe-graph width="100%" height="320">
+  <qe-nodes label="on"></qe-nodes><qe-edges network="n1"></qe-edges></qe-graph>`;
+demo.show(vis).setModelData({
+  nodes:    { data: [{ code: "A", x: 0.9, y: 0.3 }, { code: "B", x: -0.6, y: 0.8 },
+                     { code: "C", x: -0.2, y: -0.9 }],
+              types: { code: "character" } },
+  networks: { data: [{ name: "n1", "A.B": 0.8, "A.C": 0.3, "B.C": -0.5 }],
+              types: { name: "character" } },
+});
 ```
 
 With the default `color-scale="model"`, the colour range comes from the `edges`

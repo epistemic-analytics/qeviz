@@ -159,7 +159,9 @@ export class QEVisualElement extends HTMLElement {
     });
 
     // ── Step 2: ingest scalar fields ─────────────────────────────────────
-    if (data.updated  !== undefined) this._model.setByKey('updated', data.updated);
+    // render() draws only a model with `updated` set: stamp one when the
+    // caller (e.g. hand-built ModelData) leaves it out.
+    this._model.setByKey('updated', data.updated ?? Date.now());
     if (data.directed !== undefined) this._model.directed = data.directed;
     if (Array.isArray((data as any).palette)) this._model.palette = (data as any).palette.map(String);
 
